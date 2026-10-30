@@ -242,10 +242,10 @@ class RecordPageBrowserTests(LiveServerTestCase):
             and "Placeholder, not a real identifier" in ph["text"] and "holds no record" not in ph["text"] \
             and "Placeholder Carrier" not in page.evaluate("document.body.textContent")
         tier2 = " | ".join(dom["tier2"])
-        results["tier2_attributed"] = ("Attested by Dataset b" in tier2 and "Record B" in tier2
+        results["tier2_attributed"] = ("Linked by Dataset b" in tier2 and "Record B" in tier2
                                        and "Record C" not in tier2)
         results["tier2_imported_provenance"] = ("Record F" in tier2 and "2024 migration; provenance unknown" in tier2
-                                                and "which side attested it is not recorded" in tier2
+                                                and "which side made it is not recorded" in tier2
                                                 and "not mapped: no geometry" in tier2)
         results["tier3_cocitation"] = (dom["groups"] == ["gn:100"] and "Record C" in " ".join(dom["tier3"])
                                        and "co-citation, not identity" in dom["tier3intro"]

@@ -24,7 +24,7 @@ class GlossTests(SimpleTestCase):
             m("wd:3", "Lamberhurst", "Wikidata", types=["parish"], ccodes=["GB"], years=[1700, 1900]),
         ])
         text = " ".join(g["sentences"])
-        self.assertIn("This record and 2 attested equivalents (exactMatch or closeMatch), 3 records from 3 sources", text)
+        self.assertIn("This record and 2 linked equivalents (exactMatch or closeMatch), 3 records from 3 sources", text)
         self.assertIn("Named “Lamberhurst” in every record; also “Lamberherst”.", text)
         self.assertIn("Typed as parish (2) and populated place (1); the records do not all use the same type.", text)
         self.assertIn("Country code GB in every record.", text)
@@ -67,7 +67,7 @@ class GlossTests(SimpleTestCase):
     def test_record_alone(self):
         g = build_gloss([m("whg:1", "Lonely", "Dataset a", is_record=True)])
         self.assertIn("This record alone, from Dataset a", g["sentences"][0])
-        self.assertNotIn("attested equivalent", g["sentences"][0])
+        self.assertNotIn("linked equivalent", g["sentences"][0])
 
     def test_locus_wording_and_names_counted_once_per_record(self):
         g = build_gloss([m("a", "Berlin", "gn", names=["Berlin", "BERLIN", "Berlino"]),

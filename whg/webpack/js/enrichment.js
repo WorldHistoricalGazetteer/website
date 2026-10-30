@@ -392,12 +392,12 @@ function renderEnvironment(body, data) {
     const years = p.years ? yearsText(p.years) : '';
     if (years) h += `<p class="enr-years small">${years}</p>`;
     if (data.unresolved) {
-        h += `<p class="enr-incomplete small">${esc(data.unresolved)} attested equivalent${data.unresolved === 1 ? '' : 's'} could not be looked up in WHG's index just now, so ${data.unresolved === 1 ? 'it is' : 'they are'} not in this signature. Reload to try again.</p>`;
+        h += `<p class="enr-incomplete small">${esc(data.unresolved)} linked equivalent${data.unresolved === 1 ? '' : 's'} could not be looked up in WHG's index just now, so ${data.unresolved === 1 ? 'it is' : 'they are'} not in this signature. Reload to try again.</p>`;
     }
     // The concordance capped its inbound attestations (places.concordance.INBOUND_LIMIT):
     // the group is partial, and an area's outline is the outline of part of it.
     if (data.truncated) {
-        h += `<p class="enr-incomplete enr-truncated small">This group is partial: more records attest that they are this place than WHG reads for one page, so this signature describes only the ones read${p.kind === 'area' ? ', and the area is the outline of those only' : ''}.</p>`;
+        h += `<p class="enr-incomplete enr-truncated small">This group is partial: more records are linked as this place than WHG reads for one page, so this signature describes only the ones read${p.kind === 'area' ? ', and the area is the outline of those only' : ''}.</p>`;
     }
     // Members an anonymous visitor could not see (an embargoed source shown to a beta
     // user) are never sent to EDOPS (places.record_group.mark_offsite): say so.
@@ -408,7 +408,7 @@ function renderEnvironment(body, data) {
     if (data.status === 'no_location') {
         h += '<p class="enr-card" data-status="no_location">None of these records has a location, so no signature was asked for.</p>';
     } else if (data.status === 'dispersed') {
-        h += `<p class="enr-card" data-status="dispersed">The attested equivalents lie up to ${esc(p.span_km)} km apart, more than ${esc(p.limit_km)} km:
+        h += `<p class="enr-card" data-status="dispersed">The linked equivalents lie up to ${esc(p.span_km)} km apart, more than ${esc(p.limit_km)} km:
             one signature would describe none of them, so none was asked for. A spread this wide often means a mistaken link.</p>`;
     } else if (data.status === 'disabled') {
         h += `<p class="enr-card" data-status="disabled">${esc(statusSentence('disabled'))}</p>`;

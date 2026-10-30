@@ -190,7 +190,7 @@ class EnrichmentBrowserTests(LiveServerTestCase):
                     attr: a && a.getAttribute('href'),
                     status: window.__whgEnrichment && window.__whgEnrichment.environmentStatus};
         }""", self.ENV)
-        r["gloss_text"] = ("This record and 1 attested equivalent" in d["gloss"] and "GeoNames" in d["gloss"]
+        r["gloss_text"] = ("This record and 1 linked equivalent" in d["gloss"] and "GeoNames" in d["gloss"]
                            and "Not known from these records" in d["gloss"] and "Record C" not in d["gloss"])
         r["env_area_scope"] = ("an area" in d["env"] and "convex hull" in d["env"] and "one basin" not in d["env"])
         r["env_years_reason"] = "area scope takes a single year" in d["env"]
@@ -268,7 +268,7 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertTrue(ok)
         self.assertIn("This group is partial", d["env"])
         self.assertIn("describes part of the group", d["gloss"])
-        self.assertIn("This record and 1 attested equivalent", d["gloss"])     # the one read
+        self.assertIn("This record and 1 linked equivalent", d["gloss"])     # the one read
 
     def test_edops_unreachable_is_not_no_data(self):
         page = self.new_page()
