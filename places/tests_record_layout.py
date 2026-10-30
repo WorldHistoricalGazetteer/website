@@ -153,7 +153,8 @@ class RecordLayoutTemplateTests(TestCase):
         html = self.page(self.A, self.beta)
         nav = html.split('atlas-record-tabs', 1)[1].split("</ul>", 1)[0]
         hrefs = re.findall(r'href="#([a-z_]+)"', nav)
-        self.assertEqual(hrefs, ["record", "record_gloss", "concordance", "record_environment"])
+        self.assertEqual(hrefs, ["record", "record_gloss", "concordance", "record_public_links",
+                                "record_environment"])  # beta users see Links with the switch off
         for h in hrefs:
             self.assertIn(f'id="{h}"', html)
 
@@ -222,11 +223,11 @@ class RecordLayoutTemplateTests(TestCase):
 
     def test_sections_carry_the_divider(self):
         html = self.page(self.A, self.beta)
-        for id_ in ("record", "record_gloss", "concordance"):
+        for id_ in ("record", "record_gloss", "concordance", "record_public_links"):
             m = re.search(r'<section id="%s" class="([^"]+)"' % id_, html)
             self.assertIsNotNone(m, id_)
             self.assertIn("atlas-record-divided", m.group(1).split(), id_)
-        self.assertEqual(html.count("atlas-record-divided"), 3)
+        self.assertEqual(html.count("atlas-record-divided"), 4)
 
     def test_one_explore_button(self):
         html = self.page(self.A, self.beta)

@@ -275,10 +275,10 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
             state: window.__whgRecord})""")
         self.assertTrue(ready, d)
         summary = " ".join(d["summary"].split())
-        self.assertIn("4 attested equivalents (exactMatch or closeMatch, from this record or about it), "
+        self.assertIn("4 linked equivalents (exactMatch or closeMatch, from this record or about it), "
                       "4 on the map, plus this record.", summary)
         self.assertIn("this record", d["note"])
-        self.assertIn("attested equivalents (exactMatch, closeMatch)", d["note"])
+        self.assertIn("linked equivalents (exactMatch, closeMatch)", d["note"])
         self.assertIn("more than one record at the same point", d["note"])
         self.assertEqual((d["inSide"], d["inMain"]), (True, False))
         self.assertEqual((d["state"]["mapped"], d["state"]["stacks"]), (4, 2))
@@ -416,7 +416,7 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
         # The totals: the lists' own lengths (counted from the DOM, which holds them closed).
         self.assertEqual((n["links"], n["outbound"], n["cocited"]), (5, 5, 2))
         self.assertTrue(f["links"]["head"].startswith("Links, as contributed (5)"), f["links"]["head"])
-        self.assertTrue(f["outbound"]["head"].startswith("Outbound: this record's own attestations (5)"),
+        self.assertTrue(f["outbound"]["head"].startswith("Outbound: Links made from this record (5)"),
                         f["outbound"]["head"])
         self.assertTrue(f["cocited"]["head"].endswith("(2 records)"), f["cocited"]["head"])  # records, not ids
         self.assertEqual({k: (v["total"], v["toggle"], v["open"]) for k, v in d["flags"].items()},
@@ -430,7 +430,7 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
         ready, _g = self.open(page)
         self.assertTrue(ready, self.errors)
         f = page.evaluate(self.FOLDS)["folds"]
-        for key, sentence in (("inbound", "No other public record attests that it is this place."),
+        for key, sentence in (("inbound", "No other public record is linked as the same place as this one."),
                               ("related", "This record names no related places.")):
             self.assertEqual((f[key]["tag"], f[key]["summary"], f[key]["collapsed"], f[key]["chevron"]),
                              ("DIV", False, "none", None), key)

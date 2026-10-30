@@ -229,7 +229,7 @@
   <section id="record_gloss" class="atlas-record-section atlas-record-divided" aria-labelledby="record_gloss_heading"
            data-endpoint="{% url 'atlas-record-gloss' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
     <h2 id="record_gloss_heading" class="h5">About this group <span class="enr-badge">generated from the records' data</span></h2>
-    <p class="small text-muted">This record and its attested equivalents, described only from what the records themselves
+    <p class="small text-muted">This record and its linked equivalents, described only from what the records themselves
       say: names, types, country codes, containing places and dates. Nothing is inferred.</p>
     <div class="enr-body"></div>
   </section>
@@ -240,12 +240,12 @@
            data-endpoint="{{ concordance_endpoint }}">
     <h2 id="concordance_heading" class="h5">Concordance</h2>
     <p class="small text-muted">
-      The records attested to be the same place as this one, one step from it.
-      This is a view of other attestations, not a merged place.
+      The records linked as the same place as this one, one step from it.
+      This is a view of Links, not a merged place.
     </p>
     <div id="concordance_status" class="atlas-record-loading" role="status" aria-live="polite">
       <div class="spinner-border spinner-border-sm text-secondary me-2" aria-hidden="true"></div>
-      <span>Looking up the attestations about this record&hellip;</span>
+      <span>Looking up the Links about this record&hellip;</span>
     </div>
     <div id="concordance_body" hidden></div>
   </section>

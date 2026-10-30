@@ -181,7 +181,7 @@ class EnrichmentViewTests(TestCase):
         with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
             g = self.client.get(f"/atlas/place/{self.A.pk}/gloss/").json()
         text = " ".join(g["gloss"]["sentences"])
-        self.assertIn("This record and 2 attested equivalents", text)
+        self.assertIn("This record and 2 linked equivalents", text)
         self.assertIn("Dataset a", text)
         self.assertIn("GeoNames", text)                       # registry name, not "gn"
         self.assertIn("populated place (1)", text)            # gn feature class P, read as a type
@@ -192,7 +192,7 @@ class EnrichmentViewTests(TestCase):
         with patch("api.crc_client.crc_fetch_places", side_effect=failing_fetch):
             g = self.client.get(f"/atlas/place/{self.A.pk}/gloss/").json()
         # gn:100 could not be resolved, so it is missing from the group: said, not hidden.
-        self.assertTrue(any("1 attested equivalent could not be looked up" in u and "incomplete group" in u
+        self.assertTrue(any("1 linked equivalent could not be looked up" in u and "incomplete group" in u
                             for u in g["gloss"]["unknown"]), g["gloss"]["unknown"])
         self.assertNotIn("populated place", " ".join(g["gloss"]["sentences"]))
         with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):  # not cached thin
@@ -212,7 +212,7 @@ class EnrichmentViewTests(TestCase):
         with patch("api.crc_client.crc_fetch_places", side_effect=first_ok_then_fail):
             g = self.client.get(f"/atlas/place/{self.A.pk}/gloss/").json()
         self.assertEqual(len(calls), 2)
-        self.assertIn("This record and 2 attested equivalents", " ".join(g["gloss"]["sentences"]))
+        self.assertIn("This record and 2 linked equivalents", " ".join(g["gloss"]["sentences"]))
         self.assertTrue(any("could not be read just now" in u for u in g["gloss"]["unknown"]))
 
     def test_environment_reports_an_incomplete_group(self):
@@ -610,7 +610,7 @@ class PublicEnrichmentTests(_PublicFixture):
         keys = {f"whg:{self.A.pk}", f"whg:{self.B.pk}", "gn:100"}
         self.assertEqual({m["key"] for m in g["members"]}, keys)           # presence: what anyone may see
         self.assertIn("GeoNames", " ".join(g["gloss"]["sentences"]))
-        self.assertIn("This record and 2 attested equivalents", " ".join(g["gloss"]["sentences"]))
+        self.assertIn("This record and 2 linked equivalents", " ".join(g["gloss"]["sentences"]))
         self.assert_no_secret(g)                                           # absence: embargoed/private
         self.assertEqual((e["status"], e["plan"]["kind"]), ("ok", "area"))
         self.assertEqual({m["key"] for m in e["members"]}, keys)

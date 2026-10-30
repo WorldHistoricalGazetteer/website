@@ -212,7 +212,7 @@ function outboundItem(e) {
         const rec = (e.target && e.target.records && e.target.records[0]) || {};
         return `<li class="conc-entry" data-tier="1" data-source="close_matches">
             ${typeBadge(e)} ${recordLabel(rec, 'postgres')}
-            <div class="conc-meta">Record-to-record link attested by this record's dataset · ${provenanceBadge(e)}
+            <div class="conc-meta">Record-to-record link made by this record's dataset · ${provenanceBadge(e)}
             ${rec.has_geometry ? '' : ' · <span class="text-muted">not mapped: no geometry</span>'}</div>
             ${linkActions(e.identifier, rec.title)}
         </li>`;
@@ -234,11 +234,11 @@ function inboundItem(e) {
     const tgt = entryTarget(e);
     let who;
     if (e.source === 'close_matches' && e.direction === 'unknown') {
-        who = `A record-to-record link between this record and ${recordLabel(rec, 'postgres')}; which side attested it is not recorded`;
+        who = `A record-to-record link between this record and ${recordLabel(rec, 'postgres')}; which side made it is not recorded`;
     } else if (e.source === 'close_matches') {
-        who = `Attested by ${esc(rec.dataset_title || 'its dataset')}, for its record ${recordLabel(rec, 'postgres', false)}`;
+        who = `Linked by ${esc(rec.dataset_title || 'its dataset')}, for its record ${recordLabel(rec, 'postgres', false)}`;
     } else {
-        who = `Attested by ${esc(rec.dataset_title || 'its dataset')}: its record ${recordLabel(rec, 'postgres', false)} cites ${identifierHTML(e)}`;
+        who = `Linked by ${esc(rec.dataset_title || 'its dataset')}: its record ${recordLabel(rec, 'postgres', false)} cites ${identifierHTML(e)}`;
     }
     const notMapped = !e.aggregates
         ? ' · <span class="text-muted">listed, not mapped: this link type does not assert identity</span>'
@@ -326,19 +326,19 @@ function distinctHTML(entries) {
 // (round 2: it was also repeated at the foot of the Concordance).
 function emptyStateHTML(root, data) {
     const excluded = data.excluded_self_links
-        ? `<li>${data.excluded_self_links} link${data.excluded_self_links === 1 ? '' : 's'} naming this record itself, which ${data.excluded_self_links === 1 ? 'is' : 'are'} not ${data.excluded_self_links === 1 ? 'an attestation' : 'attestations'}, ${data.excluded_self_links === 1 ? 'was' : 'were'} left out.</li>`
+        ? `<li>${data.excluded_self_links} link${data.excluded_self_links === 1 ? '' : 's'} naming this record itself, which ${data.excluded_self_links === 1 ? 'is' : 'are'} not ${data.excluded_self_links === 1 ? 'a Link' : 'Links'}, ${data.excluded_self_links === 1 ? 'was' : 'were'} left out.</li>`
         : '';
     return `<div class="conc-empty" id="concordance_empty">
         <div class="conc-empty-lead">
-            <h3 class="h6 mb-2">No other record is attested to be this place, yet</h3>
-            <p class="mb-0">That is the common case: most records in WHG have no attested equivalents. Records that may describe
+            <h3 class="h6 mb-2">No other record is linked as the same place yet</h3>
+            <p class="mb-0">That is the common case: most records in WHG have no linked equivalents. Records that may describe
             the same place can still be found by searching for them, with <a href="#explore_similar_header"
             class="conc-explore-ref">Explore similar records</a> at the top of this page.</p>
         </div>
         <ul class="small text-muted mt-3 mb-0">
             <li>This record cites no identifier for the same place, and no other public record cites this one.</li>
             ${excluded}
-            <li>Attestations come from contributors and reviewed reconciliation. Similar records found by searching are suggestions, not attestations.</li>
+            <li>Links come from contributors and from matches reviewed in WHG v3. Similar records found by searching are suggestions, not Links.</li>
         </ul>
     </div>`;
 }
@@ -353,7 +353,7 @@ function summaryHTML(data, mappable, recordOnMap) {
         ? (recordOnMap ? ', plus this record.' : '. This record itself has no location, so it is not on the map.')
         : '.';
     return `<p class="conc-summary mb-1" id="concordance_summary">
-        <strong>${n}</strong> attested equivalent${n === 1 ? '' : 's'}
+        <strong>${n}</strong> linked equivalent${n === 1 ? '' : 's'}
         (exactMatch or closeMatch, from this record or about it),
         <strong>${mappable}</strong> on the map${own}
         ${(data.outbound.length + data.inbound.length) > n ? 'Other links are listed with what became of each.' : ''}
@@ -575,10 +575,10 @@ function render(root, data) {
                    (the number says how many; click it to list them).` : '';
             notes += `<p id="concordance_map_note" class="mb-0">
                 <span class="conc-key conc-key-record"></span> this record
-                <span class="conc-key conc-key-member ms-2"></span> attested equivalents (exactMatch, closeMatch).
+                <span class="conc-key conc-key-member ms-2"></span> linked equivalents (exactMatch, closeMatch).
                 Co-cited records are not shown.${ring}</p>`;
         } else {
-            notes += '<p id="concordance_map_note" class="mb-0">No attested equivalent has a location WHG holds, so there is nothing to map.</p>';
+            notes += '<p id="concordance_map_note" class="mb-0">No linked equivalent has a location WHG holds, so there is nothing to map.</p>';
         }
         const notesEl = document.getElementById('concordance_map_notes');
         const box = document.getElementById('concordance_map_box');
@@ -590,14 +590,14 @@ function render(root, data) {
         // they are listed), every inbound record entry, co-cited RECORDS.
         const inTrunc = !!(data.truncated && data.truncated.inbound);
         let h = foldHTML({ id: 'concordance_tier1', cls: 'conc-tier-1', key: 'outbound',
-            title: "Outbound: this record's own attestations", total: data.outbound.length,
+            title: "Outbound: Links made from this record", total: data.outbound.length,
             body: `<ul class="conc-list">${data.outbound.map(outboundItem).join('')}</ul>`,
-            empty: 'This record attests no equivalents of its own.' });
+            empty: 'This record has no Links of its own to other records.' });
         h += foldHTML({ id: 'concordance_tier2', cls: 'conc-tier-2', key: 'inbound',
             title: 'Inbound: other records that say they are this place', total: data.inbound.length, truncated: inTrunc,
             body: `<ul class="conc-list">${data.inbound.map(inboundItem).join('')}</ul>`
-                + (inTrunc ? '<p class="small text-muted">More records attest this than are listed here.</p>' : ''),
-            empty: 'No other public record attests that it is this place.' });
+                + (inTrunc ? '<p class="small text-muted">More records link to this one than are listed here.</p>' : ''),
+            empty: 'No other public record is linked as the same place as this one.' });
         h += cocitedHTML(data.cocited || [], !!(data.truncated && data.truncated.cocited));
         h += distinctHTML(data.distinct);
         body.innerHTML = h;
@@ -695,7 +695,7 @@ function load(root) {
     const status = document.getElementById('concordance_status');
     status.hidden = false;
     status.innerHTML = '<div class="spinner-border spinner-border-sm text-secondary me-2" aria-hidden="true"></div>'
-        + '<span>Looking up the attestations about this record…</span>';
+        + '<span>Looking up the Links about this record…</span>';
     state.concordance = 'loading';
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);

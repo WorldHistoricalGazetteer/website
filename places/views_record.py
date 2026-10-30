@@ -301,8 +301,9 @@ def atlas_record_page(request, pk):
         "enrichment_public": v4_landing_enabled(),
     }
     # The "Links" section (place#343, ruling Q7): the ACTIVE Links naming this record, labelled
-    # and disputable, the same for every viewer. Only with the release switch on: dark on prod.
-    if v4_landing_enabled():
+    # and disputable, the same for every viewer. With the release switch off only beta users
+    # (who alone can open this page) see it, so it can be tested before the public release.
+    if v4_landing_enabled() or linking_open_to(request.user):
         from places.record_links import record_links
         context["public_links"] = record_links(place, request.user)
         context["public_links_shown"] = True

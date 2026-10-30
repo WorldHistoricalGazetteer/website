@@ -115,10 +115,10 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
     if kind == "concordance":
         eq = n - 1
         if eq == 0:
-            say("sources", f"This record alone, from {src}: no other record is attested to be the same place, "
+            say("sources", f"This record alone, from {src}: no other record is linked as the same place, "
                            "so this describes one contributor's account.")
         else:
-            say("sources", f"This record and {eq} attested equivalent{'s' if eq != 1 else ''} "
+            say("sources", f"This record and {eq} linked equivalent{'s' if eq != 1 else ''} "
                            f"(exactMatch or closeMatch), {n} records from {len(sources)} source"
                            f"{'s' if len(sources) != 1 else ''}: {src}.")
     else:
@@ -223,7 +223,7 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
                               f"{_of(k, len(known)).capitalize()} {'is' if k == 1 else 'are'} undated.")
 
     if unresolved:
-        out["unknown"].append(f"{unresolved} attested equivalent{'s' if unresolved != 1 else ''} could not be looked "
+        out["unknown"].append(f"{unresolved} linked equivalent{'s' if unresolved != 1 else ''} could not be looked "
                               "up in WHG's index just now, so this describes an incomplete group. Reload to try again.")
     if truncated:
         from places.concordance import INBOUND_LIMIT
