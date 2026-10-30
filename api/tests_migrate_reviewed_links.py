@@ -129,3 +129,22 @@ class MigrateReviewedLinksTests(TestCase):
             run("--execute", "--forward")
         active = ContributorAttestation.objects.get(status="active")
         self.post.delay.assert_called_once_with(active.pk)
+
+
+class CanonicalOrderMatchesPythonTests(TestCase):
+    """The CHECK compares with the "C" collation. Under the database default (en_US, which ignores
+    punctuation) a pair Python sorts as ("whg:1618:anon:84", "whg:16:1090469") was refused, and the
+    whole prod migration rolled back."""
+
+    def test_pair_sorted_by_python_is_accepted_by_the_database(self):
+        from django.db import IntegrityError, transaction
+        user = get_user_model().objects.create_user(
+            username="co_u", email="co_u@example.org", password="pw", given_name="C", surname="O")
+        a, b = sorted(("whg:16:1090469", "whg:1618:anon:84"))
+        self.assertEqual(a, "whg:1618:anon:84")
+        ContributorAttestation.objects.bulk_create([ContributorAttestation(
+            place_a=a, place_b=b, relation_type="closeMatch", user=user, status="pending")])
+        self.assertEqual(ContributorAttestation.objects.count(), 1)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ContributorAttestation.objects.bulk_create([ContributorAttestation(
+                place_a=b, place_b=a, relation_type="closeMatch", user=user, status="pending")])
