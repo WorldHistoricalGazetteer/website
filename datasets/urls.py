@@ -41,6 +41,7 @@ urlpatterns = [
 
   # v4 lifecycle, beta only (place#334 Phase 3): JSON
   path('<int:dsid>/lifecycle/', views_lifecycle.lifecycle_state, name='lifecycle'),
+  path('<int:dsid>/lifecycle/start/', views_lifecycle.lifecycle_start, name='lifecycle-start'),
   path('<int:dsid>/lifecycle/submit/', views_lifecycle.lifecycle_submit, name='lifecycle-submit'),
   path('<int:dsid>/lifecycle/publish/', views_lifecycle.lifecycle_publish, name='lifecycle-publish'),
   path('<int:dsid>/lifecycle/withdraw/', views_lifecycle.lifecycle_withdraw, name='lifecycle-withdraw'),

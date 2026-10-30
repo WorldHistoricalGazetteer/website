@@ -91,13 +91,22 @@ class FullPathTests(LifecycleBase):
         self.assertTrue(Dataset.objects.get(pk=self.ds.pk).public)
         self.run_on_commit(lifecycle.withdraw, self.ds, self.owner, "taking it back")
         self.assertFalse(Dataset.objects.get(pk=self.ds.pk).public)
-        self.run_on_commit(lifecycle.publish, self.ds, self.owner)  # the toggle again
+        # A withdrawn dataset is reviewed again before it can be published (2026-10-30).
+        with self.assertRaises(lifecycle.LifecycleRefused) as cm:
+            self.run_on_commit(lifecycle.publish, self.ds, self.owner)
+        self.assertEqual((cm.exception.status, self.state()), (409, "withdrawn"))
+        self.run_on_commit(lifecycle.submit, self.ds, self.owner)
+        self.run_on_commit(lifecycle.start_review, self.ds, self.editor)
+        self.run_on_commit(lifecycle.accept, self.ds, self.editor)
+        self.run_on_commit(lifecycle.publish, self.ds, self.owner)
         steps = list(DatasetLifecycleEvent.objects.filter(dataset_pk=self.ds.pk)
                      .values_list("from_state", "to_state", "actor_id"))
         self.assertEqual(steps, [
             (None, "submitted", self.owner.id), ("submitted", "in_review", self.editor.id),
             ("in_review", "accepted", self.editor.id), ("accepted", "published", self.owner.id),
-            ("published", "withdrawn", self.owner.id), ("withdrawn", "published", self.owner.id)])
+            ("published", "withdrawn", self.owner.id), ("withdrawn", "submitted", self.owner.id),
+            ("submitted", "in_review", self.editor.id), ("in_review", "accepted", self.editor.id),
+            ("accepted", "published", self.owner.id)])
         self.assertEqual(self.state(), "published")
         # ds_status, which the v3 pages read, is untouched throughout.
         self.assertIsNone(Dataset.objects.get(pk=self.ds.pk).ds_status)
@@ -134,6 +143,7 @@ class TransitionTableTests(LifecycleBase):
             "validate": lambda: lifecycle.begin_validation(ds),
             "fail_validation": lambda: lifecycle.validation_failed(ds, ["bad row"]),
             "pass_validation": lambda: lifecycle.validation_passed(ds),
+            "start": lambda: lifecycle.start(ds, self.owner),
             "submit": lambda: lifecycle.submit(ds, self.owner),
             "start_review": lambda: lifecycle.start_review(ds, self.editor),
             "accept": lambda: lifecycle.accept(ds, self.editor),
@@ -221,6 +231,21 @@ class RefusalRollsBackTests(LifecycleBase):
         ds.refresh_from_db()
         self.assertEqual((ds.lifecycle_state, ds.public), ("published", True))
         self.m["index"].delay.assert_called_once_with(self.ds.pk)  # v3 pub indexing still runs
+
+    def test_start_is_the_owners_explicit_opt_in_for_a_private_v3_dataset(self):
+        self.set_state(None, public=True)
+        with self.assertRaises(lifecycle.LifecycleRefused) as cm:
+            lifecycle.start(self.ds, self.owner)
+        self.assertEqual((cm.exception.status, self.state()), (409, None))
+        self.set_state(None, public=False)
+        with self.assertRaises(lifecycle.LifecycleRefused) as cm:
+            lifecycle.start(self.ds, self.stranger)
+        self.assertEqual((cm.exception.status, self.state()), (403, None))
+        self.run_on_commit(lifecycle.start, self.ds, self.owner)
+        self.assertEqual(self.state(), "draft")
+        self.assertEqual(list(DatasetLifecycleEvent.objects.filter(dataset_pk=self.ds.pk)
+                              .values_list("from_state", "to_state", "actor_id")),
+                         [(None, "draft", self.owner.id)])
 
     def test_a_public_v3_dataset_cannot_be_submitted(self):
         self.set_state(None, public=True)

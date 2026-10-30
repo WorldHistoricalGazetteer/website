@@ -1,5 +1,18 @@
 {% load static %}
-{% if show %}
+{% if show and start_only %}
+<div id="ds_lifecycle" class="ds-card mb-2" data-testid="lifecycle-panel" data-state="none">
+  <p class="ds-card-header">Review and publication <span class="badge bg-warning text-dark ms-1">beta</span></p>
+  <p class="mb-2">You can take this dataset through the new review process. It stays private while
+    you prepare it; when you submit it, the WHG team reviews it, and it can be published only after
+    that review. Nothing changes until you start.</p>
+  <form class="lifecycle-form mb-2" data-testid="lifecycle-start"
+        data-url="{% url 'datasets:lifecycle-start' ds.id %}" data-confirm="{{ start_confirm }}">
+    <button type="submit" class="btn btn-sm btn-primary">Start the review process</button>
+    <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+  </form>
+</div>
+<script src="{% static 'datasets/lifecycle.js' %}" defer></script>
+{% elif show %}
 <div id="ds_lifecycle" class="ds-card mb-2" data-testid="lifecycle-panel" data-state="{{ ds.lifecycle_state }}">
   <p class="ds-card-header">Review and publication <span class="badge bg-warning text-dark ms-1">beta</span></p>
   <p class="mb-1"><strong data-testid="lifecycle-state">{{ state_label }}</strong></p>
@@ -31,7 +44,7 @@
         data-url="{% url 'datasets:lifecycle-submit' ds.id %}">
     <label class="small d-block mb-1" for="lifecycle_note">Note for the editor (optional)</label>
     <textarea id="lifecycle_note" name="note" rows="2" class="form-control form-control-sm mb-1"></textarea>
-    <button type="submit" class="btn btn-sm btn-primary">{% if ds.lifecycle_state == "changes_requested" %}Submit again for review{% else %}Submit for review{% endif %}</button>
+    <button type="submit" class="btn btn-sm btn-primary">{% if ds.lifecycle_state == "changes_requested" or ds.lifecycle_state == "withdrawn" %}Submit again for review{% else %}Submit for review{% endif %}</button>
     <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
   </form>
   {% endif %}

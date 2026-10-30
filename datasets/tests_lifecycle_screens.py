@@ -19,7 +19,7 @@ from datasets.tests_lifecycle import LifecycleBase
 from places.tests_vocabulary import BANNED, literals, violations
 
 User = get_user_model()
-ACTIONS = ("lifecycle-submit", "lifecycle-publish", "lifecycle-withdraw", "lifecycle-sensitivity")
+ACTIONS = ("lifecycle-start", "lifecycle-submit", "lifecycle-publish", "lifecycle-withdraw", "lifecycle-sensitivity")
 QUEUE_ACTIONS = ("review-start", "review-accept", "review-request-changes", "review-decline")
 ROOT = Path(__file__).resolve().parent
 
@@ -60,14 +60,44 @@ class ScreenBase(LifecycleBase):
 
 
 class OwnerPanelGateTests(ScreenBase):
-    def test_null_lifecycle_shows_nothing_new(self):
-        self.set_state("draft")
-        self.assertIn('data-testid="lifecycle-panel"', self.status_page())
+    def test_null_lifecycle_beta_owner_gets_only_the_start_control(self):
+        """Ruling 2026-10-30: a v3-era (NULL) private dataset offers its beta owner one thing,
+        the explicit opt-in; viewing the page changes nothing."""
         self.set_state(None)
+        html = self.status_page()
+        self.assertIn('data-state="none"', html)
+        self.assertEqual(testids(html, ACTIONS), {"lifecycle-start"})
+        self.assertIsNone(self.state())
+        confirm = re.search(r'data-testid="lifecycle-start"[^>]*data-confirm="([^"]+)"', html, re.S)
+        self.assertIsNotNone(confirm)
+        self.assertIn("published only after that review", confirm.group(1))
+        url = re.search(r'data-testid="lifecycle-start"\s+data-url="([^"]+)"', html).group(1)
+        self.assertEqual(url, reverse("datasets:lifecycle-start", args=[self.ds.pk]))
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client.post(url, {}, content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self.state(), "draft")
+        self.assertEqual(testids(self.status_page(), ACTIONS),
+                         {"lifecycle-submit", "lifecycle-sensitivity"})
+
+    def test_null_lifecycle_shows_nothing_new_to_anyone_else(self):
+        self.set_state(None)
+        self.assertIn('data-testid="lifecycle-start"', self.status_page())
+        # a public v3 dataset: the review process is for unpublished datasets
+        self.set_state(None, public=True)
         html = self.status_page()
         self.assertNotIn('data-testid="lifecycle-panel"', html)
         self.assertNotIn("lifecycle.js", html)
         self.assertNotIn("/lifecycle/", html)
+        self.set_state(None, public=False)
+        # staff: in the circle, not an owner
+        self.assertNotIn("/lifecycle/", self.status_page(self.editor))
+        # the owner without beta
+        User.objects.filter(pk=self.owner.pk).update(role="normal")
+        html = self.status_page(User.objects.get(pk=self.owner.pk))
+        self.assertNotIn('data-testid="lifecycle-panel"', html)
+        self.assertNotIn("/lifecycle/", html)
+        self.assertIsNone(self.state())
 
     def test_owner_without_beta_sees_nothing(self):
         self.set_state("draft")
@@ -110,7 +140,7 @@ class OwnerPanelStateTests(ScreenBase):
         ("declined", False, set()),
         ("accepted", False, {"lifecycle-publish"}),
         ("published", True, {"lifecycle-withdraw"}),
-        ("withdrawn", False, {"lifecycle-publish"}),
+        ("withdrawn", False, {"lifecycle-submit", "lifecycle-sensitivity"}),
     ]
 
     def test_only_the_actions_allowed_now(self):
@@ -122,7 +152,8 @@ class OwnerPanelStateTests(ScreenBase):
                 self.assertIn(f'data-state="{state}"', html)
                 self.assertEqual(testids(html, ACTIONS), expected)
                 offered_somewhere |= expected
-        self.assertEqual(offered_somewhere, set(ACTIONS))  # every button can appear
+        # every button but "start" (NULL only, tested above) can appear
+        self.assertEqual(offered_somewhere, set(ACTIONS) - {"lifecycle-start"})
 
     def test_buttons_post_to_the_endpoints_that_accept_them(self):
         """The URL a button posts to, taken from the page, accepts the request (the endpoint
@@ -252,7 +283,7 @@ class VocabularyTests(ScreenBase):
         self.assertIsNotNone(m)
         self.assertIn("Request changes", visible_text(m.group(0)))
         self.assertIsNone(BANNED.search(visible_text(m.group(0))))
-        for state, public in (("draft", False), ("changes_requested", False),
+        for state, public in ((None, False), ("draft", False), ("withdrawn", False), ("changes_requested", False),
                               ("accepted", False), ("published", True)):
             self.set_state(state, public=public)
             p = self.panel(self.status_page())
@@ -270,3 +301,24 @@ class VocabularyTests(ScreenBase):
     def test_guard_can_fail(self):
         self.assertIsNotNone(BANNED.search(visible_text("<p>Request accessioning</p>")))
         self.assertIsNotNone(BANNED.search(visible_text('<form data-confirm="Reconcile now?">')))
+
+
+class ReviewQueueNavLinkTests(ScreenBase):
+    """The user menu's "Review queue" link: shown to exactly those the page admits."""
+    LINK = 'data-testid="nav-review-queue"'
+
+    def page(self, user):
+        self.client.force_login(user)
+        r = self.client.get(reverse("licenses"))  # any page on the base template
+        self.assertEqual(r.status_code, 200)
+        return r.content.decode()
+
+    def test_link_follows_the_page_gate(self):
+        self.assertIn(self.LINK, self.page(self.editor))  # staff: beta + editor
+        self.assertIn("/datasets/review-queue/", self.page(self.editor))
+        self.assertNotIn(self.LINK, self.page(self.owner))  # beta, not an editor
+        Group.objects.get_or_create(name="editorial")[0].user_set.add(self.stranger)
+        stranger = User.objects.get(pk=self.stranger.pk)
+        self.assertNotIn(self.LINK, self.page(stranger))  # editor, no beta
+        User.objects.filter(pk=self.stranger.pk).update(role="beta_tester")
+        self.assertIn(self.LINK, self.page(User.objects.get(pk=self.stranger.pk)))

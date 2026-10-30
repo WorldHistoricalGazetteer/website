@@ -1,10 +1,11 @@
 """The owner's "Review and publication" panel on the dataset status page (place#334 Phase 3).
 
 Shown only to an owner or co-owner who is signed in with beta access, in the dataset's circle
-(the gate of ``datasets/views_lifecycle._gate``), and only for a dataset that is on the v4
-lifecycle: a NULL ``lifecycle_state`` (every v3-era dataset) renders nothing at all. The
-buttons offered are exactly ``views_lifecycle.allowed_actions``; each posts to the existing
-JSON endpoint, which still decides.
+(the gate of ``datasets/views_lifecycle._gate``). A dataset with a NULL ``lifecycle_state``
+(every v3-era dataset) gets only the explicit "Start the review process" control, and only
+while it is private (Stephen, 2026-10-30); nobody else sees anything new. The buttons offered
+are exactly ``views_lifecycle.allowed_actions``; each posts to the existing JSON endpoint,
+which still decides.
 """
 from django import template
 from django.urls import reverse
@@ -25,12 +26,16 @@ STATE_TEXT = {
     "declined": "The editor has declined this dataset. It stays private.",
     "accepted": "Accepted. You can publish it whenever you are ready.",
     "published": "Published: anyone can see it, and its records are in the search index.",
-    "withdrawn": "Made private again. It is not in the search index. You can publish it again.",
+    "withdrawn": "Made private again. It is not in the search index. To publish it again, "
+                 "submit it for review again.",
 }
 
 PUBLISH_CONFIRM = ("Publish this dataset? It becomes public: anyone can see and download it, "
                    "its records are added to the search index, and the links you made from "
                    "its records become public too.")
+START_CONFIRM = ("Start the review process for this dataset? It stays private while you prepare "
+                 "it. When you submit it, the WHG team reviews it, and it can be published only "
+                 "after that review.")
 WITHDRAW_CONFIRM = ("Withdraw this dataset? It becomes private again: it is removed from the "
                     "search index and its public page, and the links you made from its "
                     "records stop being public. You can publish it again later.")
@@ -42,7 +47,7 @@ def _is_owner(ds, user):
 
 def panel_context(ds, user):
     """The panel's context, or ``{"show": False}``. Separate from the tag for tests."""
-    if (ds is None or ds.lifecycle_state is None or user is None
+    if (ds is None or user is None
             or not getattr(user, "is_authenticated", False)
             or not getattr(user, "can_access_beta", False)
             or not ds.user_has_private_access(user) or not _is_owner(ds, user)):
@@ -51,6 +56,11 @@ def panel_context(ds, user):
     from datasets.forms import SensitivityDeclarationForm
     from datasets.views_lifecycle import allowed_actions
     can = allowed_actions(ds, user)
+    if ds.lifecycle_state is None:
+        # v3-era: nothing but the opt-in, and only where the endpoint would take it.
+        if not can["start"]:
+            return {"show": False}
+        return {"show": True, "start_only": True, "ds": ds, "start_confirm": START_CONFIRM}
     summary = lifecycle.status_summary(ds, user) or {}
     by = summary.get("usually_by")
     text = STATE_TEXT.get(ds.lifecycle_state, "").format(
@@ -76,6 +86,16 @@ def panel_context(ds, user):
         if (not ds.public and ds.lifecycle_state in qc.STRIPPABLE_STATES
             and ds.user_can_manage(user)) else "",
     }
+
+
+@register.filter
+def is_review_editor(user):
+    """For the user menu's "Review queue" link: the review page's own gate (beta + editor).
+    Beta is asked first, so nobody else costs a groups query."""
+    if not getattr(user, "is_authenticated", False) or not getattr(user, "can_access_beta", False):
+        return False
+    from datasets.lifecycle import is_editor
+    return is_editor(user)
 
 
 @register.inclusion_tag("datasets/_lifecycle_panel.html", takes_context=True)

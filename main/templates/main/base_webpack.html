@@ -2,6 +2,7 @@
 {% load static %}
 {% load dataset_extras %}
 {% load v4_landing_tags %}
+{% load lifecycle_tags %}
 <!DOCTYPE html>
 
 <html lang="en">
@@ -415,6 +416,11 @@
                             <li class="nav-item">
                                 <a class="nav-link" href="{% url 'profile-edit' %}"> Profile </a>
                             </li>
+                            {% if user|is_review_editor %}{# place#340: the review page's own gate (beta + editor) #}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'datasets:lifecycle-review-queue' %}" data-testid="nav-review-queue">Review queue <span class="badge text-bg-warning">beta</span></a>
+                            </li>
+                            {% endif %}
                             <li class="nav-item">
                                 {# place#155 — invite a colleague to register (no page context) #}
                                 <a class="nav-link" data-whg-modal="/invite/?kind=join" href="#">Invite a colleague</a>

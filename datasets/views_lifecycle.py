@@ -5,6 +5,7 @@ Session auth and CSRF like every other datasets POST. A dataset the caller may n
 ``datasets/lifecycle.py``; these views only translate a refusal into its HTTP status.
 
     GET  /datasets/<id>/lifecycle/                 state, service level, timeline, checks
+    POST /datasets/<id>/lifecycle/start/           owner: opt a NULL (v3-era) dataset in (draft)
     POST /datasets/<id>/lifecycle/submit/          owner
     POST /datasets/<id>/lifecycle/publish/         owner, once accepted (the publish toggle)
     POST /datasets/<id>/lifecycle/withdraw/        owner
@@ -61,6 +62,8 @@ def allowed_actions(ds, user):
     editor = lifecycle.is_editor(user)
     manage = ds.user_can_manage(user)
     return {
+        "start": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["start"][0]
+        and not ds.public,
         "submit": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["submit"][0]
         and not ds.public,
         "publish": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["publish"][0],
@@ -104,6 +107,11 @@ def _act(request, dsid, fn):
 def lifecycle_state(request, dsid):
     ds, refusal = _gate(request, dsid)
     return refusal or JsonResponse(_state(ds, request.user))
+
+
+@require_POST
+def lifecycle_start(request, dsid):
+    return _act(request, dsid, lambda ds, b: lifecycle.start(ds, request.user))
 
 
 @require_POST
