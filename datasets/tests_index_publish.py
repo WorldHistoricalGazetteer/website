@@ -104,6 +104,19 @@ class IndexOnPublishTests(LifecycleBase):
         self.assertEqual(self.job(), "")
         self.assertEqual(self.post.call_count, 1)  # polling never re-triggers
 
+    @override_settings(**CFG)
+    def test_a_job_that_failed_after_indexing_still_clears_the_flag(self):
+        self.set_state("published", public=True)
+        with mock.patch.dict("os.environ", ENV):
+            tasks.index_dataset_on_publish(self.ds.pk)  # POST: job J1
+            self.get.return_value = resp(200, {"job_id": "J1", "status": "failed", "indexed": False})
+            tasks.index_dataset_on_publish(self.ds.pk)
+            self.assertIsNotNone(self.flag())           # failed and not indexed: still waiting
+            tasks.index_dataset_on_publish(self.ds.pk)  # fresh job J1 again (id cleared on failure)
+            self.get.return_value = resp(200, {"job_id": "J1", "status": "failed", "indexed": True})
+            tasks.index_dataset_on_publish(self.ds.pk)
+        self.assertIsNone(self.flag())
+
     def test_unconfigured_makes_no_http_call(self):
         with override_settings(CRC_REINGEST_URL=""), mock.patch.dict("os.environ", ENV):
             self.publish()

@@ -1614,7 +1614,9 @@ def index_dataset_on_publish(dataset_id):
             r = requests.get(f"{base}/{ds.index_job_id}", headers=headers, timeout=timeout)
             if r.status_code == 200:
                 body = r.json()
-                if body.get("status") == "completed" and body.get("indexed") is True:
+                # `indexed` comes from a marker written last, by this job, after a zero-error bulk;
+                # a job that failed after indexing has still indexed the dataset.
+                if body.get("indexed") is True:
                     Dataset.objects.filter(pk=ds.pk).update(index_pending_since=None, index_job_id="")
                     return {"status": "indexed"}
                 if body.get("status") == "failed":
