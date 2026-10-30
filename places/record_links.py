@@ -55,15 +55,21 @@ def shows_attester_name(attester, viewer=None, per_user=True) -> bool:
     """Whether a Link's maker is named to ``viewer``. THE one place this is decided
     (also used by ``api.attestations.attester``).
 
-    No WHG account carries a choice to be named on public Links yet, so for now a maker is
-    named only to beta users (the pre-release state, unchanged) and to themselves; everyone
-    else reads "a WHG contributor". When an opt-in exists it belongs here.
+    A maker is named to EVERYONE when they opted in (``User.show_name_on_links``, set on the
+    Profile page); otherwise only to beta users (the pre-release state, unchanged) and to
+    themselves; everyone else reads "a WHG contributor".
 
-    ``per_user=False`` (a result cached per viewer CLASS, e.g. the Concordance) drops the
-    "themselves" case, which would otherwise put one person's view in a shared entry.
+    ``per_user=False`` (a result cached per viewer CLASS, e.g. the Concordance) answers on
+    viewer-class facts ONLY: it drops the "themselves" case, which would otherwise put one
+    person's view in a shared entry, AND the maker's opt-in, which they can change at any
+    time and which would otherwise stay in the cache after they withdrew it. The cached
+    Concordance applies the opt-in after the cache instead
+    (``places.concordance.decorate_for_user``).
     """
     if attester is None:
         return False
+    if per_user and getattr(attester, "show_name_on_links", False):
+        return True
     if viewer is not None and getattr(viewer, "is_authenticated", False):
         if getattr(viewer, "can_access_beta", False):
             return True

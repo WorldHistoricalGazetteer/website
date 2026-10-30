@@ -152,6 +152,12 @@ class User(AbstractUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     news_permitted = models.BooleanField(default=False)
 
+    # Opt-in to being named on the Links one makes (place#343): when True, everyone (signed
+    # in or not) sees this user's name (and ORCiD) beside their public Links; when False,
+    # everyone but beta users and the user themselves reads "a WHG contributor". Read by
+    # ``places.record_links.shows_attester_name``; set on the Profile page.
+    show_name_on_links = models.BooleanField(default=False)
+
     # UI language preference — a short code (e.g. 'en', 'de', or 'local' for
     # "as recorded"). Mirrors the client-side ``whg_lang`` localStorage so
     # signed-in users keep their choice across machines and sessions.

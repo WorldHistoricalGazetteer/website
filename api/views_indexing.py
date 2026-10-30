@@ -317,6 +317,22 @@ class RetentionNotifyView(AuthenticatedAPIView):
 # ---------------------------------------------------------------------------
 
 
+LINKING_CLOSED_MESSAGE = ("Making and changing Links is not open to your account yet. "
+                          "Reading Links is unaffected.")
+
+
+def _linking_refused(user):
+    """The server-side write gate for Links (place#343): a 403 for a signed-in caller to whom
+    ``places.v4_landing.linking_open_to`` says no (beta users always may; with the release
+    switch on, every signed-in user may), else None. The Link sheet is only offered to the
+    same users, but hiding a button is not a gate: token and session callers both reach here."""
+    from places.v4_landing import linking_open_to
+    if linking_open_to(user):
+        return None
+    return Response({"error": LINKING_CLOSED_MESSAGE, "code": "linking_not_open"},
+                    status=status.HTTP_403_FORBIDDEN)
+
+
 @method_decorator(csrf_exempt, name="dispatch")
 class ContributorAttestationView(AuthenticatedAPIView):
     """Create / list a contributor's hard-link assertions.
@@ -336,6 +352,9 @@ class ContributorAttestationView(AuthenticatedAPIView):
     post_save signal forwards the new row to the gateway's ``/api/links``
     endpoint (best-effort, production context only). ``DELETE`` withdraws by id:
     the row is kept with status ``withdrawn`` and revoked from the gateway.
+    POST, PATCH and DELETE answer 403 to a signed-in caller for whom
+    ``places.v4_landing.linking_open_to`` is false (``_linking_refused``); GET is
+    unaffected.
     """
 
     http_method_names = ["get", "post", "patch", "delete", "options"]
@@ -365,6 +384,9 @@ class ContributorAttestationView(AuthenticatedAPIView):
         if not request.user.is_authenticated:
             return Response({"error": "auth required"},
                             status=status.HTTP_401_UNAUTHORIZED)
+        refused = _linking_refused(request.user)
+        if refused is not None:
+            return refused
         body = _parse_json_body(request)
         if body is None:
             return Response({"error": "JSON body required"},
@@ -388,6 +410,9 @@ class ContributorAttestationView(AuthenticatedAPIView):
         if not request.user.is_authenticated:
             return Response({"error": "auth required"},
                             status=status.HTTP_401_UNAUTHORIZED)
+        refused = _linking_refused(request.user)
+        if refused is not None:
+            return refused
         body = _parse_json_body(request) or {}
         if body.get("status") != "withdrawn":
             return Response({"error": "the only permitted change is status 'withdrawn'"},
@@ -399,6 +424,9 @@ class ContributorAttestationView(AuthenticatedAPIView):
         if not request.user.is_authenticated:
             return Response({"error": "auth required"},
                             status=status.HTTP_401_UNAUTHORIZED)
+        refused = _linking_refused(request.user)
+        if refused is not None:
+            return refused
         body = _parse_json_body(request) or {}
         row_id = body.get("id") or request.GET.get("id")
         if not row_id:

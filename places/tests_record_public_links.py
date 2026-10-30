@@ -339,3 +339,74 @@ class MakerNameElsewhereTests(_Fixture):
         self.assertEqual(name(self.beta), "Sam Stranger")
         self.assertEqual(name(self.stranger), "Sam Stranger")
         self.assertIsNone(name(self.plain))
+
+
+@ON
+class MakerNameOptInTests(_Fixture):
+    """"Show my name on Links I make" (``User.show_name_on_links``, place#343): an opted-in
+    maker is named to everyone on the Record page, in the Concordance JSON and in
+    GET /api/links?about=; an opted-out one only to beta users (and themselves where the
+    answer is per user). Each test asserts the name present and absent in the same test."""
+
+    def set_opt_in(self, value):
+        type(self.stranger).objects.filter(pk=self.stranger.pk).update(show_name_on_links=value)
+        self.stranger.refresh_from_db()
+
+    def concordance_names(self, user):
+        self.client.logout()
+        if user:
+            self.client.force_login(user)
+        with patch("api.crc_client.crc_fetch_places", return_value={}):
+            data = self.client.get(f"/atlas/place/{self.A.pk}/concordance/").json()
+        self.client.logout()
+        return [e["attestation"]["attested_by"]["name"]
+                for k in ("outbound", "inbound") for e in data[k] if e.get("source") == "attestation"]
+
+    def test_record_page_names_an_opted_in_maker_to_everyone(self):
+        self.link(self.stranger, self.A, self.B)
+        self.link(self.plain, self.A, self.C)                         # Pat Plain did not opt in
+        self.set_opt_in(True)
+        for viewer in (None, self.plain, self.owner):
+            s = self.section(self.page(viewer))
+            self.assertIn("Sam Stranger", s, viewer)
+            self.assertIn("0000-0002-1825-0097", s, viewer)          # ORCiD, as for beta viewers
+        s = self.section(self.page(None))
+        self.assertNotIn("Pat Plain", s)
+        self.assertIn("a WHG contributor", s)
+        self.set_opt_in(False)
+        s = self.section(self.page(None))
+        self.assertNotIn("Sam Stranger", s)
+        self.assertIn("Sam Stranger", self.section(self.page(self.beta)))   # beta: unchanged
+
+    def test_concordance_cache_never_holds_the_opt_in(self):
+        """The Concordance is cached per viewer CLASS. The opt-in is applied after the cache,
+        so withdrawing it takes effect on the very next request, with the entry still warm."""
+        from django.core.cache import cache
+        from places.concordance import concordance_cache_key
+        self.link(self.stranger, self.A, self.B)
+        self.assertEqual(self.concordance_names(None), [None])        # warms the anonymous entry
+        self.set_opt_in(True)
+        self.assertEqual(self.concordance_names(None), ["Sam Stranger"])          # served from cache
+        self.assertEqual(self.concordance_names(self.plain), ["Sam Stranger"])
+        cached = cache.get(concordance_cache_key(self.A.pk, None))
+        self.assertIsNotNone(cached, "the anonymous entry was not cached: the test proves nothing")
+        stored = [e["attestation"]["attested_by"]["name"]
+                  for k in ("outbound", "inbound") for e in cached[k] if e.get("source") == "attestation"]
+        self.assertEqual(stored, [None])                              # the cache itself holds no name
+        self.set_opt_in(False)
+        self.assertEqual(self.concordance_names(None), [None])        # same warm entry, name gone
+        self.assertEqual(self.concordance_names(self.plain), [None])
+        self.assertEqual(self.concordance_names(self.beta), ["Sam Stranger"])     # control
+
+    def test_api_about_names_an_opted_in_maker(self):
+        self.link(self.stranger, self.A, self.B)
+
+        def name(user):
+            self.client.force_login(user)
+            r = self.client.get("/api/links", {"about": f"whg:{self.A.pk}"})
+            self.client.logout()
+            (row,) = r.json()["result"]
+            return row["attested_by"]["name"]
+        self.assertIsNone(name(self.plain))
+        self.set_opt_in(True)
+        self.assertEqual(name(self.plain), "Sam Stranger")
