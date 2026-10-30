@@ -359,6 +359,12 @@ def withdraw(dataset, actor, reason=""):
         ds.public = False
         ds.save(update_fields=["public", "lifecycle_state"])
         Dataset.objects.filter(pk=ds.pk).update(index_pending_since=None, index_job_id="", index_failure_reason="")
+        pk = ds.pk
+
+        def queue_retraction():
+            from datasets.tasks import retract_dataset_from_index
+            retract_dataset_from_index.delay(pk)
+        transaction.on_commit(queue_retraction)  # the gateway checks our state, so commit first
         return {"attestations_made_private": deactivate_for_dataset(ds.pk, by=actor)}
     return _transition(dataset, "withdraw", actor, act, reason=reason)
 

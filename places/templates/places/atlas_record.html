@@ -86,6 +86,9 @@
       <li class="nav-item"><a class="nav-link" href="#record_gloss">About</a></li>
       {% endif %}
       <li class="nav-item"><a class="nav-link" href="#concordance">Concordance</a></li>
+      {% if public_links_shown %}
+      <li class="nav-item"><a class="nav-link" href="#record_public_links">Links</a></li>
+      {% endif %}
       {% if user.can_access_beta or enrichment_public %}
       <li class="nav-item"><a class="nav-link" href="#record_environment">Environment</a></li>
       {% endif %}
@@ -246,6 +249,63 @@
     </div>
     <div id="concordance_body" hidden></div>
   </section>
+
+  {% if public_links_shown %}
+  {% comment %}
+    place#343 (Phase 6 of place#334, ruling Q7): the ACTIVE Links naming this record, made by
+    people with the Link sheet or the feed, or carried over from reviewed v3 matches. Server-side
+    and the same for every viewer (places/record_links.py: pending, withdrawn, rejected and
+    superseded Links never appear, nor any Link whose other side is not public). "Dispute this
+    Link" is attest.js's Link sheet, pre-set to the opposite answer: it writes through
+    POST /api/links like any other Link; nothing here writes.
+  {% endcomment %}
+  <section id="record_public_links" class="atlas-record-section atlas-record-divided" aria-labelledby="record_public_links_heading"
+           data-total="{{ public_links|length }}">
+    <h2 id="record_public_links_heading" class="h5">Links made by people <span class="rec-fold-count">({{ public_links|length }})</span></h2>
+    <p class="small text-muted">
+      Statements by WHG users that this record and another describe the same place, or not. Each is one
+      person's view, shown as made; anyone signed in may dispute it with a Link of their own.
+      Links are published under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer license">CC BY 4.0</a>.
+    </p>
+    {% if public_links %}
+      <ul class="list-unstyled mb-0 record-public-links">
+        {% for l in public_links %}
+          <li class="mb-2 record-public-link" data-link-id="{{ l.id }}" data-relation="{{ l.relation }}"
+              data-source="{% if l.legacy %}v3{% else %}v4{% endif %}">
+            <span class="badge {% if l.relation == 'distinct' %}text-bg-warning{% else %}text-bg-light border{% endif %} me-1">{{ l.relation_label }}</span>
+            <a href="{{ l.other.href }}">{% if l.other.kind == 'record' %}{{ l.other.title }}{% else %}<code>{{ l.other.id }}</code>{% endif %}</a>
+            {% if l.other.kind == 'record' and l.other.dataset %}<span class="small text-muted ms-1">in {{ l.other.dataset }}</span>{% endif %}
+            <div class="small text-muted">
+              Linked by {% if l.orcid %}<a href="{{ l.orcid }}" target="_blank" rel="noopener noreferrer">{{ l.by }}</a>{% else %}{{ l.by }}{% endif %}{% if l.date %}, {{ l.date }}{% endif %}
+              · {{ l.source_label }}
+              · <a href="{{ l.licence.url }}" target="_blank" rel="noopener noreferrer license">{{ l.licence.label }}</a>
+              {% if link_disputable %}
+                {% if l.mine %}
+                  · <button type="button" class="btn btn-link btn-sm p-0 align-baseline whg-link-btn record-link-change"
+                            data-link-subject="{{ link_subject_id }}" data-link-subject-label="{{ place.title }}"
+                            data-link-target="{{ l.other.id }}" data-link-target-label="{{ l.other.title }}"
+                            data-link-relation="{{ l.relation }}">Change or withdraw</button>
+                {% else %}
+                  · <button type="button" class="btn btn-link btn-sm p-0 align-baseline whg-link-btn record-link-dispute"
+                            data-link-subject="{{ link_subject_id }}" data-link-subject-label="{{ place.title }}"
+                            data-link-target="{{ l.other.id }}" data-link-target-label="{{ l.other.title }}"
+                            data-link-relation="{{ l.dispute_relation }}"
+                            aria-label="Dispute this Link: answer {{ l.dispute_label }}">Dispute this Link</button>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% if l.justification %}<div class="small fst-italic">&ldquo;{{ l.justification }}&rdquo;</div>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+      {% if not user.is_authenticated %}
+        <p class="small mb-0 mt-2"><a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}">Sign in</a> to dispute a Link.</p>
+      {% endif %}
+    {% else %}
+      <p class="text-muted small mb-0">No one has linked this record to another yet.</p>
+    {% endif %}
+  </section>
+  {% endif %}
 
   </div>{# .rs-main #}
 

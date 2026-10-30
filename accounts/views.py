@@ -601,6 +601,22 @@ def profile_news_toggle(request):
     return JsonResponse({'status': 'success', 'news_permitted': news_permitted})
 
 
+
+@login_required
+@require_POST
+def profile_link_name_set(request):
+    """Persist "Show my name on Links I make" (``User.show_name_on_links``, place#343). A plain
+    form post that returns to the Profile page. Nothing to invalidate: the cached Concordance
+    applies the choice after its cache (``places.concordance.decorate_for_user``), and the
+    Record page's Links section and ``GET /api/links`` are not cached."""
+    show = request.POST.get('show_name_on_links') == 'on'
+    request.user.show_name_on_links = show
+    request.user.save(update_fields=['show_name_on_links'])
+    messages.success(request, 'Your name will now be shown on Links you make.' if show
+                     else 'Links you make will now say “a WHG contributor” instead of your name.')
+    return redirect(reverse('profile-edit') + '#link-name-form')
+
+
 def _github_user_missing(handle):
     """True only when GitHub positively reports no such user.
 

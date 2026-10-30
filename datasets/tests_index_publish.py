@@ -44,6 +44,12 @@ class IndexOnPublishTests(LifecycleBase):
         a = mock.patch.object(tasks.index_dataset_on_publish, "apply_async")
         self.apply_async = a.start()
         self.addCleanup(a.stop)
+        rd = mock.patch.object(tasks.retract_dataset_from_index, "delay")
+        self.retract_delay = rd.start()
+        self.addCleanup(rd.stop)
+        ra = mock.patch.object(tasks.retract_dataset_from_index, "apply_async")
+        self.retract_async = ra.start()
+        self.addCleanup(ra.stop)
 
     def flag(self):
         return Dataset.objects.get(pk=self.ds.pk).index_pending_since
@@ -232,3 +238,82 @@ class IndexOnPublishTests(LifecycleBase):
                                                "reason": "lock_conflict"})
             tasks.index_dataset_on_publish(self.ds.pk)
         self.assertEqual(Dataset.objects.get(pk=self.ds.pk).index_failure_reason, "")
+
+    @override_settings(**CFG)
+    def test_withdraw_queues_retraction_on_commit(self):
+        with mock.patch.dict("os.environ", ENV):
+            self.publish()
+        self.retract_delay.assert_not_called()
+        self.run_on_commit(lifecycle.withdraw, self.ds, self.owner)
+        self.retract_delay.assert_called_once_with(self.ds.pk)
+
+    @override_settings(**CFG)
+    def test_retract_trigger_body_auth_and_follow_up(self):
+        self.set_state("withdrawn", public=False)
+        with mock.patch.dict("os.environ", ENV):
+            tasks.retract_dataset_from_index.run(self.ds.pk)
+        args, kwargs = self.post.call_args
+        self.assertEqual(args[0], CFG["CRC_REINGEST_URL"])
+        self.assertEqual(kwargs["json"], {"namespace": f"whg:{self.ds.pk}", "action": "retract"})
+        self.assertEqual(kwargs["headers"], {"Authorization": "Bearer tok"})
+        self.retract_async.assert_called_once_with(args=[self.ds.pk, "J1", 1], countdown=60)
+
+    @override_settings(**CFG)
+    def test_retract_poll_completes_or_gives_up(self):
+        self.set_state("withdrawn", public=False)
+        with mock.patch.dict("os.environ", ENV):
+            self.get.return_value = resp(200, {"status": "completed", "indexed": False})
+            out = tasks.retract_dataset_from_index.run(self.ds.pk, "J1", 1)
+            self.assertEqual(out["status"], "retracted")
+            self.retract_async.assert_not_called()
+            self.get.return_value = resp(200, {"status": "running", "indexed": True})
+            out = tasks.retract_dataset_from_index.run(self.ds.pk, "J1", 3)
+            self.assertEqual(out["status"], "pending")
+            self.assertEqual(self.retract_async.call_count, 1)
+            out = tasks.retract_dataset_from_index.run(self.ds.pk, "J1", 9)
+            self.assertEqual(out["status"], "unconfirmed")
+            self.assertEqual(self.retract_async.call_count, 1)
+        self.post.assert_not_called()
+
+    @override_settings(**CFG)
+    def test_retract_409_foreign_namespace_not_adopted(self):
+        self.set_state("withdrawn", public=False)
+        self.post.return_value = resp(409, {"detail": {"error": "running", "job_id": "J9",
+                                                       "namespace": "whg:99999"}})
+        with mock.patch.dict("os.environ", ENV):
+            tasks.retract_dataset_from_index.run(self.ds.pk)
+        self.retract_async.assert_not_called()
+        self.post.return_value = resp(409, {"detail": {"error": "running", "job_id": "J8",
+                                                       "namespace": f"whg:{self.ds.pk}"}})
+        with mock.patch.dict("os.environ", ENV):
+            tasks.retract_dataset_from_index.run(self.ds.pk)
+        self.retract_async.assert_called_once_with(args=[self.ds.pk, "J8", 1], countdown=60)
+
+    @override_settings(**CFG)
+    def test_retract_gateway_failure_does_not_raise(self):
+        self.set_state("withdrawn", public=False)
+        with mock.patch.dict("os.environ", ENV):
+            for outcome in (resp(503), resp(401)):
+                self.post.return_value = outcome
+                self.assertEqual(tasks.retract_dataset_from_index.run(self.ds.pk)["status"], "failed")
+            self.post.side_effect = requests.ConnectionError("down")
+            self.assertEqual(tasks.retract_dataset_from_index.run(self.ds.pk)["status"], "failed")
+        self.retract_async.assert_not_called()
+
+    def test_retract_unconfigured_makes_no_call(self):
+        self.set_state("withdrawn", public=False)
+        with override_settings(CRC_REINGEST_URL=""), mock.patch.dict("os.environ", ENV):
+            tasks.retract_dataset_from_index.run(self.ds.pk)
+        with override_settings(**CFG), mock.patch.dict("os.environ", {"REINGEST_DATASET_TOKEN": ""}):
+            tasks.retract_dataset_from_index.run(self.ds.pk)
+        self.post.assert_not_called()
+        self.get.assert_not_called()
+
+    @override_settings(**CFG)
+    def test_retract_still_published_makes_no_call(self):
+        self.set_state("published", public=True)
+        with mock.patch.dict("os.environ", ENV):
+            out = tasks.retract_dataset_from_index.run(self.ds.pk)
+        self.assertEqual(out["status"], "skipped")
+        self.post.assert_not_called()
+        self.get.assert_not_called()

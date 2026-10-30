@@ -1250,6 +1250,11 @@ def ds_recon(request, pk):
     geonames = request.POST.get('no_geonames', False)
     language = request.LANGUAGE_CODE
 
+    # The WHG-index (accession) target is retired (place#342); wdlocal/wd remain.
+    if auth == 'idx':
+        messages.error(request, "That matching target is no longer available.")
+        return redirect(f'/datasets/{ds.id}/addtask')
+
     # Validation
     if auth == 'idx' and not ds.public and test == 'off':
         messages.error(request, "Dataset must be public before indexing!")

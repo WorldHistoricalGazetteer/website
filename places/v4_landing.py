@@ -159,6 +159,16 @@ def record_page_open_to(user) -> bool:
     return bool(user.is_authenticated and getattr(user, "can_access_beta", False))
 
 
+def linking_open_to(user) -> bool:
+    """Whether ``user`` is offered the Link sheet and the "Link your records" feed (place#343,
+    Phase 6 of place#334): beta users always; with the release switch on, every signed-in
+    user (the feed still only for a dataset's own circle, which its view checks). Anonymous
+    callers never: ``POST /api/links`` answers them 401 regardless."""
+    if not getattr(user, "is_authenticated", False):
+        return False
+    return v4_landing_enabled() or bool(getattr(user, "can_access_beta", False))
+
+
 # ---------------------------------------------------------------- /entity/place:<pk>/
 
 RECORD_STATEMENT = (

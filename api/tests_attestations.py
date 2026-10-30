@@ -317,8 +317,11 @@ class ForwardTaskTests(TestCase):
         post.assert_not_called()
 
 
+@override_settings(V4_LANDING_ENABLED=True)
 class ApiViewTests(TestCase):
-    """The HTTP surface, with the place checks stubbed (they are covered above)."""
+    """The HTTP surface, with the place checks stubbed (they are covered above). The
+    release switch is ON: these users are not beta users, and the write gate
+    (``LinkWriteGateTests``) would otherwise refuse them."""
 
     def setUp(self):
         User = get_user_model()
@@ -376,3 +379,68 @@ class ApiViewTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get("/api/links", {"about": "wd:Q90"}).status_code, 401)
         self.assertEqual(self.post({}).status_code, 401)
+
+
+class LinkWriteGateTests(TestCase):
+    """The server-side write gate on ``/api/links`` (place#343): POST, PATCH and DELETE need
+    ``places.v4_landing.linking_open_to`` (beta users always; any signed-in user once the
+    release switch is on); GET is unaffected. Each refusal is asserted beside an admission
+    in the same test, so a gate that refuses everyone (or a view that 403s for another
+    reason) cannot pass."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.plain = User.objects.create_user(username="g_plain", email="g_plain@example.org", password="x",
+                                              given_name="Pat", surname="Plain")
+        self.beta = User.objects.create_user(username="g_beta", email="g_beta@example.org", password="x",
+                                             given_name="Bea", surname="Beta", role="beta_tester")
+        p = mock.patch("api.attestations._place_side", side_effect=fake_side())
+        p.start()
+        self.addCleanup(p.stop)
+        for t in ("forward_attestation_post", "forward_attestation_revoke"):
+            q = mock.patch(f"api.signals.{t}")
+            q.start()
+            self.addCleanup(q.stop)
+
+    def as_user(self, user):
+        self.client.logout()
+        self.client.force_login(user)
+
+    def post(self, b="gn:2988507"):
+        return self.client.post("/api/links", {"place_a": "wd:Q90", "place_b": b, "relation_type": "closeMatch"},
+                                content_type="application/json")
+
+    @override_settings(V4_LANDING_ENABLED=False)
+    def test_switch_off_refuses_non_beta_writes_and_admits_beta(self):
+        self.as_user(self.beta)
+        made = self.post()
+        self.assertEqual(made.status_code, 201)                       # beta: admitted
+        rid = made.json()["id"]
+        self.as_user(self.plain)
+        refused = self.post("gn:1")
+        self.assertEqual(refused.status_code, 403)
+        self.assertEqual(refused.json()["code"], "linking_not_open")
+        self.assertIn("not open to your account", refused.json()["error"])
+        self.assertFalse(ContributorAttestation.objects.filter(user=self.plain).exists())
+        # reads are unaffected
+        got = self.client.get("/api/links", {"about": "wd:Q90"})
+        self.assertEqual((got.status_code, got.json()["count"]), (200, 1))
+        # withdraw / change are gated too (before the row lookup: a 403, not a 404)
+        for method in (self.client.patch, self.client.delete):
+            r = method("/api/links", {"id": rid, "status": "withdrawn"}, content_type="application/json")
+            self.assertEqual(r.status_code, 403, method)
+        self.as_user(self.beta)
+        r = self.client.patch("/api/links", {"id": rid, "status": "withdrawn"}, content_type="application/json")
+        self.assertEqual(r.status_code, 200)                          # beta: withdraw admitted
+
+    def test_switch_on_admits_every_signed_in_user(self):
+        with override_settings(V4_LANDING_ENABLED=False):
+            self.as_user(self.plain)
+            self.assertEqual(self.post().status_code, 403)
+        with override_settings(V4_LANDING_ENABLED=True):
+            r = self.post()
+            self.assertEqual(r.status_code, 201)
+            self.assertEqual(self.client.delete("/api/links", {"id": r.json()["id"]},
+                                                content_type="application/json").status_code, 200)
+            self.client.logout()
+            self.assertEqual(self.post().status_code, 401)            # anonymous: still 401

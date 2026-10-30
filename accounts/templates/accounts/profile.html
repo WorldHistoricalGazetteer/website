@@ -1,6 +1,7 @@
 {% extends "main/base_webpack.html" %}
 {% load static %}
 {% load l10n %}
+{% load v4_landing_tags %}
 
 {% block extra_css %}
     #api-token-section.has-token #no-token {
@@ -268,6 +269,26 @@
           </label>
         </div>
       </form>
+
+      {% if user|linking_open or user.show_name_on_links %}
+      {# place#343: whether this user's name is shown to everyone on the Links they make. #}
+      <form id="link-name-form" class="mt-3" method="post" action="{% url 'accounts:profile-link-name' %}">
+        {% csrf_token %}
+        <div class="form-check d-flex align-items-center mb-1">
+          <input class="form-check-input" type="checkbox" name="show_name_on_links"
+                 id="id_show_name_on_links" style="cursor: pointer;"{% if user.show_name_on_links %} checked{% endif %}>
+          <label class="form-check-label ms-2 mb-0" for="id_show_name_on_links">
+            Show my name on Links I make
+          </label>
+          <button type="submit" class="btn btn-outline-secondary btn-sm ms-3">Save</button>
+        </div>
+        <div class="form-text small">
+          When ticked, anyone reading a record sees your name (and ORCiD iD) beside the Links you
+          have made between records ("Same place", "Not the same place"). When not ticked, they
+          see "a WHG contributor" instead.
+        </div>
+      </form>
+      {% endif %}
 
       <div class="mt-3">
         <label for="preferred-language" class="form-check-label fw-semibold mb-1 d-block">

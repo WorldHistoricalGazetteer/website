@@ -654,7 +654,9 @@ def add_attestation_entries(out, place, rows, user, use_gateway=True, viewer=Non
         other = others.get(r.id)
         if other is None:
             continue
-        d = row_dict(r, viewer)
+        # The maker is named by the REQUEST user's class (beta or not), never per person:
+        # active rows land in a cache entry shared by everyone of that class (place#343).
+        d = row_dict(r, viewer, name_viewer=user, per_user=False)
         d["_uid"] = r.user_id
         distinct = r.relation_type == "distinct"
         tier = 1 if (not distinct and in_circle(r.user)) else 2
@@ -685,13 +687,30 @@ def decorate_for_user(conc, place, user):
     if pending:
         add_attestation_entries(conc, place, pending, user, viewer=user)
     uid = getattr(user, "id", None) if getattr(user, "is_authenticated", False) else None
-    for key in ("outbound", "inbound", "distinct"):
-        for e in conc.get(key) or []:
-            a = e.get("attestation")
-            if a is not None:
-                a["mine"] = a.get("mine") or (uid is not None and a.get("_uid") == uid)
-                a.pop("_uid", None)
+    atts = [e["attestation"] for key in ("outbound", "inbound", "distinct")
+            for e in conc.get(key) or [] if e.get("attestation") is not None]
+    # The makers' opt-in to be named (User.show_name_on_links, place#343) is read HERE, after
+    # the cache, never stored in it: a maker who withdraws it is anonymous on the next
+    # request, with no cache entry to invalidate. One query, only when there are Links.
+    named = _opted_in_makers({a.get("_uid") for a in atts if a.get("_uid") is not None})
+    for a in atts:
+        a["mine"] = a.get("mine") or (uid is not None and a.get("_uid") == uid)
+        maker = named.get(a.get("_uid"))
+        if maker is not None and not (a.get("attested_by") or {}).get("name"):
+            from api.attestations import attester
+            a["attested_by"] = attester(maker)
+        a.pop("_uid", None)
     return conc
+
+
+def _opted_in_makers(uids) -> dict:
+    """``{user id: User}`` for those of ``uids`` who chose to be named on their Links."""
+    if not uids:
+        return {}
+    from django.contrib.auth import get_user_model
+    return {u.id: u for u in get_user_model().objects
+            .filter(id__in=uids, show_name_on_links=True)
+            .only("id", "name", "username", "orcid", "show_name_on_links")}
 
 
 def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[dict]:

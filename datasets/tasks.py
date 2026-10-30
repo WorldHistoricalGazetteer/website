@@ -1658,6 +1658,74 @@ def index_dataset_on_publish(dataset_id):
         return {"status": "pending", "gateway": "unreachable"}
 
 
+_RETRACT_MAX_ATTEMPTS = 10
+
+
+@shared_task()
+def retract_dataset_from_index(dataset_id, job_id=None, attempt=0):
+    """Ask the gateway to retract a withdrawn dataset from the search index and geometry
+    store (place#334 phase 4). Queued on commit by ``lifecycle.withdraw``.
+
+    The first call triggers the retract; follow-ups (``job_id`` set) poll the job every 60 s,
+    at most ``_RETRACT_MAX_ATTEMPTS`` times in all. Success is status completed and
+    indexed false. Does nothing when the gateway is unconfigured or the dataset is published
+    and public again. Never raises for a gateway failure."""
+    import requests
+
+    ds = Dataset.objects.filter(pk=dataset_id).first()
+    if ds is not None and ds.lifecycle_state == "published" and ds.public:
+        logger.info("retract_dataset_from_index: dataset %s is published and public; skipped", dataset_id)
+        return {"status": "skipped"}
+    cfg = _reingest_config()
+    if cfg is None:
+        return {"status": "skipped", "gateway": "not configured"}
+    base, token = cfg
+    headers = {"Authorization": f"Bearer {token}"}
+    timeout = getattr(settings, "CRC_GATEWAY_TIMEOUT", 10)
+    ns = f"whg:{dataset_id}"
+
+    def again(jid):
+        if attempt + 1 >= _RETRACT_MAX_ATTEMPTS:
+            logger.error("gateway retraction of %s not confirmed after %s attempts (job %s)", ns, attempt + 1, jid)
+            return {"status": "unconfirmed", "job_id": jid}
+        retract_dataset_from_index.apply_async(args=[dataset_id, jid, attempt + 1], countdown=60)
+        return {"status": "pending", "job_id": jid}
+
+    try:
+        if job_id:
+            r = requests.get(f"{base}/{job_id}", timeout=timeout)
+            if r.status_code == 200:
+                body = r.json()
+                if body.get("status") == "completed" and body.get("indexed") is False:
+                    logger.info("gateway retracted %s (job %s)", ns, job_id)
+                    return {"status": "retracted", "job_id": job_id}
+                if body.get("status") == "failed":
+                    logger.error("gateway retraction of %s failed: %s", ns, str(body.get("reason"))[:100])
+                    return {"status": "failed", "job_id": job_id}
+                return again(job_id)
+            logger.warning("gateway retract poll for %s answered %s", ns, r.status_code)
+            return again(job_id)
+        r = requests.post(base, json={"namespace": ns, "action": "retract"}, headers=headers, timeout=timeout)
+        if r.status_code in (202, 409):
+            try:
+                body = r.json()
+                detail = body.get("detail") or {}
+                jid = body.get("job_id") or detail.get("job_id")
+                if r.status_code == 409 and detail.get("namespace") not in (None, ns):
+                    jid = None  # another dataset's job: not ours to follow
+            except (ValueError, AttributeError):
+                jid = None
+            if jid:
+                return again(str(jid)[:100])
+            logger.warning("gateway retract trigger for %s answered %s without a usable job", ns, r.status_code)
+            return {"status": "failed", "gateway": r.status_code}
+        logger.error("gateway retract trigger for %s answered %s", ns, r.status_code)
+        return {"status": "failed", "gateway": r.status_code}
+    except requests.RequestException:
+        logger.error("gateway retract for %s failed", ns, exc_info=True)
+        return {"status": "failed", "gateway": "unreachable"}
+
+
 @shared_task()
 def sweep_index_pending():
     """Re-check published datasets still waiting for the search index (place#334 phase 4).

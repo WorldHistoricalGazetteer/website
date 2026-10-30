@@ -368,10 +368,16 @@ def record_ids(place):
     return ids
 
 
-def attester(user):
-    """How an attester is shown: name and ORCiD, nothing else."""
+def attester(user, viewer=None, per_user=True):
+    """How an attester is shown to ``viewer``: name and ORCiD, nothing else, and only when
+    ``places.record_links.shows_attester_name`` allows it (place#343); otherwise both are
+    None and the page says "a WHG contributor". ``per_user=False`` for a result shared by a
+    whole viewer class (the cached Concordance): then only class-level facts may count."""
+    from places.record_links import shows_attester_name
     if user is None:
         return None
+    if not shows_attester_name(user, viewer, per_user=per_user):
+        return {"name": None, "orcid": None}
     return {"name": getattr(user, "name", None) or getattr(user, "username", ""),
             "orcid": getattr(user, "orcid", None) or None}
 
@@ -411,8 +417,9 @@ def pending_rows_visible_to(ids, user):
     return out
 
 
-def row_dict(row, viewer=None):
-    """The API / Concordance shape of one attestation."""
+def row_dict(row, viewer=None, name_viewer=None, per_user=True):
+    """The API / Concordance shape of one attestation. ``name_viewer`` (default ``viewer``)
+    decides whether the attester is named (``attester``)."""
     return {
         "id": row.id,
         "place_a": row.place_a,
@@ -428,7 +435,8 @@ def row_dict(row, viewer=None):
         "place_b_pk": row.place_b_pk,
         "mine": bool(viewer is not None and getattr(viewer, "is_authenticated", False)
                      and row.user_id == viewer.id),
-        "attested_by": attester(row.user),
+        "attested_by": attester(row.user, name_viewer if name_viewer is not None else viewer,
+                                per_user=per_user),
     }
 
 

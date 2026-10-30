@@ -19,6 +19,7 @@ urlpatterns = [
     path('profile/api-token/', views.ProfileAPITokenView.as_view(), name='profile-api-token'),
 
     path('profile/news-toggle/', views.profile_news_toggle, name='profile-news-toggle'),
+    path('profile/link-name/', views.profile_link_name_set, name='profile-link-name'),
     path('profile/language/', views.profile_language_set, name='profile-language'),
     path('profile/github/', views.profile_github_set, name='profile-github'),
     path('profile/download/', views.profile_download, name='profile-download'),

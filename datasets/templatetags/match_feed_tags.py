@@ -1,5 +1,5 @@
 """The "Links" section of the dataset page (place#334 4i Screen 3; place#338). Rendered only for
-a beta user inside the dataset's circle: link counts are the contributor's (Q11), never public."""
+a beta user (or, with the v4 switch on, any signed-in user: place#343) inside the dataset's circle: link counts are the contributor's (Q11), never public."""
 from django import template
 
 register = template.Library()
@@ -9,8 +9,8 @@ register = template.Library()
 def links_progress(context, ds):
     request = context.get("request")
     user = getattr(request, "user", None)
-    if (ds is None or not getattr(user, "can_access_beta", False)
-            or not ds.user_has_private_access(user)):
+    from places.v4_landing import linking_open_to
+    if ds is None or not linking_open_to(user) or not ds.user_has_private_access(user):
         return {"show": False}
     from datasets.views_feed import progress
     p = progress(ds)
