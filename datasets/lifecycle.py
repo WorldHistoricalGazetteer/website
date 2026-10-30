@@ -332,6 +332,13 @@ def publish(dataset, actor):
         ds.save(update_fields=["public", "lifecycle_state"])
         flipped = activate_for_dataset(ds.pk, by=actor)
         track_dataset(ds, copy_count=False)  # G3: upgrades the Register link once it exists
+        # Once per publish, after the commit (so the task sees lifecycle_state 'published').
+        pk = ds.pk
+
+        def queue_indexing():
+            from datasets.tasks import index_dataset_on_publish
+            index_dataset_on_publish.delay(pk)
+        transaction.on_commit(queue_indexing)
         return {"attestations_activated": flipped["activated"],
                 "attestations_still_pending": flipped["still_pending"],
                 "attestations_unresolved": [list(x) for x in flipped["unresolved"]][:50]}
@@ -351,6 +358,7 @@ def withdraw(dataset, actor, reason=""):
         from api.attestations import deactivate_for_dataset
         ds.public = False
         ds.save(update_fields=["public", "lifecycle_state"])
+        Dataset.objects.filter(pk=ds.pk).update(index_pending_since=None, index_job_id="")
         return {"attestations_made_private": deactivate_for_dataset(ds.pk, by=actor)}
     return _transition(dataset, "withdraw", actor, act, reason=reason)
 

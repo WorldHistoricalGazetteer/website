@@ -65,6 +65,9 @@ V4_LANDING_ENABLED = os.environ.get('V4_LANDING_ENABLED', '') == '1' or bool(glo
 CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWAY_URL', '')
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
 CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
+# Per-dataset indexing trigger (place#334 phase 4). Empty = never call the gateway; datasets are
+# then indexed to 'pub' only. The bearer token comes from the REINGEST_DATASET_TOKEN env var.
+CRC_REINGEST_URL = os.environ.get('CRC_REINGEST_URL') or globals().get('CRC_REINGEST_URL', '')
 
 # Shared secret used to sign short-lived collab tokens for the Hocuspocus real-time service
 # (Workbench Phase 2, place#112). Same value is passed to the hocuspocus container via .env so it
