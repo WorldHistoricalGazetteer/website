@@ -42,6 +42,21 @@ class AuthrecordIdTests(TestCase):
         made = self._run([_form("", {"src_id": "Q5"})])
         self.assertEqual(made["link"][0]["jsonb"]["identifier"], "wd:Q5")
 
+    def test_geonames_hit_under_wikidata_task_is_cited_as_gn(self):
+        hit_json = {"src_id": "1504065", "dataset": "geonames", "variants": ["Kazakhstan"],
+                    "geoms": [{"type": "Point", "coordinates": [66, 48]}]}
+        form = _form("1504065", hit_json)
+        form.cleaned_data["authority"] = "geonames"
+        made = self._run([form], aug_geoms="on", aug_names="on")
+        self.assertEqual(made["link"][0]["jsonb"]["identifier"], "gn:1504065")
+        self.assertEqual(made["geom"][0]["jsonb"]["citation"], {"id": "gn:1504065", "label": "GeoNames"})
+        self.assertEqual(made["name"][0]["jsonb"]["citations"][0], {"id": "gn:1504065", "label": "GeoNames"})
+
+    def test_wikidata_hit_still_wd(self):
+        form = _form("Q5", {"src_id": "Q5", "dataset": "wikidata"})
+        form.cleaned_data["authority"] = "wikidata"
+        self.assertEqual(self._run([form])["link"][0]["jsonb"]["identifier"], "wd:Q5")
+
 
 class WhgIdAllocationTests(TestCase):
     def test_maxid_is_not_reused_for_first_new_seed(self):
