@@ -17,7 +17,7 @@ from elastic.es_utils import makeDoc
 from places.models import Place, PlaceGeom, PlaceName, PlaceLink, CloseMatch
 from whg import settings
 from .geometry_utils import _simplify_geometry
-from .helpers import link_uri
+from .helpers import link_uri, hit_is_geonames
 from .static.hashes.parents import ccodes as cchash
 from .tasks import maxID
 
@@ -320,6 +320,9 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
         # Hit.json (HitRecord) carries no 'authrecord_id' key: the authority id is
         # Hit.authrecord_id (form field), mirrored in json['src_id'].
         authrecord_id = cleaned_data.get("authrecord_id") or hit_json.get("authrecord_id") or hit_json.get("src_id") or ''
+        # A GeoNames hit under a Wikidata task is cited as gn:, labelled GeoNames (place#342)
+        hit_gn = hit_is_geonames(hit_json.get("dataset"), cleaned_data.get("authority"))
+        cite_auth, cite_label = ("gn", "GeoNames") if hit_gn and auth != "whg" else (auth, authname)
 
         if hit_id and match_type not in ["none"]:
             matches += 1
@@ -343,7 +346,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                         reviewer=request.user,
                         jsonb={
                             "type": geom_data["type"],
-                            "citation": {"id": f"{auth}:{authrecord_id}", "label": authname},
+                            "citation": {"id": f"{cite_auth}:{authrecord_id}", "label": cite_label},
                             "coordinates": geom_data["coordinates"]
                         }
                     ))
@@ -369,7 +372,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                                 jsonb={
                                     "toponym": name,
                                     "citations": [
-                                        {"id": f"{auth}:{authrecord_id}", "label": authname}]
+                                        {"id": f"{cite_auth}:{authrecord_id}", "label": cite_label}]
                                 }
                             ))
                             existing_toponyms.add(name)  # Prevent duplicates in same batch
@@ -379,7 +382,8 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                 if tid not in links_task_ids:
                     link_identifier = link_uri(
                         task.task_name,
-                        authrecord_id if auth != "whg" else hit_json.get("place_id")
+                        authrecord_id if auth != "whg" else hit_json.get("place_id"),
+                        dataset="geonames" if hit_gn else None,
                     )
                     links_to_create.append(PlaceLink(
                         place=place,
@@ -784,6 +788,8 @@ def write_wd_pass0(request, tid):
         # existing for the place
         authids = place.links.all().values_list('jsonb__identifier', flat=True)
         authname = 'Wikidata' if h.authority == 'wd' else 'GeoNames'
+        h_gn = hit_is_geonames(h.authority, (h.json or {}).get('dataset'))
+        h_auth = 'gn' if h_gn else auth
         # GEOMS
         # confirm another user hasn't just done this...
         if hasGeom and kwargs['aug_geoms'] == 'on' \
@@ -797,7 +803,7 @@ def write_wd_pass0(request, tid):
                     reviewer=request.user,
                     jsonb={
                         "type": g['type'],
-                        "citation": {"id": auth + ':' + h.authrecord_id, "label": authname},
+                        "citation": {"id": h_auth + ':' + h.authrecord_id, "label": authname},
                         "coordinates": g['coordinates']
                     }
                 )
@@ -805,7 +811,7 @@ def write_wd_pass0(request, tid):
         # LINKS
         link_counter = 0
         # add PlaceLink record for wikidata hit if not already there
-        if 'wd:' + h.authrecord_id not in authids:
+        if h_auth + ':' + h.authrecord_id not in authids:
             link_counter += 1
             link = PlaceLink.objects.create(
                 place=place,
@@ -814,7 +820,7 @@ def write_wd_pass0(request, tid):
                 reviewer=request.user,
                 jsonb={
                     "type": "closeMatch",
-                    "identifier": link_uri(task.task_name, h.authrecord_id)
+                    "identifier": link_uri(task.task_name, h.authrecord_id, dataset='geonames' if h_gn else None)
                 }
             )
 

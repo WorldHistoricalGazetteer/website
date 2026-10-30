@@ -90,25 +90,76 @@ class PlanExecuteTests(TestCase):
         out = self.run_cmd("--report", path)
         self.assertIn("DRY RUN", out)
         self.assertRegex(out, r"REPAIRABLE \(a\)\+\(b\)\s+2 of 3")
-        self.assertIn("of 3", out)
+        self.assertRegex(out, r"delete \(duplicate of real link\)\s*1 of 2")
         self.l1.refresh_from_db()
         self.assertEqual(self.l1.jsonb["identifier"], "wd:None")
         rows = list(csv.reader(open(path)))
         self.assertEqual([r[0] for r in rows[1:]], ["link"])
         self.assertEqual(int(rows[1][3]), self.p3.id)
 
-    def test_execute_repairs_a_b_only_idempotently(self):
-        out = self.run_cmd("--execute")
+    def test_execute_refuses_without_backup(self):
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            self.run_cmd("--execute")
+
+    def test_execute_rewrites_deletes_and_backs_up(self):
+        import os, tempfile, json as _j
+        from places.models import PlaceLink
+        bk = os.path.join(tempfile.mkdtemp(), "bk.json")
+        out = self.run_cmd("--execute", "--backup", bk)
         self.assertIn("EXECUTED", out)
-        for o in (self.l1, self.l2, self.l3, self.g1, self.n1):
+        self.assertIn(bk, out)
+        saved = _j.load(open(bk))
+        self.assertEqual(saved["n_rows"], 4)  # l1, l2, g1, n1
+        self.assertEqual({r["pk"] for r in saved["rows"] if r["model"] == "places.PlaceLink"}, {self.l1.pk, self.l2.pk})
+        self.assertEqual([r for r in saved["rows"] if r["pk"] == self.l2.pk][0]["row"]["jsonb"]["identifier"], "wd:None")
+        for o in (self.l1, self.g1, self.n1):
             o.refresh_from_db()
         self.assertEqual(self.l1.jsonb, {"type": "closeMatch", "identifier": "wd:Q1"})
-        self.assertEqual(self.l2.jsonb["identifier"], "wd:Q2")
-        self.assertEqual(self.l3.jsonb["identifier"], "wd:None")          # (c) never guessed
+        self.assertFalse(PlaceLink.objects.filter(pk=self.l2.pk).exists())   # duplicate of wd:Q2: deleted
+        self.assertTrue(PlaceLink.objects.filter(place=self.p2, jsonb__identifier="wd:Q2").exists())
+        self.assertEqual(PlaceLink.objects.get(pk=self.l3.pk).jsonb["identifier"], "wd:None")  # (c) never guessed
         self.assertEqual(self.g1.jsonb["citation"], {"id": "wd:Q1", "label": "Wikidata"})
         self.assertEqual(self.g1.jsonb["coordinates"], [1, 1])
         self.assertEqual(self.n1.jsonb["citations"][0]["id"], "wd:Q1")
         self.assertEqual(self.n1.toponym, "Uno")
-        self.assertEqual(self.l1.reviewer_id, self.l1.reviewer.id)
-        again = self.run_cmd("--execute")
+        again = self.run_cmd("--execute", "--backup", bk + "2")
         self.assertIn("bad rows after:  {'place_link': 1, 'place_geom': 0, 'place_name': 0}", again)
+
+    def test_sample_is_read_only_and_readable(self):
+        out = self.run_cmd("--sample", "3", "--seed", "1")
+        self.assertIn("PLANNED: DELETE", out)
+        self.assertIn("PLANNED: rewrite", out)
+        self.assertIn("**<- chosen**", out)
+        self.l1.refresh_from_db()
+        self.assertEqual(self.l1.jsonb["identifier"], "wd:None")
+
+
+class GeoNamesRemapTests(TestCase):
+    def test_geonames_hit_gets_gn_prefix_on_link_geom_and_name(self):
+        from datasets.models import Dataset, Hit
+        from places.models import Place, PlaceGeom, PlaceLink, PlaceName
+        user = get_user_model().objects.create_user(
+            username="rep2", email="rep2@example.org", password="pw", given_name="R", surname="P")
+        with patch("datasets.signals.doi"):
+            ds = Dataset.objects.create(owner=user, label="rep342b", title="R", description="D", creator="X",
+                                        public=True, ds_status="indexed", uri_base="https://example.org/p/")
+        p = Place.objects.create(title="g", src_id="g", dataset=ds, ccodes=[])
+        Hit.objects.create(place=p, task_id="T2", authority="geonames", dataset=ds, query_pass="pass1",
+                           src_id="s", score=1, authrecord_id="1504065",
+                           json={"dataset": "geonames", "variants": ["Kaz"], "geoms": [{"type": "Point", "coordinates": [1, 1]}]})
+        l = PlaceLink.objects.create(place=p, task_id="T2", reviewer=user, src_id="g",
+                                     jsonb={"type": "closeMatch", "identifier": "wd:None"})
+        g = PlaceGeom.objects.create(place=p, task_id="T2", reviewer=user, src_id="g",
+                                     jsonb={"type": "Point", "citation": {"id": "wd:", "label": "Wikidata"}, "coordinates": [1, 1]})
+        n = PlaceName.objects.create(place=p, task_id="T2", src_id="g", toponym="Kaz",
+                                     jsonb={"toponym": "Kaz", "citations": [{"id": "wd:", "label": "Wikidata"}]})
+        import os, tempfile
+        from django.core.management import call_command
+        call_command("repair_empty_authority_ids", "--execute", "--backup", os.path.join(tempfile.mkdtemp(), "b.json"),
+                     stdout=io.StringIO())
+        for o in (l, g, n):
+            o.refresh_from_db()
+        self.assertEqual(l.jsonb["identifier"], "gn:1504065")
+        self.assertEqual(g.jsonb["citation"], {"id": "gn:1504065", "label": "GeoNames"})
+        self.assertEqual(n.jsonb["citations"][0], {"id": "gn:1504065", "label": "GeoNames"})
