@@ -1576,6 +1576,10 @@ def _reingest_config():
     return (url, token) if url and token else None
 
 
+# Gateway failure reasons that clear themselves on a retry (they are not shown as a problem).
+_INDEX_RETRYABLE = {"discovery_unreachable", "lock_conflict", "timeout", "runner_died"}
+
+
 @shared_task()
 def index_dataset_on_publish(dataset_id):
     """Make a newly published dataset searchable (place#334 phase 4).
@@ -1617,11 +1621,16 @@ def index_dataset_on_publish(dataset_id):
                 # `indexed` comes from a marker written last, by this job, after a zero-error bulk;
                 # a job that failed after indexing has still indexed the dataset.
                 if body.get("indexed") is True:
-                    Dataset.objects.filter(pk=ds.pk).update(index_pending_since=None, index_job_id="")
+                    Dataset.objects.filter(pk=ds.pk).update(
+                        index_pending_since=None, index_job_id="", index_failure_reason="")
                     return {"status": "indexed"}
                 if body.get("status") == "failed":
-                    # Let the next call start a fresh job.
-                    Dataset.objects.filter(pk=ds.pk).update(index_job_id="")
+                    # Keep the gateway's reason for the status line; the next call starts a fresh job.
+                    reason = str(body.get("reason") or "unknown")[:40]
+                    if reason in _INDEX_RETRYABLE:
+                        reason = ""  # the sweep will simply try again; nothing for a human to do
+                    Dataset.objects.filter(pk=ds.pk).update(index_job_id="", index_failure_reason=reason)
+                    logger.error("gateway indexing job for dataset %s failed: %s", ds.pk, reason)
                 return {"status": "pending", "gateway": body.get("status")}
             logger.warning("gateway job poll for dataset %s answered %s", ds.pk, r.status_code)
             return {"status": "pending", "gateway": r.status_code}
@@ -1630,14 +1639,38 @@ def index_dataset_on_publish(dataset_id):
             try:
                 body = r.json()
                 # 202 {"job_id"}; 409 {"detail": {"error", "job_id"}} (job already in flight)
-                job_id = body.get("job_id") or (body.get("detail") or {}).get("job_id")
+                detail = body.get("detail") or {}
+                job_id = body.get("job_id") or detail.get("job_id")
+                # A 409 may be another dataset's job (one runs at a time): adopt only our own.
+                if r.status_code == 409 and detail.get("namespace") not in (None, f"whg:{ds.pk}"):
+                    job_id = None
             except (ValueError, AttributeError):
                 job_id = None
             if job_id:
                 Dataset.objects.filter(pk=ds.pk).update(index_job_id=str(job_id)[:100])
+                # Jobs take about half a minute: look again shortly rather than wait for the sweep.
+                index_dataset_on_publish.apply_async(args=[ds.pk], countdown=60)
             return {"status": "pending", "gateway": r.status_code}
         logger.warning("gateway indexing trigger for dataset %s answered %s", ds.pk, r.status_code)
         return {"status": "pending", "gateway": r.status_code}
     except requests.RequestException:
         logger.warning("gateway indexing trigger for dataset %s failed", ds.pk, exc_info=True)
         return {"status": "pending", "gateway": "unreachable"}
+
+
+@shared_task()
+def sweep_index_pending():
+    """Re-check published datasets still waiting for the search index (place#334 phase 4).
+
+    Runs from beat. Only datasets flagged within the last 24 hours are retried, so a dataset the
+    gateway keeps refusing stops being retried and stays flagged with its reason for an admin."""
+    from datetime import timedelta
+    from django.utils import timezone
+
+    since = timezone.now() - timedelta(hours=24)
+    pks = list(Dataset.objects.filter(
+        lifecycle_state="published", public=True, index_pending_since__gte=since,
+    ).values_list("pk", flat=True))
+    for pk in pks:
+        index_dataset_on_publish.delay(pk)
+    return {"checked": len(pks)}

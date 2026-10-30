@@ -358,7 +358,7 @@ def withdraw(dataset, actor, reason=""):
         from api.attestations import deactivate_for_dataset
         ds.public = False
         ds.save(update_fields=["public", "lifecycle_state"])
-        Dataset.objects.filter(pk=ds.pk).update(index_pending_since=None, index_job_id="")
+        Dataset.objects.filter(pk=ds.pk).update(index_pending_since=None, index_job_id="", index_failure_reason="")
         return {"attestations_made_private": deactivate_for_dataset(ds.pk, by=actor)}
     return _transition(dataset, "withdraw", actor, act, reason=reason)
 

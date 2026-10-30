@@ -129,6 +129,8 @@ class Dataset(models.Model):
     # (place#334 phase 4); cleared only when the gateway confirms it, or on withdrawal.
     index_pending_since = models.DateTimeField(null=True, blank=True)
     index_job_id = models.CharField(max_length=100, blank=True, default="")
+    # The gateway's machine-readable reason when its last indexing job failed (empty otherwise).
+    index_failure_reason = models.CharField(max_length=40, blank=True, default="")
     featured = models.IntegerField(null=True, blank=True)  #
     core = models.BooleanField(default=False)  # e.g. tgn, geonames, physical geography
     authority = models.BooleanField(default=False)  # eligible as an authority source for new ES indexes

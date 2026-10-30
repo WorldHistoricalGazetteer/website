@@ -41,6 +41,9 @@ class IndexOnPublishTests(LifecycleBase):
                               side_effect=lambda pk: tasks.index_dataset_on_publish.run(pk))
         self.delay = d.start()
         self.addCleanup(d.stop)
+        a = mock.patch.object(tasks.index_dataset_on_publish, "apply_async")
+        self.apply_async = a.start()
+        self.addCleanup(a.stop)
 
     def flag(self):
         return Dataset.objects.get(pk=self.ds.pk).index_pending_since
@@ -154,9 +157,78 @@ class IndexOnPublishTests(LifecycleBase):
         Dataset.objects.filter(pk=self.ds.pk).update(index_pending_since="2026-10-30 10:00")
         self.ds.refresh_from_db()
         src = open("datasets/templates/datasets/ds_status.html").read()
-        i = src.index('id="ds_index_pending"')
+        i = src.rindex('id="ds_index_pending"')
         line = src[i:src.index("</p>", i)]
         self.assertIn("Waiting to be added to the search index", line)
+        j = src.index('id="ds_index_pending"')
+        failed = src[j:src.index("</p>", j)]
+        self.assertIn("could not be added to the search index automatically", failed)
         for word in ("accession", "reconcil", "attest"):
             self.assertNotIn(word, line.lower())
+            self.assertNotIn(word, failed.lower())
         self.assertIn("{% if ds.index_pending_since and ds.public %}", src)
+
+    @override_settings(**CFG)
+    def test_trigger_schedules_a_follow_up_poll(self):
+        self.set_state("published", public=True)
+        with mock.patch.dict("os.environ", ENV):
+            tasks.index_dataset_on_publish(self.ds.pk)
+        self.apply_async.assert_called_once_with(args=[self.ds.pk], countdown=60)
+
+    @override_settings(**CFG)
+    def test_failure_reason_is_kept_then_cleared_on_success(self):
+        self.set_state("published", public=True)
+        with mock.patch.dict("os.environ", ENV):
+            tasks.index_dataset_on_publish(self.ds.pk)  # job J1
+            self.get.return_value = resp(200, {"job_id": "J1", "status": "failed", "indexed": False,
+                                               "reason": "stage_error"})
+            tasks.index_dataset_on_publish(self.ds.pk)
+            ds = Dataset.objects.get(pk=self.ds.pk)
+            self.assertEqual(ds.index_failure_reason, "stage_error")
+            self.assertEqual(ds.index_job_id, "")
+            tasks.index_dataset_on_publish(self.ds.pk)  # fresh job
+            self.get.return_value = resp(200, {"job_id": "J1", "status": "completed", "indexed": True})
+            tasks.index_dataset_on_publish(self.ds.pk)
+        ds = Dataset.objects.get(pk=self.ds.pk)
+        self.assertEqual((ds.index_failure_reason, ds.index_job_id), ("", ""))
+        self.assertIsNone(ds.index_pending_since)
+
+    @override_settings(**CFG)
+    def test_sweep_rechecks_only_recent_published_pending_datasets(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        self.set_state("published", public=True)
+        now = timezone.now()
+        Dataset.objects.filter(pk=self.ds.pk).update(index_pending_since=now - timedelta(hours=1))
+        self.assertEqual(tasks.sweep_index_pending(), {"checked": 1})
+        self.delay.assert_called_with(self.ds.pk)
+        self.delay.reset_mock()
+        Dataset.objects.filter(pk=self.ds.pk).update(index_pending_since=now - timedelta(hours=30))
+        self.assertEqual(tasks.sweep_index_pending(), {"checked": 0})
+        Dataset.objects.filter(pk=self.ds.pk).update(index_pending_since=now, public=False)
+        self.assertEqual(tasks.sweep_index_pending(), {"checked": 0})
+        self.delay.assert_not_called()
+
+    @override_settings(**CFG)
+    def test_409_for_another_datasets_job_is_not_adopted(self):
+        self.post.return_value = resp(409, {"detail": {"error": "running", "job_id": "J9",
+                                                       "namespace": "whg:99999"}})
+        self.set_state("published", public=True)
+        with mock.patch.dict("os.environ", ENV):
+            tasks.index_dataset_on_publish(self.ds.pk)
+        self.assertEqual(self.job(), "")
+        self.post.return_value = resp(409, {"detail": {"error": "running", "job_id": "J8",
+                                                       "namespace": f"whg:{self.ds.pk}"}})
+        with mock.patch.dict("os.environ", ENV):
+            tasks.index_dataset_on_publish(self.ds.pk)
+        self.assertEqual(self.job(), "J8")
+
+    @override_settings(**CFG)
+    def test_retryable_failure_reasons_are_not_shown_as_a_problem(self):
+        self.set_state("published", public=True)
+        with mock.patch.dict("os.environ", ENV):
+            tasks.index_dataset_on_publish(self.ds.pk)
+            self.get.return_value = resp(200, {"job_id": "J1", "status": "failed", "indexed": False,
+                                               "reason": "lock_conflict"})
+            tasks.index_dataset_on_publish(self.ds.pk)
+        self.assertEqual(Dataset.objects.get(pk=self.ds.pk).index_failure_reason, "")
