@@ -69,17 +69,7 @@
                 {% else %}
                   <input type="hidden" name="ds" value="{{ ds.id }}">
                   <input type="hidden" name="wd_lang" value="">
-                  {# whg accession and test options if superuser or editor #}
                   {% if user.is_superuser %}
-                    <div class="form-check mt-2">
-                      <label class="form-check-label text-danger" for="r_idx">
-                        <input type="radio" class="form-check-input r_recon" id="r_idx"
-                               name="recon" value="idx">WHG accession (reconcile, index)
-                      </label>
-                      {#	test reconcile against whg index; no writes #}
-                      <span class="float-end">test only? <input type="checkbox" name="test"></span>
-                      <br/>
-                    </div>
                     {% for message in messages %}
                       <div class="container-fluid p-0">
                         <div class="alert {{ message.tags }} alert-dismissible fade show" role="alert">
