@@ -244,18 +244,19 @@ class PublicLinksSectionTests(_Fixture):
 
 @OFF
 class SwitchOffTests(_Fixture):
-    """Dark with the switch off: a beta user (who can open the Record page today) sees no
-    Links section, and a signed-in non-beta user is offered no Link sheet."""
+    """With the switch off only beta users can open the Record page, and they see the Links
+    section so they can test it; everyone else cannot reach the page, and a signed-in non-beta
+    user is offered no Link sheet."""
 
-    def test_no_section_with_the_switch_off(self):
+    def test_section_is_for_beta_only_with_the_switch_off(self):
         self.link(self.stranger, self.A, self.B)
         r = self.page(self.beta)
         self.assertEqual(r.status_code, 200)
-        body = r.content.decode()
-        self.assertIn("Alphaville", body)                                 # the page rendered
-        self.assertNotIn('id="record_public_links"', body)
-        with ON:                                                          # control
-            self.assertIn("Bravotown", self.section(self.page(self.beta)))
+        self.assertIn("Bravotown", self.section(r))                       # beta sees the Link
+        for viewer in (self.plain, None):                                 # nobody else gets the page
+            r = self.page(viewer)
+            self.assertNotIn('id="record_public_links"', r.content.decode())
+            self.assertNotEqual(r.status_code, 200)
 
     def test_link_sheet_meta_only_for_beta_with_the_switch_off(self):
         meta = '<meta name="whg-link-enabled" content="1">'
