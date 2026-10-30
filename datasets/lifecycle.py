@@ -329,6 +329,7 @@ def publish(dataset, actor):
         from api.attestations import activate_for_dataset
         from grace.tracking import track_dataset
         ds.public = True
+        ds._lifecycle_activates = True   # datasets.signals leaves the flip to the call below
         ds.save(update_fields=["public", "lifecycle_state"])
         flipped = activate_for_dataset(ds.pk, by=actor)
         track_dataset(ds, copy_count=False)  # G3: upgrades the Register link once it exists

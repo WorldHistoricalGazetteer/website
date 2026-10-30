@@ -87,8 +87,13 @@ def handle_public_flag(sender, instance, **kwargs):
                     'dataset_id': instance.id if instance else 'N/A',
                 })
 
-                # Changed from False to True, index the records
+                # Changed from False to True, index the records. A v4 dataset (lifecycle_state
+                # 'published') is indexed by index_dataset_on_publish from datasets.lifecycle;
+                # every other dataset keeps this legacy path.
                 transaction.on_commit(lambda: index_to_pub.delay(instance.id))
+                # Links that went pending because a side was private come back, whichever
+                # route made the dataset public: done in post_save (below), once the row says so.
+                instance._went_public = True
 
                 # remove from volunteers needed page
                 # if instance.volunteers:
@@ -116,6 +121,23 @@ def handle_public_flag(sender, instance, **kwargs):
                     'dataset_label': instance.label if instance else 'N/A',
                     'dataset_id': instance.id if instance else 'N/A',
                 })
+
+
+@receiver(post_save, sender=Dataset)
+def restore_links_when_public(sender, instance, **kwargs):
+    """Going public (v3 metadata form, admin, lifecycle) restores the Links that went pending
+    because a side was private. ``activate_for_dataset`` looks at 'pending' rows only, so
+    withdrawn / rejected / superseded ones are untouched, and flips a row only when both its
+    sides are now public. Idempotent. The lifecycle's publish sets ``_lifecycle_activates`` and
+    makes the same call itself, with the acting user, so it is skipped here. Does not start
+    any indexing: legacy datasets keep the ``index_to_pub`` path in ``handle_public_flag``."""
+    if not getattr(instance, "_went_public", False):
+        return
+    instance._went_public = False
+    if getattr(instance, "_lifecycle_activates", False):
+        return
+    from api.attestations import activate_for_dataset
+    activate_for_dataset(instance.id, by=None)
 
 
 @receiver(post_save, sender=Dataset)

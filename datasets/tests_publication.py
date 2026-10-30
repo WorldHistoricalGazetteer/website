@@ -216,3 +216,41 @@ class V3PrivateRouteTests(PublicationBase):
             self.run_on_commit(ds.save)
         self.assertEqual(self.status(r), "active")
         self.m["revoke"].delay.assert_not_called()
+
+
+class V3PublicRouteTests(PublicationBase):
+    """Going public by the v3 metadata form or admin (a plain ``Dataset.save``) restores the
+    Links that went pending because a side was private, and only those."""
+
+    def make_public_by_save(self, ds_obj=None):
+        ds = Dataset.objects.get(pk=(ds_obj or self.ds).pk)
+        ds.public = True
+        with mock.patch("datasets.tasks.index_to_pub"), mock.patch("whgmail.messaging.WHGmail"), \
+                mock.patch("datasets.signals.doi"):
+            self.m["post"].reset_mock()
+            self.run_on_commit(ds.save)
+
+    def test_going_public_restores_only_pending_links_and_starts_no_v4_indexing(self):
+        pending = self.row(self.a1, self.b1)
+        other_private = self.row(self.a1, self.c1)               # the other side is still private
+        withdrawn = self.row(self.a2, self.b1, status="withdrawn")
+        rejected = self.row(self.a2, "wd:Q5", status="rejected")
+        superseded = self.row(self.a2, "wd:Q6", status="superseded")
+        with mock.patch("datasets.tasks.index_dataset_on_publish") as v4:
+            self.make_public_by_save()
+        self.assertEqual(self.status(pending), "active")
+        self.assertEqual(self.posted(), [pending.pk])             # forwarded once
+        self.assertEqual(self.status(other_private), "pending")
+        self.assertEqual(self.status(withdrawn), "withdrawn")
+        self.assertEqual(self.status(rejected), "rejected")
+        self.assertEqual(self.status(superseded), "superseded")
+        v4.delay.assert_not_called()
+        self.assertNotEqual(Dataset.objects.get(pk=self.ds.pk).lifecycle_state, "published")
+
+    def test_control_a_save_that_does_not_change_public_restores_nothing(self):
+        pending = self.row(self.a1, "wd:Q90")
+        ds = Dataset.objects.get(pk=self.ds.pk)
+        ds.title = "Renamed"
+        with mock.patch("whgmail.messaging.WHGmail"), mock.patch("datasets.signals.doi"):
+            self.run_on_commit(ds.save)
+        self.assertEqual(self.status(pending), "pending")

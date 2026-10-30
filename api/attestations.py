@@ -179,6 +179,10 @@ def create(user, body, candidate=None, evidence=None):
     clean = validate(user, body)
     if candidate is not None:
         clean.update(candidate=candidate, suggested_by="candidate", evidence=dict(evidence or {}))
+    elif evidence:
+        # A hand-search Link from the feed: no suggestion behind it (suggested_by stays
+        # 'manual'), but it carries the feed marker so Undo can find it.
+        clean.update(evidence=dict(evidence))
     sides = clean.pop("_sides")
     status = "active" if all(x["public"] for x in sides) else "pending"
     # place_a / place_b are stored in canonical order, so the stored pks follow the sort.
