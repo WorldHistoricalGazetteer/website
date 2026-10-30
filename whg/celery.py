@@ -31,6 +31,11 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.release_embargoes',
         'schedule': crontab(minute=15, hour='*'),  # Runs every hour
     },
+    # place#334 phase 4: re-check datasets still waiting to be added to the search index.
+    'sweep-index-pending-every-15-minutes': {
+        'task': 'datasets.tasks.sweep_index_pending',
+        'schedule': crontab(minute='*/15'),
+    },
 }
 
 # Load task modules from all registered Django app configs.
