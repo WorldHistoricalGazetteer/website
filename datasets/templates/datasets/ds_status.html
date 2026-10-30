@@ -51,6 +51,9 @@
     <div id="summary" class="tab-pane fade show active" role="tabpanel" aria-labelledby="summary-tab">
       <div class="row">
         <div id="ds_status_guide" class="col-md-7">
+          {% if ds.index_pending_since and ds.public %}
+          <p id="ds_index_pending" class="alert alert-info py-2 mb-2" data-testid="index-pending">Waiting to be added to the search index</p>
+          {% endif %}
           <div class="row mb-2">
             <div id="status_badges" class="col-12 large">
               {% if ds.ds_status|lower == 'uploaded' %}

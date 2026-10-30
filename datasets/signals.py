@@ -97,6 +97,8 @@ def handle_public_flag(sender, instance, **kwargs):
             else:
                 # Changed from True to False, remove the records from the index
                 transaction.on_commit(lambda: unindex_from_pub.delay(instance.id))
+                # No longer waiting to be added to the gateway index.
+                sender.objects.filter(pk=instance.pk).update(index_pending_since=None, index_job_id="")
                 # Links that name this dataset's records go back to pending and are revoked
                 # from the gateway overlay, whichever route made the dataset private (the
                 # v3 metadata form and admin do not go through datasets.lifecycle). One save

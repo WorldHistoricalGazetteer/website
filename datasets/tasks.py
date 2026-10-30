@@ -1567,3 +1567,73 @@ def finalise_task(dataset, user, test_mode, hit_summary, logger):
 
 # place#338: background candidate generation (queue `recon`); imported so autodiscovery registers it.
 from datasets.tasks_candidates import generate_candidates  # noqa: E402,F401
+
+
+def _reingest_config():
+    """(base_url, token) when the gateway trigger is configured, else None."""
+    url = (getattr(settings, "CRC_REINGEST_URL", "") or "").rstrip("/")
+    token = os.environ.get("REINGEST_DATASET_TOKEN", "")
+    return (url, token) if url and token else None
+
+
+@shared_task()
+def index_dataset_on_publish(dataset_id):
+    """Make a newly published dataset searchable (place#334 phase 4).
+
+    Sets ``index_pending_since``, always runs the existing ``index_to_pub`` path, and, only
+    when CRC_REINGEST_URL and REINGEST_DATASET_TOKEN are set, asks the gateway to index
+    ``whg:<id>``. The flag is cleared only when the gateway reports the job completed and
+    indexed; a staged-but-not-indexed answer, a 409 (job already running), 401/503 or a
+    network error all leave it set. Nothing here raises for a gateway failure. Never acts on a
+    dataset that is not published and public."""
+    import requests
+    from django.utils import timezone
+
+    ds = Dataset.objects.filter(pk=dataset_id).first()
+    if ds is None or ds.lifecycle_state != "published" or not ds.public:
+        logger.info("index_dataset_on_publish: dataset %s is not published and public; skipped", dataset_id)
+        return {"status": "skipped"}
+
+    if ds.index_pending_since is None:
+        Dataset.objects.filter(pk=ds.pk).update(index_pending_since=timezone.now())
+
+    try:
+        index_to_pub(ds.pk)
+    except Exception:  # noqa: BLE001 — the gateway trigger below must still be attempted
+        logger.exception("index_to_pub failed for dataset %s", ds.pk)
+
+    cfg = _reingest_config()
+    if cfg is None:
+        return {"status": "pending", "gateway": "not configured"}
+    base, token = cfg
+    headers = {"Authorization": f"Bearer {token}"}
+    timeout = getattr(settings, "CRC_GATEWAY_TIMEOUT", 10)
+
+    try:
+        if ds.index_job_id:
+            r = requests.get(f"{base}/{ds.index_job_id}", headers=headers, timeout=timeout)
+            if r.status_code == 200:
+                body = r.json()
+                if body.get("status") == "completed" and body.get("indexed") is True:
+                    Dataset.objects.filter(pk=ds.pk).update(index_pending_since=None, index_job_id="")
+                    return {"status": "indexed"}
+                if body.get("status") == "failed":
+                    # Let the next call start a fresh job.
+                    Dataset.objects.filter(pk=ds.pk).update(index_job_id="")
+                return {"status": "pending", "gateway": body.get("status")}
+            logger.warning("gateway job poll for dataset %s answered %s", ds.pk, r.status_code)
+            return {"status": "pending", "gateway": r.status_code}
+        r = requests.post(base, json={"namespace": f"whg:{ds.pk}"}, headers=headers, timeout=timeout)
+        if r.status_code in (200, 202, 409):
+            try:
+                job_id = r.json().get("job_id")
+            except ValueError:
+                job_id = None
+            if job_id:
+                Dataset.objects.filter(pk=ds.pk).update(index_job_id=str(job_id)[:100])
+            return {"status": "pending", "gateway": r.status_code}
+        logger.warning("gateway indexing trigger for dataset %s answered %s", ds.pk, r.status_code)
+        return {"status": "pending", "gateway": r.status_code}
+    except requests.RequestException:
+        logger.warning("gateway indexing trigger for dataset %s failed", ds.pk, exc_info=True)
+        return {"status": "pending", "gateway": "unreachable"}

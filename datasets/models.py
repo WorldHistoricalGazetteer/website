@@ -125,6 +125,10 @@ class Dataset(models.Model):
     lifecycle_state = models.CharField(
         max_length=20, null=True, blank=True, choices=LIFECYCLE_STATES, db_index=True
     )
+    # Set when a published dataset is waiting to be added to the gateway search index
+    # (place#334 phase 4); cleared only when the gateway confirms it, or on withdrawal.
+    index_pending_since = models.DateTimeField(null=True, blank=True)
+    index_job_id = models.CharField(max_length=100, blank=True, default="")
     featured = models.IntegerField(null=True, blank=True)  #
     core = models.BooleanField(default=False)  # e.g. tgn, geonames, physical geography
     authority = models.BooleanField(default=False)  # eligible as an authority source for new ES indexes
