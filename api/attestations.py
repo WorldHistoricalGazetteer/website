@@ -167,12 +167,18 @@ def _event(row, user, action, **detail):
     AttestationEvent.objects.create(attestation=row, user=user, action=action, detail=detail)
 
 
-def create(user, body):
+def create(user, body, candidate=None, evidence=None):
     """``(row, created)``. An existing active row for the same edge is returned unchanged;
     a withdrawn / rejected / superseded one is reactivated (the unique constraint allows one
-    row per edge and user)."""
+    row per edge and user).
+
+    ``candidate`` (a ``datasets.MatchCandidate``) and ``evidence`` are set by the contributor
+    feed (place#338), never read from a request body: the row is then ``suggested_by='candidate'``
+    and keeps the frozen evidence the person saw. Every rule above applies unchanged."""
     from api.models import ContributorAttestation
     clean = validate(user, body)
+    if candidate is not None:
+        clean.update(candidate=candidate, suggested_by="candidate", evidence=dict(evidence or {}))
     sides = clean.pop("_sides")
     status = "active" if all(x["public"] for x in sides) else "pending"
     # place_a / place_b are stored in canonical order, so the stored pks follow the sort.
@@ -193,13 +199,16 @@ def create(user, body):
         existing.justification = clean["justification"]
         existing.certainty = clean["certainty"]
         existing.asserted_at = timezone.now()
+        for k in ("candidate", "suggested_by", "evidence"):
+            if k in clean:
+                setattr(existing, k, clean[k])
         for k, v in pks.items():
             setattr(existing, k, v)
         existing.save()
         _event(existing, user, "reactivated", status=status)
         return existing, True
-    row = ContributorAttestation(user=user, status=status, legacy_v3_2=False,
-                                 suggested_by="manual", **clean, **pks)
+    clean.setdefault("suggested_by", "manual")
+    row = ContributorAttestation(user=user, status=status, legacy_v3_2=False, **clean, **pks)
     row.save()
     _event(row, user, "created", status=status)
     return row, True

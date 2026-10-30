@@ -752,3 +752,7 @@ def remove_files(**kwargs):
     ds_instance = kwargs.get("instance")
     files = DatasetFile.objects.filter(dataset_id_id=ds_instance.id)
     files.delete()
+
+
+# place#338 (v4 reconciliation Phase 2): match candidates and the contributor feed.
+from datasets.models_matching import CandidateGeneration, MatchCandidate, RecordReviewState  # noqa: E402,F401

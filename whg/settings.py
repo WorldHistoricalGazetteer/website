@@ -274,6 +274,15 @@ CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_RESULT_EXTENDED = True
 CELERY_RESULT_EXPIRES = None
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+# place#338: candidate generation runs on its own queue so a long run never holds up the default
+# one; the worker listens to both (entrypoints/entrypoint-celery.sh, CELERY_QUEUES).
+CELERY_TASK_ROUTES = {'datasets.generate_candidates': {'queue': 'recon'}}
+# Gateway calls per second for background candidate generation (one request in flight).
+RECON_BG_QPS = float(os.environ.get('RECON_BG_QPS', '3'))
+# Outside production a run needs an explicit cap of at most 100 records: dev shares production's
+# gateway and indexes (datasets/candidates.py run_limit). Unset = refused.
+RECON_DEV_RECORD_LIMIT = int(os.environ['RECON_DEV_RECORD_LIMIT']) if os.environ.get('RECON_DEV_RECORD_LIMIT') else None
+RECON_MAX_RECORDS = int(os.environ.get('RECON_MAX_RECORDS', '250000'))
 
 DJANGORESIZED_DEFAULT_SIZE = [1000, 800]
 DJANGORESIZED_DEFAULT_QUALITY = 75

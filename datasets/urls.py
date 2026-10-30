@@ -4,7 +4,7 @@ from django.urls import path
 from django.conf.urls.static import static
 from django.conf import settings
 
-from . import views, views_lifecycle
+from . import views, views_feed, views_lifecycle
 from datasets.utils import download_file, download_dataset, UpdateCountsView, toggle_volunteers
 from .services import write_wd_pass0
 
@@ -61,6 +61,13 @@ urlpatterns = [
   path('<int:id>/collab', views.DatasetCollabView.as_view(), name='ds_collab'),
   path('<int:id>/addtask', views.DatasetAddTaskView.as_view(), name='ds_addtask'),
   path('<int:id>/log', views.DatasetLogView.as_view(), name='ds_log'),
+  # place#338: the contributor feed, "Link your records" (beta-gated, owner circle only)
+  path('<int:id>/matches/', views_feed.feed_page, name='ds_matches'),
+  path('<int:id>/matches/candidates/', views_feed.feed_candidates, name='ds_matches_candidates'),
+  path('<int:id>/matches/review/', views_feed.feed_review, name='ds_matches_review'),
+  path('<int:id>/matches/search/', views_feed.feed_search, name='ds_matches_search'),
+  path('<int:id>/matches/progress/', views_feed.feed_progress, name='ds_matches_progress'),
+  path('<int:id>/matches/regenerate/', views_feed.feed_regenerate, name='ds_matches_regenerate'),
 
   # public dataset pages (tabs): metadata, browse
   # path('<int:pk>', views.DatasetPublicView.as_view(), name='ds_meta'),

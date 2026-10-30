@@ -53,6 +53,7 @@ module.exports = {
 		home: './whg/webpack/js/home.js',
 		locus: './whg/webpack/js/locus.js',
 		mapAndTable: './whg/webpack/js/mapAndTable.js',
+		match_feed: './whg/webpack/js/matchFeed.js',
 		phonetics: './whg/webpack/js/phonetics.js',
 		places: './whg/webpack/js/places.js',
 		portal: './whg/webpack/js/portal.js',

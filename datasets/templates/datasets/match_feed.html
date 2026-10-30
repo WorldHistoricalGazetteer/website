@@ -1,0 +1,78 @@
+<!-- datasets/match_feed.html: "Link your records", the contributor feed (place#338) -->
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{% block extra_head %}
+<link href="{% static 'webpack/match_feed.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+{% endblock %}
+
+{% block title %}<title>Link your records: {{ ds.title }}</title>{% endblock %}
+
+{% block content %}
+<div class="container-fluid mf-page" id="match_feed"
+     data-dataset="{{ ds.id }}" data-tab="{{ tab }}" data-record="{{ record }}"
+     data-candidates-url="{% url 'datasets:ds_matches_candidates' ds.id %}"
+     data-review-url="{% url 'datasets:ds_matches_review' ds.id %}"
+     data-search-url="{% url 'datasets:ds_matches_search' ds.id %}"
+     data-progress-url="{% url 'datasets:ds_matches_progress' ds.id %}"
+     data-regenerate-url="{% url 'datasets:ds_matches_regenerate' ds.id %}">
+  <div class="d-flex flex-wrap justify-content-between align-items-baseline mt-3 mb-2 gap-2">
+    <h1 class="h4 mb-0"><a href="{% url 'datasets:ds_status' ds.id %}">{{ ds.title }}</a> · Link your records
+      <span class="badge bg-warning text-dark align-middle ms-1">beta</span></h1>
+    <div class="small text-secondary" id="mf_progress">
+      {{ progress.reviewed }} / {{ progress.records }} reviewed · {{ progress.links }} link{{ progress.links|pluralize }}
+    </div>
+  </div>
+
+  {% if not progress.generation %}
+  <div class="alert alert-info" id="mf_no_generation">
+    No suggestions have been prepared for this dataset yet.
+    <button type="button" class="btn btn-sm btn-primary ms-2" data-act="regenerate">Prepare suggestions</button>
+  </div>
+  {% elif progress.generation.status != "finished" %}
+  <div class="alert alert-secondary small" id="mf_generation_running">
+    Suggestions are still being prepared ({{ progress.generation.counts.done|default:0 }} of {{ progress.records }} records so far).
+    You can start now; more will appear.
+  </div>
+  {% endif %}
+
+  <ul class="nav nav-tabs mf-tabs" role="tablist">
+    {% for key, label, n in tabs %}
+    <li class="nav-item" role="presentation">
+      <button type="button" class="nav-link{% if key == tab %} active{% endif %}" data-tab="{{ key }}" role="tab"
+              aria-selected="{% if key == tab %}true{% else %}false{% endif %}">
+        {{ label }} <span class="badge bg-secondary mf-tab-count" data-count-for="{{ key }}">{{ n }}</span>
+      </button>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="small text-secondary mt-2 mb-2" id="mf_tab_note"></p>
+
+  <div class="row g-3">
+    <div class="col-lg-3">
+      <ol class="list-group mf-queue" id="mf_queue" aria-label="Records in this tab"></ol>
+      <button type="button" class="btn btn-sm btn-link" id="mf_more" hidden>More records</button>
+    </div>
+    <div class="col-lg-9">
+      <div id="mf_record" class="mf-record" aria-live="off"></div>
+      <div class="visually-hidden" id="mf_live" aria-live="polite"></div>
+    </div>
+  </div>
+  <p class="small text-secondary mt-3">
+    Keys: <kbd>1</kbd>–<kbd>9</kbd> choose · <kbd>Enter</kbd> Same place · <kbd>x</kbd> Not the same place ·
+    <kbd>n</kbd> None of these fits · <kbd>l</kbd> Not sure yet · <kbd>u</kbd> undo · <kbd>s</kbd> search ·
+    <kbd>←</kbd>/<kbd>→</kbd> move
+  </p>
+</div>
+{% endblock %}
+
+{% block deferredScripts %}
+
+  var scripts = [
+	  {
+		  src: '{% static 'webpack/match_feed.bundle.js' %}?v={{ asset_version }}',
+		  type: 'module',
+	  },
+  ]
+
+{% endblock %}
