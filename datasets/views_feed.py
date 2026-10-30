@@ -12,7 +12,8 @@ One page (``/datasets/<id>/matches/``) and its JSON:
 * ``GET  matches/progress/`` and ``POST matches/regenerate/``.
 
 Every Link is written by ``api.attestations.create`` with its visibility and cap rules; nothing
-here writes an attestation any other way. Access: signed in, ``can_access_beta``, and inside the
+here writes an attestation any other way. Access: signed in, ``can_access_beta`` (or, with the v4
+release switch on, any signed-in user: ``places.v4_landing.linking_open_to``, place#343), and inside the
 dataset's circle (``user_has_private_access``); anyone else gets the same 404 as for a dataset
 that does not exist. Link counts are shown only here and on the owner's dataset page (Q11).
 """
@@ -30,6 +31,7 @@ from django.views.decorators.http import require_GET, require_POST
 from datasets import candidates
 from datasets.models import Dataset
 from datasets.models_matching import CandidateGeneration, MatchCandidate, RecordReviewState
+from places.v4_landing import linking_open_to
 
 logger = logging.getLogger("reconciliation")
 
@@ -44,8 +46,7 @@ RELATIONS = ("closeMatch", "exactMatch")   # Q1: closeMatch by default, exactMat
 def _dataset_for(request, id):
     user = request.user
     ds = Dataset.objects.filter(pk=id).first()
-    if (ds is None or not getattr(user, "can_access_beta", False)
-            or not ds.user_has_private_access(user)):
+    if ds is None or not linking_open_to(user) or not ds.user_has_private_access(user):
         raise Http404("not found")
     return ds
 

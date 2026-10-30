@@ -76,7 +76,8 @@ class AttestationConcordanceTests(TestCase):
         self.attest(self.stranger, self.A, self.B)
         conc = self.build()
         (e,) = self.attested(conc["inbound"])
-        self.assertEqual((e["tier"], e["attestation"]["attested_by"]["name"]), (2, "Sam Stranger"))
+        # The maker is named only to beta viewers (place#343); self.owner is not one.
+        self.assertEqual((e["tier"], e["attestation"]["attested_by"]["name"]), (2, None))
         self.assertEqual([(m["place_id"], m["tiers"]) for m in conc["aggregate"]], [(self.B.id, [2])])
         self.assertEqual(self.attested(conc["outbound"]), [])
 

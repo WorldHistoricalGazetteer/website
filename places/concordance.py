@@ -654,7 +654,9 @@ def add_attestation_entries(out, place, rows, user, use_gateway=True, viewer=Non
         other = others.get(r.id)
         if other is None:
             continue
-        d = row_dict(r, viewer)
+        # The maker is named by the REQUEST user's class (beta or not), never per person:
+        # active rows land in a cache entry shared by everyone of that class (place#343).
+        d = row_dict(r, viewer, name_viewer=user, per_user=False)
         d["_uid"] = r.user_id
         distinct = r.relation_type == "distinct"
         tier = 1 if (not distinct and in_circle(r.user)) else 2
