@@ -317,6 +317,9 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
         hit_id = form.instance.id
         match_type = cleaned_data.get("match")
         hit_json = cleaned_data.get("json", {})
+        # Hit.json (HitRecord) carries no 'authrecord_id' key: the authority id is
+        # Hit.authrecord_id (form field), mirrored in json['src_id'].
+        authrecord_id = cleaned_data.get("authrecord_id") or hit_json.get("authrecord_id") or hit_json.get("src_id") or ''
 
         if hit_id and match_type not in ["none"]:
             matches += 1
@@ -340,7 +343,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                         reviewer=request.user,
                         jsonb={
                             "type": geom_data["type"],
-                            "citation": {"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname},
+                            "citation": {"id": f"{auth}:{authrecord_id}", "label": authname},
                             "coordinates": geom_data["coordinates"]
                         }
                     ))
@@ -366,7 +369,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                                 jsonb={
                                     "toponym": name,
                                     "citations": [
-                                        {"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname}]
+                                        {"id": f"{auth}:{authrecord_id}", "label": authname}]
                                 }
                             ))
                             existing_toponyms.add(name)  # Prevent duplicates in same batch
@@ -376,7 +379,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                 if tid not in links_task_ids:
                     link_identifier = link_uri(
                         task.task_name,
-                        hit_json.get('authrecord_id') if auth != "whg" else hit_json.get("place_id")
+                        authrecord_id if auth != "whg" else hit_json.get("place_id")
                     )
                     links_to_create.append(PlaceLink(
                         place=place,
