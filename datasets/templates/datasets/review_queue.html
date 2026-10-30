@@ -1,0 +1,82 @@
+<!-- datasets/review_queue.html: datasets waiting for editorial review (place#334 Phase 3) -->
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{% block title %}<title>Datasets waiting for review</title>{% endblock %}
+
+{% block content %}
+<div class="container mt-3" id="review_queue" data-testid="review-queue">
+  <h1 class="h4">Datasets waiting for review <span class="badge bg-warning text-dark align-middle ms-1">beta</span></h1>
+  <p class="small text-secondary">Every dataset is reviewed before it can be published. Check the automatic checks
+    and the owner's answers, look at the records, then accept, ask for changes, or decline. The owner is emailed
+    your decision and your note.</p>
+
+  {% for row in rows %}
+  {% with ds=row.ds %}
+  <div class="card mb-3" data-testid="review-row" data-dataset="{{ ds.id }}" data-state="{{ ds.lifecycle_state }}">
+    <div class="card-header d-flex flex-wrap justify-content-between gap-2">
+      <span><strong>{{ ds.title }}</strong> <span class="text-secondary">({{ ds.label }} / {{ ds.id }})</span></span>
+      <span class="small">{{ row.summary.label }}{% if row.summary.submitted_on %} · submitted {{ row.summary.submitted_on|date:"j F Y" }}{% endif %}{% if row.summary.usually_by %} · usually answered by {{ row.summary.usually_by|date:"j F Y" }}{% endif %}</span>
+    </div>
+    <div class="card-body small">
+      <p class="mb-1">Owner: {{ ds.owner.name|default:"(no name)" }} ·
+        <a href="{% url 'datasets:ds_status' ds.id %}">dataset page</a> ·
+        <a href="{% url 'datasets:ds_places' ds.id %}" target="_blank">preview of its public page</a> ·
+        <a href="{% url 'datasets:ds_browse' ds.id %}">browse records</a></p>
+      {% if ds.description %}<p class="mb-2">{{ ds.description|truncatewords:60 }}</p>{% endif %}
+      {% if row.submit_note %}<p class="mb-2"><strong>The owner's note:</strong> {{ row.submit_note|linebreaksbr }}</p>{% endif %}
+
+      <p class="fw-bold mb-1">Sensitivity</p>
+      <ul class="mb-2" data-testid="review-sensitivity">
+        {% for question, answer in row.sensitivity %}<li>{{ question }} <strong>{{ answer }}</strong></li>{% endfor %}
+        {% if ds.sensitivity_note %}<li>The owner says: {{ ds.sensitivity_note }}</li>{% endif %}
+      </ul>
+
+      <p class="fw-bold mb-1">Automatic checks{% if row.checks.blocking %} <span class="text-danger">({{ row.checks.blocking|length }} must be fixed before publishing)</span>{% endif %}</p>
+      {% include "datasets/_lifecycle_checks.html" with checks=row.checks.checks strip_url="" %}
+
+      {% if ds.lifecycle_state == "submitted" %}
+      <form class="lifecycle-form mt-2" data-testid="review-start"
+            data-url="{% url 'datasets:lifecycle-review-start' ds.id %}">
+        <button type="submit" class="btn btn-sm btn-primary">Start review</button>
+        <span class="small text-secondary ms-2">Takes this dataset for review in your name, so others know it is being looked at.</span>
+        <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+      </form>
+      {% elif ds.lifecycle_state == "in_review" %}
+      <div class="row g-2 mt-2">
+        <form class="lifecycle-form col-md-4" data-testid="review-accept"
+              data-url="{% url 'datasets:lifecycle-review-conclude' ds.id %}">
+          <input type="hidden" name="outcome" value="accept"/>
+          <label class="d-block mb-1" for="accept_{{ ds.id }}">Note to the owner (optional)</label>
+          <textarea id="accept_{{ ds.id }}" name="comments" rows="2" class="form-control form-control-sm mb-1"></textarea>
+          <button type="submit" class="btn btn-sm btn-success">Accept</button>
+          <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+        </form>
+        <form class="lifecycle-form col-md-4" data-testid="review-request-changes"
+              data-url="{% url 'datasets:lifecycle-review-conclude' ds.id %}">
+          <input type="hidden" name="outcome" value="request_changes"/>
+          <label class="d-block mb-1" for="changes_{{ ds.id }}">What needs changing (required)</label>
+          <textarea id="changes_{{ ds.id }}" name="comments" rows="2" required class="form-control form-control-sm mb-1"></textarea>
+          <button type="submit" class="btn btn-sm btn-warning">Request changes</button>
+          <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+        </form>
+        <form class="lifecycle-form col-md-4" data-testid="review-decline"
+              data-url="{% url 'datasets:lifecycle-review-conclude' ds.id %}"
+              data-confirm="Decline this dataset? The owner is told, with your reason, and it stays private.">
+          <input type="hidden" name="outcome" value="decline"/>
+          <label class="d-block mb-1" for="decline_{{ ds.id }}">Reason for declining (required)</label>
+          <textarea id="decline_{{ ds.id }}" name="comments" rows="2" required class="form-control form-control-sm mb-1"></textarea>
+          <button type="submit" class="btn btn-sm btn-outline-danger">Decline</button>
+          <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endwith %}
+  {% empty %}
+  <p data-testid="review-queue-empty">No datasets are waiting for review.</p>
+  {% endfor %}
+</div>
+<script src="{% static 'datasets/lifecycle.js' %}" defer></script>
+{% endblock %}

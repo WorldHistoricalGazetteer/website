@@ -230,3 +230,31 @@ class LinksProgressSectionTests(FeedTestBase):
         html = self.render_for(stranger)
         self.assertNotIn("links-progress", html)
         self.assertNotIn("link", html.lower())
+
+
+class UndoHandSearchLinkTests(FeedTestBase):
+    """Undo withdraws the Links this user made for this record in this feed, including a
+    hand-search one (no candidate); other people's Links and Links made outside the feed stay."""
+
+    def test_undo_withdraws_the_hand_search_link_and_nothing_else(self):
+        User = get_user_model()
+        r = self.post({"place": self.ware.pk, "action": "link", "target": "gn:44"})
+        self.assertEqual(r.status_code, 200)
+        mine = ContributorAttestation.objects.get(user=self.owner)
+        self.assertIsNone(mine.candidate_id)
+        other = User.objects.create_user(username="feed_oth", email="fo@example.org", password="pw",
+                                         given_name="O", surname="T", role="beta_tester")
+        theirs = ContributorAttestation.objects.create(
+            user=other, dataset_id=mine.dataset_id, relation_type="closeMatch", place_a=mine.place_a,
+            place_b=mine.place_b, place_a_pk=mine.place_a_pk, place_b_pk=mine.place_b_pk,
+            status=mine.status)
+        outside = ContributorAttestation.objects.create(      # same user, made outside the feed
+            user=self.owner, dataset_id=mine.dataset_id, relation_type="exactMatch",
+            place_a=mine.place_a, place_b="wd:Q99", place_a_pk=mine.place_a_pk, status="active")
+        self.assertEqual(mine.status in ("active", "pending"), True)   # present before Undo
+        self.post({"place": self.ware.pk, "action": "reopen"})
+        for row in (mine, theirs, outside):
+            row.refresh_from_db()
+        self.assertEqual(mine.status, "withdrawn")
+        self.assertNotEqual(theirs.status, "withdrawn")
+        self.assertEqual(outside.status, "active")

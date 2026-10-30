@@ -184,10 +184,14 @@ def feed_review(request, id):
         try:
             with transaction.atomic():
                 for c, target in targets:
-                    evidence = None if c is None else {
+                    # A hand-search Link has no candidate, so it is marked in its frozen
+                    # evidence with the feed context that made it; Undo matches on this.
+                    evidence = {"feed_dataset": ds.pk, "feed_place": st.place_id,
+                                "hand_search": True} if c is None else {
                         "generation": c.generation_id, "tier": c.tier, "rank": c.rank,
                         "confidence": c.gateway_confidence, "signals": c.signals,
-                        "explanation": (c.explanation or {}).get("sentence", "")}
+                        "explanation": (c.explanation or {}).get("sentence", ""),
+                        "feed_dataset": ds.pk, "feed_place": st.place_id}
                     row, _created = attestations.create(
                         request.user, {"place_a": subject, "place_b": target, "relation_type": relation,
                                        "certainty": certainty, "justification": note or None},
@@ -227,9 +231,14 @@ def feed_review(request, id):
     elif action == "reopen":
         # Undo: take back the Links this person made from this record's suggestions, and put
         # the record back in its tab. Rows are withdrawn, never deleted.
+        # That includes hand-search Links (no candidate), found by the feed marker that
+        # ``link`` writes into their evidence; Links made elsewhere carry no marker.
+        from django.db.models import Q
         from api.models import ContributorAttestation
         for row in ContributorAttestation.objects.filter(
-                user=request.user, candidate__place=st.place, status__in=("active", "pending")):
+                Q(candidate__place=st.place)
+                | Q(evidence__feed_dataset=ds.pk, evidence__feed_place=st.place_id),
+                user=request.user, status__in=("active", "pending")):
             attestations.withdraw(row, by=request.user)
         (MatchCandidate.objects.filter(place=st.place, generation_id=st.generation_id)
          .exclude(status="stale").update(status="suggested", decided_at=None, decided_by=None))

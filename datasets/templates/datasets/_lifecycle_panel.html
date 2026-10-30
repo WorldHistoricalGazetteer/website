@@ -1,0 +1,79 @@
+{% load static %}
+{% if show and start_only %}
+<div id="ds_lifecycle" class="ds-card mb-2" data-testid="lifecycle-panel" data-state="none">
+  <p class="ds-card-header">Review and publication <span class="badge bg-warning text-dark ms-1">beta</span></p>
+  <p class="mb-2">You can take this dataset through the new review process. It stays private while
+    you prepare it; when you submit it, the WHG team reviews it, and it can be published only after
+    that review. Nothing changes until you start.</p>
+  <form class="lifecycle-form mb-2" data-testid="lifecycle-start"
+        data-url="{% url 'datasets:lifecycle-start' ds.id %}" data-confirm="{{ start_confirm }}">
+    <button type="submit" class="btn btn-sm btn-primary">Start the review process</button>
+    <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+  </form>
+</div>
+<script src="{% static 'datasets/lifecycle.js' %}" defer></script>
+{% elif show %}
+<div id="ds_lifecycle" class="ds-card mb-2" data-testid="lifecycle-panel" data-state="{{ ds.lifecycle_state }}">
+  <p class="ds-card-header">Review and publication <span class="badge bg-warning text-dark ms-1">beta</span></p>
+  <p class="mb-1"><strong data-testid="lifecycle-state">{{ state_label }}</strong></p>
+  <p class="mb-2" data-testid="lifecycle-state-text">{{ state_text }}</p>
+  {% if editor_note %}
+  <div class="alert alert-secondary py-1 px-2 small mb-2" data-testid="lifecycle-editor-note">
+    <strong>The editor's note:</strong> {{ editor_note|linebreaksbr }}
+  </div>
+  {% endif %}
+
+  {% if sensitivity_form %}
+  <form class="lifecycle-form mb-3" data-testid="lifecycle-sensitivity"
+        data-url="{% url 'datasets:lifecycle-sensitivity' ds.id %}" data-reload="1">
+    <p class="mb-1 fw-bold">Before review: two questions</p>
+    <p class="small text-secondary mb-1">The editor reads your answers when deciding whether part of the dataset should be held back.</p>
+    {% for field in sensitivity_form %}
+    <fieldset class="mb-2 small">
+      <legend class="fs-6 mb-1">{{ field.help_text|default:field.label }}</legend>
+      {{ field }}
+    </fieldset>
+    {% endfor %}
+    <button type="submit" class="btn btn-sm btn-outline-primary">Save answers</button>
+    <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+  </form>
+  {% endif %}
+
+  {% if can.submit %}
+  <form class="lifecycle-form mb-2" data-testid="lifecycle-submit"
+        data-url="{% url 'datasets:lifecycle-submit' ds.id %}">
+    <label class="small d-block mb-1" for="lifecycle_note">Note for the editor (optional)</label>
+    <textarea id="lifecycle_note" name="note" rows="2" class="form-control form-control-sm mb-1"></textarea>
+    <button type="submit" class="btn btn-sm btn-primary">{% if ds.lifecycle_state == "changes_requested" or ds.lifecycle_state == "withdrawn" %}Submit again for review{% else %}Submit for review{% endif %}</button>
+    <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+  </form>
+  {% endif %}
+  {% if can.publish %}
+  <form class="lifecycle-form mb-2" data-testid="lifecycle-publish"
+        data-url="{% url 'datasets:lifecycle-publish' ds.id %}" data-confirm="{{ publish_confirm }}">
+    <button type="submit" class="btn btn-sm btn-success">Publish</button>
+    <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+  </form>
+  {% endif %}
+  {% if can.withdraw %}
+  <form class="lifecycle-form mb-2" data-testid="lifecycle-withdraw"
+        data-url="{% url 'datasets:lifecycle-withdraw' ds.id %}" data-confirm="{{ withdraw_confirm }}">
+    <label class="small d-block mb-1" for="lifecycle_reason">Reason (optional)</label>
+    <input id="lifecycle_reason" name="reason" type="text" class="form-control form-control-sm mb-1"/>
+    <button type="submit" class="btn btn-sm btn-outline-danger">Withdraw</button>
+    <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+  </form>
+  {% endif %}
+
+  <details class="small mt-2" data-testid="lifecycle-checks">
+    <summary>Automatic checks{% if report.blocking %} <span class="text-danger">({{ report.blocking|length }} to fix before publishing)</span>{% endif %}</summary>
+    {% include "datasets/_lifecycle_checks.html" with checks=report.checks strip_url=strip_url %}
+    {% if report.links %}
+    <p class="mb-0">Records with links: {{ report.links.records_with_links }} ·
+      links made by people: {{ report.links.links_public }} public,
+      {{ report.links.links_private_until_published }} private until published.</p>
+    {% endif %}
+  </details>
+</div>
+<script src="{% static 'datasets/lifecycle.js' %}" defer></script>
+{% endif %}

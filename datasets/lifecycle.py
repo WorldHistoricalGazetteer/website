@@ -4,7 +4,12 @@
                            -> draft (private; the owner links records meanwhile)
                               -> submitted -> in_review -> changes_requested -> submitted ...
                                                         -> declined
-                                                        -> accepted -> published <-> withdrawn
+                                                        -> accepted -> published -> withdrawn
+                                                                                 -> submitted ...
+    NULL (a v3-era dataset) -> draft, only by the owner's explicit "start" (beta)
+
+A withdrawn dataset goes back through review before it can be published again (Stephen,
+2026-10-30): there is no withdrawn -> published edge.
 
 Every transition is one function here and ONE transaction: the row is locked
 (``select_for_update``), the expected ``from`` state is checked (a mismatch is refused, so two
@@ -40,12 +45,13 @@ TRANSITIONS = {
     "validate": ({"uploaded"}, "validating"),
     "fail_validation": ({"validating"}, "validation_failed"),
     "pass_validation": ({"validating"}, "draft"),
-    "submit": ({None, "draft", "changes_requested"}, "submitted"),
+    "start": ({None}, "draft"),
+    "submit": ({None, "draft", "changes_requested", "withdrawn"}, "submitted"),
     "start_review": ({"submitted"}, "in_review"),
     "accept": ({"in_review"}, "accepted"),
     "request_changes": ({"in_review"}, "changes_requested"),
     "decline": ({"in_review"}, "declined"),
-    "publish": ({"accepted", "withdrawn"}, "published"),
+    "publish": ({"accepted"}, "published"),
     "withdraw": ({"published"}, "withdrawn"),
 }
 
@@ -225,6 +231,18 @@ def validation_passed(dataset):
 # The contributor and the editor
 # ---------------------------------------------------------------------------
 
+def start(dataset, actor):
+    """The owner opts a v3-era dataset (``lifecycle_state`` NULL) into the v4 lifecycle: it
+    becomes a private draft, which then needs editorial review before it can be published.
+    Only ever on an explicit request, never automatically; refused for a dataset that is
+    already public (the review process is for datasets not yet published)."""
+    def act(ds):
+        _require(ds.user_can_manage(actor))
+        if ds.public:
+            raise LifecycleRefused(409, "this dataset is already public")
+    return _transition(dataset, "start", actor, act, reason="review process started by the owner")
+
+
 def submit(dataset, actor, note=""):
     """The owner asks for review. Runs the automatic checks (their summary, with no link
     counts, is kept on the event), starts GRACE tracking, and tells the owner when to expect
@@ -318,8 +336,8 @@ def decline(dataset, editor, comments):
 
 
 def publish(dataset, actor):
-    """The owner's toggle, once the dataset is accepted (or to re-publish one they
-    withdrew). Makes it public through ``Dataset.save()`` (the v3 publication side effects
+    """The owner's toggle, once the dataset is accepted (a withdrawn dataset is submitted
+    for review again first). Makes it public through ``Dataset.save()`` (the v3 publication side effects
     follow, see the module docstring), then flips its pending attestations to active one
     row at a time so each is forwarded to the gateway once, after commit."""
     def act(ds):
@@ -329,6 +347,7 @@ def publish(dataset, actor):
         from api.attestations import activate_for_dataset
         from grace.tracking import track_dataset
         ds.public = True
+        ds._lifecycle_activates = True   # datasets.signals leaves the flip to the call below
         ds.save(update_fields=["public", "lifecycle_state"])
         flipped = activate_for_dataset(ds.pk, by=actor)
         track_dataset(ds, copy_count=False)  # G3: upgrades the Register link once it exists

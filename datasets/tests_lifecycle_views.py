@@ -57,11 +57,28 @@ class LifecycleViewTests(LifecycleBase):
         self.assertEqual(self.post("publish/").status_code, 200)  # staff manage every dataset
         # (that publish went through: undo it so the owner's toggle can be shown)
         self.client.force_login(self.owner)
-        self.assertEqual(self.post("withdraw/").status_code, 200)
+        r = self.post("withdraw/")
+        self.assertEqual(r.status_code, 200)
+        # withdrawn: back through review, never straight to published (2026-10-30)
+        self.assertEqual((r.json()["can"]["publish"], r.json()["can"]["submit"]), (False, True))
+        self.assertEqual(self.post("publish/").status_code, 409)
+        self.assertFalse(Dataset.objects.get(pk=self.ds.pk).public)
+        self.assertEqual(self.post("submit/").status_code, 200)
+        self.client.force_login(self.editor)
+        self.post("review/start/")
+        self.post("review/conclude/", {"outcome": "accept"})
+        self.client.force_login(self.owner)
         r = self.post("publish/")
         self.assertEqual(r.status_code, 200)
         self.assertTrue(Dataset.objects.get(pk=self.ds.pk).public)
         self.assertEqual([s["state"] for s in r.json()["timeline"]][-1], "published")
+
+    def test_start_moves_a_private_v3_dataset_to_draft(self):
+        self.client.force_login(self.owner)
+        self.assertTrue(self.client.get(f"/datasets/{self.ds.pk}/lifecycle/").json()["can"]["start"])
+        self.assertEqual(self.post("start/").status_code, 200)
+        self.assertEqual(Dataset.objects.get(pk=self.ds.pk).lifecycle_state, "draft")
+        self.assertEqual(self.post("start/").status_code, 409)  # only from NULL
 
     def test_link_counts_reach_the_owner_and_not_the_editor(self):
         self.client.force_login(self.owner)
