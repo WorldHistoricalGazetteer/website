@@ -1626,8 +1626,10 @@ def index_dataset_on_publish(dataset_id):
         r = requests.post(base, json={"namespace": f"whg:{ds.pk}"}, headers=headers, timeout=timeout)
         if r.status_code in (200, 202, 409):
             try:
-                job_id = r.json().get("job_id")
-            except ValueError:
+                body = r.json()
+                # 202 {"job_id"}; 409 {"detail": {"error", "job_id"}} (job already in flight)
+                job_id = body.get("job_id") or (body.get("detail") or {}).get("job_id")
+            except (ValueError, AttributeError):
                 job_id = None
             if job_id:
                 Dataset.objects.filter(pk=ds.pk).update(index_job_id=str(job_id)[:100])

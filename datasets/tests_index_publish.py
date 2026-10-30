@@ -83,7 +83,7 @@ class IndexOnPublishTests(LifecycleBase):
 
     @override_settings(**CFG)
     def test_409_keeps_flag_and_records_job(self):
-        self.post.return_value = resp(409, {"error": "running", "job_id": "J9"})
+        self.post.return_value = resp(409, {"detail": {"error": "running", "job_id": "J9"}})
         self.set_state("published", public=True)
         with mock.patch.dict("os.environ", ENV):
             tasks.index_dataset_on_publish(self.ds.pk)
