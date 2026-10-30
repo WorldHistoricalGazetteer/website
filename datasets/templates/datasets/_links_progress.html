@@ -1,0 +1,22 @@
+{% if show %}
+<div id="ds_links_progress" class="ds-card" data-testid="links-progress">
+  <p class="ds-card-header">Links <span class="badge bg-warning text-dark ms-1">beta</span></p>
+  {% if p.generation %}
+  <p class="mb-1">
+    <span class="fw-bold">{{ pct }}% reviewed</span> ·
+    <span class="links-count">{{ p.links }} link{{ p.links|pluralize }}</span> ·
+    {{ p.tabs.none }} with nothing found (normal)
+    {% if p.tabs.unqueried %}· {{ p.tabs.unqueried }} not yet checked{% endif %}
+  </p>
+  <p class="mb-1 text-secondary">
+    {% if p.generation.status == "finished" %}Suggestions last prepared {{ p.generation.finished|slice:":10" }}.
+    {% elif p.generation.status == "failed" %}Suggestions could not be prepared.
+    {% else %}Suggestions are being prepared ({{ p.generation.counts.done|default:0 }} of {{ p.records }} records so far).{% endif %}
+  </p>
+  <a class="btn btn-sm btn-primary" href="{% url 'datasets:ds_matches' ds.id %}">Continue linking</a>
+  {% else %}
+  <p class="mb-1">No suggestions have been prepared for this dataset yet.</p>
+  <a class="btn btn-sm btn-outline-primary" href="{% url 'datasets:ds_matches' ds.id %}">Link your records</a>
+  {% endif %}
+</div>
+{% endif %}
