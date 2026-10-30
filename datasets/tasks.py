@@ -1252,7 +1252,7 @@ def align_idx(*args, **kwargs):
             #     break
 
         if new_seeds:
-            batch_new_seeds.delay(new_seeds, test_mode, start_id=whg_id)
+            batch_new_seeds.delay(new_seeds, test_mode, start_id=whg_id + 1)  # first NEW id; maxID is already taken
 
         if places_to_review:
             updated = Place.objects.filter(pk__in=places_to_review).update(review_whg=0)
