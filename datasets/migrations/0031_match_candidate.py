@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('places', '0001_initial'),
-        ('datasets', '0028_alter_dataset_license_source'),
+        ('datasets', '0030_sensitivity_declaration'),
     ]
 
     operations = [

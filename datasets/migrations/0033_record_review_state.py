@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('places', '0001_initial'),
-        ('datasets', '0030_candidate_generation'),
+        ('datasets', '0032_candidate_generation'),
     ]
 
     operations = [

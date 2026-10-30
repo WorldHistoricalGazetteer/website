@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('api', '0014_attestation_v4_fields'),
-        ('datasets', '0029_match_candidate'),
+        ('datasets', '0031_match_candidate'),
     ]
 
     operations = [
