@@ -1,0 +1,21 @@
+<ul class="list-unstyled mb-1">
+  {% for c in checks %}
+  <li class="mb-1" data-check="{{ c.key }}" data-status="{{ c.status }}">
+    {% if c.status == "ok" %}<span class="text-success" aria-label="passed">&#10003;</span>
+    {% elif c.status == "fail" %}<span class="text-danger" aria-label="must be fixed">&#10007;</span>
+    {% elif c.status == "warn" %}<span class="text-warning" aria-label="worth a look">!</span>
+    {% else %}<span class="text-secondary" aria-label="not checked">&ndash;</span>{% endif %}
+    <strong>{{ c.label }}</strong>{% if c.count is not None %} ({{ c.count }}){% endif %}{% if c.status == "not_checked" %} <span class="text-secondary">not checked</span>{% endif %}
+    {% if c.detail %}<br><span class="text-secondary">{{ c.detail }}</span>{% endif %}
+    {% if c.examples %}<br><span class="text-secondary">For example:
+      {% for e in c.examples %}<a href="{% url 'atlas-record' e.place_id %}" target="_blank">{{ e.title|default:e.place_id }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+    {% if c.fix == "strip_placeholders" and strip_url %}
+    <form class="lifecycle-form d-inline" data-testid="lifecycle-strip" data-url="{{ strip_url }}"
+          data-confirm="Remove these placeholder links from your records? They name nothing, so nothing is lost.">
+      <button type="submit" class="btn btn-link btn-sm p-0 ms-1">Remove them</button>
+      <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+    </form>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>

@@ -52,6 +52,8 @@ urlpatterns = [
        name='lifecycle-strip-placeholders'),
   path('<int:dsid>/lifecycle/sensitivity/', views_lifecycle.lifecycle_sensitivity,
        name='lifecycle-sensitivity'),
+  # ... and its HTML screen for editors (the owner's is a panel on ds_status)
+  path('review-queue/', views_lifecycle.review_queue, name='lifecycle-review-queue'),
   path('<int:id>/metadata', views.DatasetMetadataView.as_view(), name='ds_metadata'),
   path('<int:id>/citation', views.dataset_citation, name='dataset-citation'),
   path('<int:id>/contributions/add', views.dataset_contribution_add, name='ds_contribution_add'),

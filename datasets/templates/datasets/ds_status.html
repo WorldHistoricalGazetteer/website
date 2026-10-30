@@ -5,6 +5,7 @@
 {% load mathfilters %}
 {% load dataset_extras %}
 {% load match_feed_tags %}
+{% load lifecycle_tags %}
 
 {% block extra_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
@@ -309,6 +310,7 @@
         </div> <!-- status_guide -->
         <div id="ds_status_detail" class="col-md-5 small">
           <div id="ds_info">
+            {% lifecycle_panel ds %}
             <div id="ds_stats" class="ds-card">
               <table style="width:100%">
                 <tr><th></th><th class="pb-1 text-secondary">count</th><th class="pb-1 text-secondary">added</th></tr>

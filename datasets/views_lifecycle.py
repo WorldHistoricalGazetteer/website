@@ -12,15 +12,21 @@ Session auth and CSRF like every other datasets POST. A dataset the caller may n
     POST /datasets/<id>/lifecycle/review/conclude/ editor: {"outcome", "comments"}
     POST /datasets/<id>/lifecycle/strip-placeholders/   owner, private draft only
     POST /datasets/<id>/lifecycle/sensitivity/     owner: the two questions
+
+    GET  /datasets/review-queue/                   editor: HTML page of datasets awaiting
+                                                   review (the owner's screen is a panel on
+                                                   the status page, templatetags/lifecycle_tags)
 """
 import json
 
+from django.contrib.auth.views import redirect_to_login
 from django.http import Http404, JsonResponse
+from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
 
 from datasets import lifecycle, qc
 from datasets.forms import SensitivityDeclarationForm
-from datasets.models import Dataset
+from datasets.models import Dataset, DatasetLifecycleEvent
 
 
 def _gate(request, dsid):
@@ -48,8 +54,22 @@ def _is_owner(ds, user):
     return ds.owner_id == user.id or ds.owners.filter(id=user.id).exists()
 
 
-def _state(ds, user):
+def allowed_actions(ds, user):
+    """What ``user`` may do to ``ds`` now, by name. The JSON state and the HTML screens
+    (``datasets/templatetags/lifecycle_tags.py``, ``review_queue``) both read this, so a
+    button is offered exactly when the endpoint behind it would accept the request."""
     editor = lifecycle.is_editor(user)
+    manage = ds.user_can_manage(user)
+    return {
+        "submit": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["submit"][0]
+        and not ds.public,
+        "publish": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["publish"][0],
+        "withdraw": manage and ds.lifecycle_state == "published",
+        "review": editor and ds.lifecycle_state in ("submitted", "in_review"),
+    }
+
+
+def _state(ds, user):
     summary = lifecycle.status_summary(ds, user)
     if summary:
         for k in ("submitted_on", "usually_by"):
@@ -61,14 +81,7 @@ def _state(ds, user):
         # Q11: link counts only for the contributor (owner or co-owner); everyone else in
         # the circle, editors included, gets the editors' report.
         "checks": qc.qc_report(ds, audience="owner" if _is_owner(ds, user) else "editor"),
-        "can": {
-            "submit": ds.user_can_manage(user) and ds.lifecycle_state in
-            lifecycle.TRANSITIONS["submit"][0] and not ds.public,
-            "publish": ds.user_can_manage(user) and ds.lifecycle_state in
-            lifecycle.TRANSITIONS["publish"][0],
-            "withdraw": ds.user_can_manage(user) and ds.lifecycle_state == "published",
-            "review": editor and ds.lifecycle_state in ("submitted", "in_review"),
-        },
+        "can": allowed_actions(ds, user),
     }
 
 
@@ -132,6 +145,47 @@ def lifecycle_strip_placeholders(request, dsid):
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=409)
     return JsonResponse({"removed": n})
+
+
+REVIEW_QUEUE_STATES = ("submitted", "in_review")
+
+
+@require_GET
+def review_queue(request):
+    """The editors' page: datasets waiting for review, with the editors' checks report (no
+    link counts, Q11) and the decision buttons, which post to the endpoints above. Gated as
+    those are: signed in (else the login page), beta, and an editor; anyone else gets 404.
+    A dataset is listed only if the editor is in its circle, as each endpoint requires."""
+    user = request.user
+    if not user.is_authenticated:
+        return redirect_to_login(request.get_full_path())
+    if not getattr(user, "can_access_beta", False) or not lifecycle.is_editor(user):
+        raise Http404("not found")
+    rows = []
+    for ds in (Dataset.objects.filter(lifecycle_state__in=REVIEW_QUEUE_STATES)
+               .select_related("owner").order_by("id")):
+        if not ds.user_has_private_access(user):
+            continue
+        can = allowed_actions(ds, user)
+        if not can["review"]:
+            continue
+        rows.append({
+            "ds": ds,
+            "summary": lifecycle.status_summary(ds, user),
+            "checks": qc.qc_report(ds, audience="editor"),
+            "submit_note": _submission_note(ds),
+            "sensitivity": [(Dataset._meta.get_field(f).help_text,
+                             dict(Dataset._meta.get_field(f).choices).get(getattr(ds, f), "Not answered"))
+                            for f in qc.SENSITIVITY_FIELDS],
+        })
+    return render(request, "datasets/review_queue.html", {"rows": rows})
+
+
+def _submission_note(ds):
+    """The contributor's note on their latest submission ("" if none)."""
+    ev = (DatasetLifecycleEvent.objects.filter(dataset_pk=ds.pk, to_state="submitted")
+          .order_by("-at", "-id").first())
+    return ev.reason if ev else ""
 
 
 @require_POST
