@@ -178,7 +178,8 @@ class RecordLinksSectionBrowserTests(Base):
         btn.wait_for()
         self.assertEqual(btn.get_attribute("data-link-relation"), "distinct")
         self.assertEqual(page.locator(".whg-link-sheet.show").count(), 0)  # not open before the click
-        page.wait_for_function("!!window.__whgRecord", timeout=30000)     # the page bundle has run
+        # no wait on window.__whgRecord: the button itself is the readiness signal
+        page.wait_for_selector(f"{SECTION} button.record-link-dispute:not([disabled])", timeout=30000)
         btn.click()
         page.wait_for_selector(".whg-link-sheet.show", timeout=15000)
         self.assertEqual(page.locator('input[name="whg_link_relation"]:checked').get_attribute("value"), "distinct")
@@ -203,14 +204,37 @@ class RecordLinksSectionBrowserTests(Base):
 
     def test_harness_can_fail(self):
         """With the page bundle blocked the server-rendered button is still there (presence)
-        but the click opens no sheet: the dispute check must fail on such a page."""
+        but it stays disabled, says why after the timeout, and a click opens no sheet."""
         page = self.new_page(self.beta, block="atlas_record.bundle.js")
+        page.add_init_script("window.__whgLinkBtnTimeoutMs = 1500")
         self.goto_record(page)
         btn = page.locator(f"{SECTION} button.record-link-dispute")
         btn.wait_for()
-        btn.click()
-        page.wait_for_timeout(2500)
+        self.assertTrue(btn.is_disabled())
+        self.assertEqual(btn.get_attribute("title"), "Loading\u2026")
+        page.wait_for_function(
+            "document.querySelector('#record_public_links button.record-link-dispute').title.startsWith('This did not load')",
+            timeout=10000)
+        self.assertEqual(btn.get_attribute("title"), "This did not load. Reload the page to try again.")
+        self.assertTrue(btn.is_disabled())
+        btn.click(force=True)
+        page.wait_for_timeout(1000)
         self.assertEqual(page.locator(".whg-link-sheet.show").count(), 0)
+        self.assertIsNone(page.evaluate("window.__whgRecord || null"))
+
+    def test_buttons_are_disabled_until_the_bundle_is_ready_then_enabled(self):
+        page = self.new_page(self.beta)
+        self.goto_record(page)
+        btn = page.locator(f"{SECTION} button.record-link-dispute")
+        btn.wait_for()
+        # the server-rendered markup is disabled (raw response, before any script runs)
+        raw = page.request.get(f"{self.live_server_url}/atlas/place/{self.R.pk}/").text()
+        self.assertRegex(raw, r'record-link-dispute[^>]*disabled')
+        page.wait_for_function("!!window.__whgRecord", timeout=30000)
+        page.wait_for_function(
+            "!document.querySelector('#record_public_links button.record-link-dispute').disabled", timeout=5000)
+        self.assertFalse(btn.is_disabled())
+        self.assertIsNone(btn.get_attribute("title"))
 
 
 @unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the Profile page in headless Chromium")

@@ -284,13 +284,15 @@
                   · <button type="button" class="btn btn-link btn-sm p-0 align-baseline whg-link-btn record-link-change"
                             data-link-subject="{{ link_subject_id }}" data-link-subject-label="{{ place.title }}"
                             data-link-target="{{ l.other.id }}" data-link-target-label="{{ l.other.title }}"
-                            data-link-relation="{{ l.relation }}">Change or withdraw</button>
+                            data-link-relation="{{ l.relation }}"
+                            disabled title="Loading…">Change or withdraw</button>
                 {% else %}
                   · <button type="button" class="btn btn-link btn-sm p-0 align-baseline whg-link-btn record-link-dispute"
                             data-link-subject="{{ link_subject_id }}" data-link-subject-label="{{ place.title }}"
                             data-link-target="{{ l.other.id }}" data-link-target-label="{{ l.other.title }}"
                             data-link-relation="{{ l.dispute_relation }}"
-                            aria-label="Dispute this Link: answer {{ l.dispute_label }}">Dispute this Link</button>
+                            aria-label="Dispute this Link: answer {{ l.dispute_label }}"
+                            disabled title="Loading…">Dispute this Link</button>
                 {% endif %}
               {% endif %}
             </div>
@@ -342,6 +344,26 @@
   </div>{# .rs-layout #}
 
 </main>
+{% if link_disputable %}
+  <script type="text/javascript">
+    /* The Link buttons are server-rendered but their click handler comes from the deferred page
+       bundle, which sets window.__whgRecord when it has run. Until then they stay disabled. */
+    (function () {
+      var sel = '#record_public_links button.whg-link-btn[disabled]';
+      var limit = window.__whgLinkBtnTimeoutMs || 15000, t0 = Date.now();
+      var timer = setInterval(function () {
+        var btns = document.querySelectorAll(sel);
+        if (window.__whgRecord) {
+          clearInterval(timer);
+          btns.forEach(function (b) { b.disabled = false; b.removeAttribute('title'); });
+        } else if (Date.now() - t0 > limit) {
+          clearInterval(timer);
+          btns.forEach(function (b) { b.title = 'This did not load. Reload the page to try again.'; });
+        }
+      }, 100);
+    })();
+  </script>
+{% endif %}
 {% endblock %}
 
 {% block deferredScripts %}
