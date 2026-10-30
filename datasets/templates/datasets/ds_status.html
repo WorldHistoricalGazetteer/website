@@ -187,16 +187,6 @@
             <p>Your dataset has been published! It is now visible to all site visitors in its
               <a href="{% url 'datasets:ds_places' ds.id %}" target="_blank">publication page</a>, and its records
               are accessible via the WHG search and API features. Many thanks for this contribution.</p>
-            <div class="row">
-              <div class="col-md-9">
-                <p>A next step we strongly encourage is to fully accession its records by reconciling
-                  them against our <strong>union index</strong>. This will link your records with others for
-                  closely matched places from other indexed datasets.</p>
-              </div>
-              <div class="col-md-3">
-              	<a class="btn btn-sm btn-outline-primary py-1" data-whg-modal="/contact_modal/" data-subject="Request WHG accessioning (dataset id: {{ ds.id }})">Request accessioning</a>
-              </div>
-            </div>
             {% if task_wdgn %}
             <div class="task-box p-1">
               <p class="d-block bg-lightblue ps-1"><b>Reconciliation Task</b> ({{ task_wdgn.task_id|truncatechars:8 }});
