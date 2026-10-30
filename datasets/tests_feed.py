@@ -115,8 +115,7 @@ class FeedReviewTests(FeedTestBase):
         ``attestations.create``, beside the same request for a public one succeeding."""
         other_user = get_user_model().objects.create_user(username="feed_o", email="fo@example.org",
                                                           password="pw", given_name="O", surname="U")
-        self.hidden.owner = other_user
-        self.hidden.save()
+        type(self.hidden).objects.filter(pk=self.hidden.pk).update(owner=other_user)   # no save signals
         self.place("Ware", "x1", (0.03, 51.81), ds=self.hidden)
         self.place("Ware", "o1", (0.03, 51.81), ds=self.other)
         mk = lambda cid: MatchCandidate.objects.create(  # noqa: E731
