@@ -3,6 +3,7 @@ import secrets
 
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Collate
 from django.utils import timezone
 
 
@@ -182,7 +183,11 @@ class ContributorAttestation(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                check=models.Q(place_a__lt=models.F("place_b")),
+                # "C" collation = Python's code-point order, which is what the code sorts by; the
+                # database default (en_US) ignores punctuation and disagrees on ids like
+                # "whg:1618:x" vs "whg:16:y".
+                check=models.lookups.LessThan(
+                    Collate(models.F("place_a"), "C"), Collate(models.F("place_b"), "C")),
                 name="contrib_attest_canonical_order",
             ),
             models.UniqueConstraint(
