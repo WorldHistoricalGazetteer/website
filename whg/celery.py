@@ -36,6 +36,12 @@ app.conf.beat_schedule = {
         'task': 'datasets.tasks.sweep_index_pending',
         'schedule': crontab(minute='*/15'),
     },
+    # place#338: prepare suggestions again for lifecycle datasets whose candidate pool is stale
+    # (capped per sweep and per day: datasets/tasks_candidates.refresh_stale_suggestions).
+    'refresh-stale-suggestions-daily': {
+        'task': 'datasets.refresh_stale_suggestions',
+        'schedule': crontab(minute=40, hour=4),
+    },
 }
 
 # Load task modules from all registered Django app configs.
