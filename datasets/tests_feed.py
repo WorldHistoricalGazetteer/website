@@ -262,9 +262,9 @@ class UndoHandSearchLinkTests(FeedTestBase):
 
 class FeedMapDataTests(FeedTestBase):
     """The data the feed map reads: ``location`` ([lon, lat] or null) on each record and each
-    suggestion, through the existing candidates endpoint. A contributed suggestion's point is
-    given only when the person looking may see that dataset NOW; every refusal is shown beside
-    the same suggestion's point being served."""
+    suggestion, through the existing candidates endpoint. A contributed suggestion whose dataset
+    the person looking may not see NOW is left out entirely (title, id, point, number); every
+    refusal is shown beside the same suggestion being served."""
 
     SECRET = [12.34567, 45.67891]   # a point that must never appear in a refused response
 
@@ -273,16 +273,24 @@ class FeedMapDataTests(FeedTestBase):
         self.assertEqual(r.status_code, 200)
         return r, {x["title"]: x for x in r.json()["records"]}
 
-    def contributed(self, ds, src, rank):
-        self.place("Ware", src, tuple(self.SECRET), ds=ds)
+    def contributed(self, ds, src, rank, title="Ware", place=None):
+        self.place(title, src, tuple(self.SECRET), ds=ds)
+        place = place or self.ware
         return MatchCandidate.objects.create(
-            dataset=self.ds, place=self.ware, subject_id=f"whg:{self.ds.pk}:f1",
-            candidate_id=f"whg:{ds.pk}:{src}", candidate_title="Ware", tier="confident", rank=rank,
-            generation=self.gen, card={"title": "Ware", "namespace": "whg", "repr_point": list(self.SECRET)})
+            dataset=self.ds, place=place, subject_id=f"whg:{self.ds.pk}:{place.src_id}",
+            candidate_id=f"whg:{ds.pk}:{src}", candidate_title=title, tier="confident", rank=rank,
+            generation=self.gen, card={"title": title, "namespace": "whg", "repr_point": list(self.SECRET)})
 
-    def cand_json(self, tier, title, cid):
-        _r, recs = self.records(tier)
-        return next(c for c in recs[title]["candidates"] if c["candidate_id"] == cid)
+    def ware_cands(self):
+        r, recs = self.records("confident")
+        return r.content.decode(), recs["Ware"]["candidates"]
+
+    def assertHidden(self, cand, body, cands):
+        """Nothing of ``cand`` anywhere in the response: no id, no title, no number."""
+        self.assertNotIn(cand.candidate_id, body)
+        self.assertNotIn(cand.candidate_title, body)
+        self.assertNotIn(cand.candidate_id, [c["candidate_id"] for c in cands])
+        self.assertEqual([c["rank"] for c in cands], list(range(1, len(cands) + 1)))   # no gap
 
     def test_record_and_suggestion_points(self):
         _r, recs = self.records("confident")
@@ -313,24 +321,38 @@ class FeedMapDataTests(FeedTestBase):
         self.assertEqual(candidates.card(h)["repr_point"], [0.0301, 51.8105])
         self.assertNotIn("repr_point", candidates.card(hit("gn:13", "Ware")))
 
-    def test_contributed_point_only_when_the_viewer_may_see_the_dataset_now(self):
+    def test_a_suggestion_the_viewer_may_not_see_now_is_left_out_entirely(self):
         from datasets.models import Dataset
         other_user = get_user_model().objects.create_user(username="feed_mo", email="mo@example.org",
                                                           password="pw", given_name="M", surname="O")
         Dataset.objects.filter(pk=self.hidden.pk).update(owner=other_user)       # private, not ours
-        good = self.contributed(self.other, "o1", 5)                              # public
-        bad = self.contributed(self.hidden, "x1", 6)
-        r, recs = self.records("confident")
-        by_id = {c["candidate_id"]: c for c in recs["Ware"]["candidates"]}
-        self.assertEqual(by_id[good.candidate_id]["location"], self.SECRET)       # served when visible
-        self.assertEqual((by_id[bad.candidate_id]["location"], by_id[bad.candidate_id]["location_withheld"]),
-                         (None, True))
-        self.assertNotIn("repr_point", by_id[bad.candidate_id]["card"])
-        # Making the dataset public serves the same point through the same request.
+        good = self.contributed(self.other, "o1", 2, title="Ware Open Grange")   # public
+        bad = self.contributed(self.hidden, "x1", 3, title="Ware Zqx Secret Priory")
+        body, cands = self.ware_cands()
+        self.assertEqual([c["candidate_id"] for c in cands], ["gn:4", good.candidate_id])   # authority kept
+        self.assertEqual(cands[1]["location"], self.SECRET)                          # served when visible
+        self.assertIn("Ware Open Grange", body)
+        self.assertHidden(bad, body, cands)
+        # Made public, the same suggestion is served through the same request, numbered 3.
         Dataset.objects.filter(pk=self.hidden.pk).update(public=True)
-        self.assertEqual(self.cand_json("confident", "Ware", bad.candidate_id)["location"], self.SECRET)
+        body, cands = self.ware_cands()
+        self.assertEqual([(c["candidate_id"], c["rank"]) for c in cands][-1], (bad.candidate_id, 3))
+        self.assertIn("Ware Zqx Secret Priory", body)
+        self.assertEqual(cands[-1]["location"], self.SECRET)
 
-    def test_embargoed_contributed_point_is_withheld_from_outsiders_until_released(self):
+    def test_hidden_suggestion_leaves_no_gap_in_the_numbers(self):
+        from datasets.models import Dataset
+        other_user = get_user_model().objects.create_user(username="feed_mg", email="mg@example.org",
+                                                          password="pw", given_name="M", surname="G")
+        Dataset.objects.filter(pk=self.hidden.pk).update(owner=other_user)
+        MatchCandidate.objects.filter(place=self.ware, candidate_id="gn:4").update(rank=3)
+        bad = self.contributed(self.hidden, "x2", 1, title="Ware Zqx Hidden First")
+        good = self.contributed(self.other, "o2", 2, title="Ware Open Second")
+        body, cands = self.ware_cands()
+        self.assertEqual([(c["candidate_id"], c["rank"]) for c in cands], [(good.candidate_id, 1), ("gn:4", 2)])
+        self.assertHidden(bad, body, cands)
+
+    def test_embargoed_suggestion_is_hidden_from_outsiders_until_released(self):
         from datetime import timedelta
         from django.utils import timezone
         from api.models import GazetteerRegistryEntry
@@ -338,34 +360,52 @@ class FeedMapDataTests(FeedTestBase):
         other_user = get_user_model().objects.create_user(username="feed_me", email="me@example.org",
                                                           password="pw", given_name="M", surname="E")
         Dataset.objects.filter(pk=self.hidden.pk).update(owner=other_user, public=True)
-        cand = self.contributed(self.hidden, "e1", 5)
-        self.assertEqual(self.cand_json("confident", "Ware", cand.candidate_id)["location"], self.SECRET)
+        cand = self.contributed(self.hidden, "e1", 5, title="Ware Zqx Embargoed Mill")
+        body, cands = self.ware_cands()
+        self.assertIn(cand.candidate_id, [c["candidate_id"] for c in cands])         # public: shown
         row = GazetteerRegistryEntry.objects.create(id=f"whg:{self.hidden.pk}", name="Embargoed", namespace="whg",
                                                     entry_class="dataset", status="embargoed")
-        c = self.cand_json("confident", "Ware", cand.candidate_id)
-        self.assertEqual((c["location"], c["location_withheld"]), (None, True))
-        r = self.c.get(self.base + "candidates/?tier=confident")
-        self.assertNotIn("45.67891", r.content.decode())     # not anywhere in the response
-        # The dataset's own owner (inside the circle) still sees it while embargoed.
-        mine = self.contributed(self.other, "e2", 7)
+        body, cands = self.ware_cands()
+        self.assertHidden(cand, body, cands)
+        self.assertNotIn("45.67891", body)                   # no coordinates anywhere either
+        # An insider of an embargoed dataset (here its owner) still sees it.
+        mine = self.contributed(self.other, "e2", 7, title="Ware Our Embargoed Barn")
         GazetteerRegistryEntry.objects.create(id=f"whg:{self.other.pk}", name="Ours", namespace="whg",
                                               entry_class="dataset", status="embargoed")
-        self.assertEqual(self.cand_json("confident", "Ware", mine.candidate_id)["location"], self.SECRET)
+        body, cands = self.ware_cands()
+        self.assertIn(mine.candidate_id, [c["candidate_id"] for c in cands])
+        self.assertIn("Ware Our Embargoed Barn", body)
+        self.assertHidden(cand, body, cands)
         row.embargo_release_at = timezone.now() - timedelta(days=1)       # a lifted embargo
         row.save()
-        self.assertEqual(self.cand_json("confident", "Ware", cand.candidate_id)["location"], self.SECRET)
+        body, cands = self.ware_cands()
+        self.assertIn(cand.candidate_id, [c["candidate_id"] for c in cands])
 
-    def test_a_suggestion_from_a_deleted_dataset_has_no_point(self):
+    def test_a_suggestion_from_a_deleted_dataset_is_left_out(self):
         good = self.contributed(self.other, "o1", 5)
         gone = MatchCandidate.objects.create(
             dataset=self.ds, place=self.ware, subject_id=f"whg:{self.ds.pk}:f1", candidate_id="whg:999999:z",
-            candidate_title="Ware", tier="confident", rank=6, generation=self.gen,
-            card={"title": "Ware", "repr_point": list(self.SECRET)})
-        _r, recs = self.records("confident")
-        by_id = {c["candidate_id"]: c for c in recs["Ware"]["candidates"]}
-        self.assertEqual(by_id[good.candidate_id]["location"], self.SECRET)
-        self.assertEqual((by_id[gone.candidate_id]["location"], by_id[gone.candidate_id]["location_withheld"]),
-                         (None, True))
+            candidate_title="Ware Zqx Gone Abbey", tier="confident", rank=6, generation=self.gen,
+            card={"title": "Ware Zqx Gone Abbey", "repr_point": list(self.SECRET)})
+        body, cands = self.ware_cands()
+        self.assertIn(good.candidate_id, [c["candidate_id"] for c in cands])
+        self.assertHidden(gone, body, cands)
+
+    def test_a_record_whose_only_suggestions_are_hidden_shows_none(self):
+        from datasets.models import Dataset
+        other_user = get_user_model().objects.create_user(username="feed_mn", email="mn@example.org",
+                                                          password="pw", given_name="M", surname="N")
+        Dataset.objects.filter(pk=self.hidden.pk).update(owner=other_user)
+        hod = self.place("Hoddesdon", "f4", (-0.01, 51.76))
+        candidates.record_candidates(hod, self.gen, self.owner)        # the gateway answers nothing
+        tier = RecordReviewState.objects.get(place=hod).tier
+        bad = self.contributed(self.hidden, "x3", 1, title="Hoddesdon Zqx Secret Hall", place=hod)
+        r, recs = self.records(tier)
+        self.assertEqual(recs["Hoddesdon"]["candidates"], [])           # the normal "no suggestions" state
+        self.assertNotIn("Zqx", r.content.decode())
+        Dataset.objects.filter(pk=self.hidden.pk).update(public=True)
+        _r, recs = self.records(tier)
+        self.assertEqual([c["candidate_id"] for c in recs["Hoddesdon"]["candidates"]], [bad.candidate_id])
 
     def test_bad_coordinates_are_no_location(self):
         from datasets.views_feed import lon_lat

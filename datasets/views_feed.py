@@ -4,8 +4,8 @@ One page (``/datasets/<id>/matches/``) and its JSON:
 
 * ``GET  matches/candidates/?tier=&offset=`` a page of records with their suggestions, in the
   plan's order (4c): confident, ambiguous, weak, none; later and unqueried on their own tabs.
-  Each record and each suggestion carries ``location`` ([lon, lat] or null) for the feed map;
-  a contributed suggestion the viewer may not see now has ``location_withheld`` and no point;
+  Each record and each suggestion carries ``location`` ([lon, lat] or null) for the feed map.
+  A contributed suggestion whose dataset the viewer may not see now is left out entirely;
 * ``POST matches/review/`` one decision about one record: ``link`` (Same place), ``reject``
   (Not the same place; optionally also recorded as a ``distinct`` Link), ``none`` (None of
   these fits), ``later`` (Not sure yet), ``reopen`` (undo);
@@ -117,6 +117,19 @@ def visible_contributed_pks(user, cands):
     return visible_dataset_pks(user, pks) if pks else set()
 
 
+def candidate_visible(c, visible_pks):
+    """False for a contributed (``whg:``) suggestion whose dataset the viewer may not see now
+    (private, embargoed, deleted, or an id that names no dataset). Such a suggestion is left out
+    of the feed ENTIRELY: no title, id, dataset or point, no number in the list. Authority
+    suggestions are always shown."""
+    cid = str(c.candidate_id or "")
+    if not cid.startswith("whg:"):
+        return True
+    from api.dataset_access import parse_contributed_id
+    parsed = parse_contributed_id(cid)
+    return parsed is not None and parsed[0] in visible_pks
+
+
 def candidate_location(c, visible_pks):
     """``(location, withheld)`` for one suggestion: its representative point from the card the
     gateway answered with, unless it is a contributed record the viewer may not see now (then
@@ -158,7 +171,9 @@ def _record_json(st, cands, visible_pks=frozenset()):
             "tier": st.tier, "state": st.state, "has_geometry": st.has_geometry,
             "location": record_location(p),
             "minmax": p.minmax, "note": st.note, "last_failure": st.last_failure,
-            "candidates": [_candidate_json(c, visible_pks) for c in cands]}
+            # Ranks are renumbered over what is shown, so a hidden suggestion leaves no gap.
+            "candidates": [{**_candidate_json(c, visible_pks), "rank": n}
+                           for n, c in enumerate(cands, start=1)]}
 
 
 @login_required
@@ -195,8 +210,10 @@ def feed_candidates(request, id):
     for c in (MatchCandidate.objects.filter(place_id__in=[s.place_id for s in page])
               .exclude(status="stale").order_by("place_id", "rank")):
         cands.setdefault(c.place_id, []).append(c)
+    # One visibility query per load; hidden suggestions are dropped before anything is serialised.
     visible_pks = visible_contributed_pks(request.user, [c for cs in cands.values() for c in cs])
-    records = [_record_json(s, [c for c in cands.get(s.place_id, []) if c.generation_id == s.generation_id],
+    records = [_record_json(s, [c for c in cands.get(s.place_id, [])
+                                if c.generation_id == s.generation_id and candidate_visible(c, visible_pks)],
                             visible_pks)
                for s in page]
     return JsonResponse({"tier": tab, "offset": offset, "total": total, "records": records,
