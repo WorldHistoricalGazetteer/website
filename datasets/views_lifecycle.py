@@ -85,9 +85,18 @@ def _state(ds, user):
         "timeline": [dict(s, at=s["at"].isoformat()) for s in lifecycle.timeline(ds, user)],
         # Q11: link counts only for the contributor (owner or co-owner); everyone else in
         # the circle, editors included, gets the editors' report.
-        "checks": qc.qc_report(ds, audience="owner" if _is_owner(ds, user) else "editor"),
+        "checks": _checks(ds, user),
         "can": allowed_actions(ds, user),
     }
+
+
+def _checks(ds, user):
+    """The owner's report for an owner; otherwise the editors' report, with the sample check
+    (``datasets/qc_sample.py``) when the viewer is an editor."""
+    if _is_owner(ds, user):
+        return qc.qc_report(ds, audience="owner")
+    return qc.qc_report(ds, audience="editor",
+                        sample_for=user if lifecycle.is_editor(user) else None)
 
 
 def _act(request, dsid, fn):
@@ -189,7 +198,7 @@ def review_queue(request):
         rows.append({
             "ds": ds,
             "summary": lifecycle.status_summary(ds, user),
-            "checks": qc.qc_report(ds, audience="editor"),
+            "checks": qc.qc_report(ds, audience="editor", sample_for=user),
             "submit_note": _submission_note(ds),
             "sensitivity": [(Dataset._meta.get_field(f).help_text,
                              dict(Dataset._meta.get_field(f).choices).get(getattr(ds, f), "Not answered"))
