@@ -65,7 +65,10 @@ class LifecycleBase(TestCase):
             self.ds = Dataset.objects.create(
                 owner=self.owner, label="lc334", title="Lifecycle test", description="D",
                 creator="X", public=False, license=self.licence,
-                uri_base="https://example.org/places/")
+                uri_base="https://example.org/places/",
+                # Submitting needs both sensitivity questions answered (place#334 ruling,
+                # 2026-10-31); tests of that blank them out explicitly.
+                sensitivity_indigenous="no", sensitivity_restricted="no")
 
     def set_state(self, state, public=None):
         fields = {"lifecycle_state": state}

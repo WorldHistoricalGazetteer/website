@@ -23,7 +23,8 @@ STATE_TEXT = {
     "in_review": "A WHG editor is reviewing this dataset. You will usually hear by {by}.",
     "changes_requested": "The editor has asked for changes. Make them, then submit the "
                          "dataset again.",
-    "declined": "The editor has declined this dataset. It stays private.",
+    "declined": "The editor has declined this dataset. It stays private. You can edit it and "
+                "submit it for review again.",
     "accepted": "Accepted. You can publish it whenever you are ready.",
     "published": "Published: anyone can see it, and its records are in the search index.",
     "withdrawn": "Made private again. It is not in the search index. To publish it again, "
@@ -80,6 +81,10 @@ def panel_context(ds, user):
         # The questions are asked while the owner can still submit (they are part of what the
         # editor reads); the endpoint, not this page, decides what an answer must contain.
         "sensitivity_form": SensitivityDeclarationForm(instance=ds) if can["submit"] else None,
+        # Why Submit is held back (empty when the questions are answered): saved answers from
+        # an earlier submission count, so a resubmission needs nothing more.
+        "submit_blocked": qc.sensitivity_unanswered(ds) if can["submit"] else "",
+        "submit_again": ds.lifecycle_state in ("changes_requested", "declined", "withdrawn"),
         "publish_confirm": PUBLISH_CONFIRM, "withdraw_confirm": WITHDRAW_CONFIRM,
         # The one-step placeholder fix, offered only where qc.strip_placeholders allows it.
         "strip_url": reverse("datasets:lifecycle-strip-placeholders", args=[ds.pk])

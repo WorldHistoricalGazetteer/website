@@ -3,7 +3,7 @@
     uploaded -> validating -> validation_failed
                            -> draft (private; the owner links records meanwhile)
                               -> submitted -> in_review -> changes_requested -> submitted ...
-                                                        -> declined
+                                                        -> declined -> submitted ...
                                                         -> accepted -> published -> withdrawn
                                                                                  -> submitted ...
     NULL (a v3-era dataset) -> draft, only by the owner's explicit "start" (beta)
@@ -46,7 +46,7 @@ TRANSITIONS = {
     "fail_validation": ({"validating"}, "validation_failed"),
     "pass_validation": ({"validating"}, "draft"),
     "start": ({None}, "draft"),
-    "submit": ({None, "draft", "changes_requested", "withdrawn"}, "submitted"),
+    "submit": ({None, "draft", "changes_requested", "declined", "withdrawn"}, "submitted"),
     "start_review": ({"submitted"}, "in_review"),
     "accept": ({"in_review"}, "accepted"),
     "request_changes": ({"in_review"}, "changes_requested"),
@@ -244,14 +244,21 @@ def start(dataset, actor):
 
 
 def submit(dataset, actor, note=""):
-    """The owner asks for review. Runs the automatic checks (their summary, with no link
+    """The owner asks for review (first time, or again after changes_requested, declined or
+    withdrawn: the same path each time). Refused until both sensitivity questions are answered.
+    Runs the automatic checks (their summary, with no link
     counts, is kept on the event), starts GRACE tracking, and tells the owner when to expect
     an answer; the editorial address is copied in."""
     def act(ds):
         _require(ds.user_can_manage(actor))
         if ds.public:
             raise LifecycleRefused(409, "this dataset is already public")
-        from datasets.qc import qc_report, summary
+        from datasets.qc import qc_report, summary, sensitivity_unanswered
+        # Both sensitivity questions must have been answered (answers saved earlier are kept
+        # across a resubmission). Refused before anything is written or sent.
+        unanswered = sensitivity_unanswered(ds)
+        if unanswered:
+            raise LifecycleRefused(409, unanswered)
         report = qc_report(ds, audience="editor")
         _track(ds)
         _mail_after_commit(
