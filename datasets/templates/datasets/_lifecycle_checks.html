@@ -8,7 +8,7 @@
     <strong>{{ c.label }}</strong>{% if c.count is not None %} ({{ c.count }}){% endif %}{% if c.verdict %} <span class="{% if c.verdict == 'ok' %}text-success{% elif c.verdict == 'look closer' %}text-warning-emphasis{% else %}text-secondary{% endif %}" data-testid="check-verdict">{{ c.verdict }}</span>{% elif c.status == "not_checked" %} <span class="text-secondary">not checked</span>{% endif %}
     {% if c.detail %}<br><span class="text-secondary">{{ c.detail }}</span>{% endif %}
     {% if c.examples %}<br><span class="text-secondary">For example:
-      {% for e in c.examples %}<a href="{% url 'atlas-record' e.place_id %}" target="_blank">{{ e.title|default:e.place_id }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+      {% for e in c.examples %}<a href="{% url 'atlas-record' e.place_id %}" target="_blank">{% if e.identifier %}<code>{{ e.identifier }}</code>{% else %}{{ e.title|default:e.place_id }}{% endif %}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
     {% if c.fix == "strip_placeholders" and strip_url %}
     <form class="lifecycle-form d-inline" data-testid="lifecycle-strip" data-url="{{ strip_url }}"
           data-confirm="Remove these placeholder links from your records? They name nothing, so nothing is lost.">

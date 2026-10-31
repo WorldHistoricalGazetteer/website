@@ -11,9 +11,11 @@ Every check returns ``{key, label, status, count, detail, examples}`` with ``sta
 reported as passing). Counts are over the dataset's own records; ``examples`` holds up to
 five ``{place_id, title}`` so the editor can go and look.
 
-Not checked here (yet): whether link identifiers resolve (§4e asks for a sample of 50
-through the gateway; it is reported as ``not_checked`` so that an absent check is not read
-as a pass).
+Whether link identifiers resolve (§4e: a sample of 50 through the gateway) is reported here as
+``not_checked``, so that an absent check is not read as a pass. In the editors' report, when an
+editor asks for it (``sample_for``), that placeholder is replaced by the real check
+(``datasets/qc_links.py``), run in the background like the sample below; the owner's report and
+the summary kept at submission keep the placeholder.
 
 The editors' report may also carry ``gateway_sample`` (``datasets/qc_sample.py``): a small,
 reproducible sample of records searched for suggestions, run in the background and read from
@@ -247,13 +249,17 @@ def link_counts(ds):
 
 def qc_report(ds, audience="editor", sample_for=None):
     """The checks for ``ds``. ``audience`` is ``editor`` (no link counts, Q11) or ``owner``.
-    ``sample_for``, an editor, adds the sample check to the editors' report (queued in the
-    background if not yet taken); it is ignored for the owner's report."""
+    ``sample_for``, an editor, adds the sample check to the editors' report and replaces its
+    ``link_resolution`` placeholder with the link check (each queued in the background if not
+    yet taken); it is ignored for the owner's report."""
     if audience not in ("editor", "owner"):
         raise ValueError("audience must be 'editor' or 'owner'")
     checks = [fn(ds) for fn in CHECKS]
     if audience == "editor" and sample_for is not None:
+        from datasets.qc_links import link_check
         from datasets.qc_sample import sample_check
+        checks = [link_check(ds, requested_by=sample_for) if c["key"] == "link_resolution" else c
+                  for c in checks]
         checks.append(sample_check(ds, requested_by=sample_for))
     report = {
         "dataset": ds.pk,

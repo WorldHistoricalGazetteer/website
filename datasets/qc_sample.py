@@ -296,14 +296,15 @@ def _claim(event_pk, n_records):
     return True
 
 
-def store(event_pk, result):
+def store(event_pk, result, key=PAYLOAD_KEY):
+    """Write ``result`` under ``key`` of the event's payload (``qc_links`` uses its own key)."""
     from datasets.models import DatasetLifecycleEvent
     with transaction.atomic():
         ev = DatasetLifecycleEvent.objects.select_for_update().filter(pk=event_pk).first()
         if ev is None:
             return
         payload = dict(ev.payload or {})
-        payload[PAYLOAD_KEY] = result
+        payload[key] = result
         DatasetLifecycleEvent.objects.filter(pk=event_pk).update(payload=payload)
 
 
