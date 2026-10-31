@@ -160,6 +160,18 @@ def lifecycle_strip_placeholders(request, dsid):
 REVIEW_QUEUE_STATES = ("submitted", "in_review")
 
 
+def waiting_for_review(user):
+    """Datasets in ``submitted`` / ``in_review`` that ``user`` (an editor) may act on: in the
+    dataset's circle, and the review action allowed. The review page lists exactly these and
+    the dashboard line counts exactly these, so the two always agree."""
+    out = []
+    for ds in (Dataset.objects.filter(lifecycle_state__in=REVIEW_QUEUE_STATES)
+               .select_related("owner").order_by("id")):
+        if ds.user_has_private_access(user) and allowed_actions(ds, user)["review"]:
+            out.append(ds)
+    return out
+
+
 @require_GET
 def review_queue(request):
     """The editors' page: datasets waiting for review, with the editors' checks report (no
@@ -172,13 +184,8 @@ def review_queue(request):
     if not getattr(user, "can_access_beta", False) or not lifecycle.is_editor(user):
         raise Http404("not found")
     rows = []
-    for ds in (Dataset.objects.filter(lifecycle_state__in=REVIEW_QUEUE_STATES)
-               .select_related("owner").order_by("id")):
-        if not ds.user_has_private_access(user):
-            continue
+    for ds in waiting_for_review(user):
         can = allowed_actions(ds, user)
-        if not can["review"]:
-            continue
         rows.append({
             "ds": ds,
             "summary": lifecycle.status_summary(ds, user),

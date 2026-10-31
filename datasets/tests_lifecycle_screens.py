@@ -322,3 +322,89 @@ class ReviewQueueNavLinkTests(ScreenBase):
         self.assertNotIn(self.LINK, self.page(stranger))  # editor, no beta
         User.objects.filter(pk=self.stranger.pk).update(role="beta_tester")
         self.assertIn(self.LINK, self.page(User.objects.get(pk=self.stranger.pk)))
+
+
+class DashboardWaitingTests(ScreenBase):
+    """The editors' dashboard line: 'N datasets waiting for review', linking to the queue."""
+    MARK = 'data-testid="dashboard-review-waiting"'
+
+    def dash(self, user, name="dashboard-user"):
+        self.client.force_login(user)
+        r = self.client.get(reverse(name))
+        self.assertEqual(r.status_code, 200)
+        return r.content.decode()
+
+    def test_count_matches_the_review_page_and_links_to_it(self):
+        self.set_state("submitted")
+        html = self.dash(self.editor)
+        m = re.search(self.MARK + r'><a href="([^"]+)">(\d+) datasets? waiting for review</a>', html)
+        self.assertIsNotNone(m, "line missing for an editor with a dataset waiting")
+        self.assertEqual(m.group(1), "/datasets/review-queue/")
+        self.assertEqual(m.group(2), "1")
+        self.assertIn("1 dataset waiting for review", html)
+        self.assertEqual(self.queue().count('data-testid="review-row"'), 1)  # agrees with the page
+        self.set_state("in_review")
+        self.assertIn("1 dataset waiting", self.dash(self.editor))
+        # a second dataset: both pages say 2
+        from datasets.models import Dataset
+        Dataset.objects.create(owner=self.owner, label="lc334b", title="B", description="D", creator="X",
+                               public=False, uri_base="https://example.org/b/", lifecycle_state="submitted")
+        self.assertIn("2 datasets waiting for review", self.dash(self.editor))
+        self.assertEqual(self.queue().count('data-testid="review-row"'), 2)
+
+    def test_nothing_when_none_waiting_or_for_anyone_else(self):
+        self.set_state("submitted")
+        self.assertIn(self.MARK, self.dash(self.editor))               # presence, same data
+        for state in ("draft", "accepted", "changes_requested", None):
+            self.set_state(state)
+            self.assertNotIn(self.MARK, self.dash(self.editor), state)
+        self.set_state("submitted")
+        self.assertNotIn(self.MARK, self.dash(self.owner))             # beta, not an editor
+        Group.objects.get_or_create(name="editorial")[0].user_set.add(self.stranger)
+        self.assertNotIn(self.MARK, self.dash(User.objects.get(pk=self.stranger.pk)))  # editor, no beta
+        User.objects.filter(pk=self.stranger.pk).update(role="beta_tester")
+        # editorial but outside the dataset's circle: the queue lists nothing, so the line is absent too
+        self.assertNotIn(self.MARK, self.dash(User.objects.get(pk=self.stranger.pk)))
+        self.assertEqual(self.queue_for(User.objects.get(pk=self.stranger.pk)).count('data-testid="review-row"'), 0)
+        Group.objects.get_or_create(name="whg_admins")[0].user_set.add(self.stranger)  # in every circle
+        self.assertIn(self.MARK, self.dash(User.objects.get(pk=self.stranger.pk)))
+
+    def queue_for(self, user):
+        self.client.force_login(user)
+        return self.client.get("/datasets/review-queue/").content.decode()
+
+    def test_admin_dashboard_too(self):
+        self.set_state("submitted")
+        Group.objects.get_or_create(name="whg_admins")[0].user_set.add(self.editor)
+        self.assertIn(self.MARK, self.dash(User.objects.get(pk=self.editor.pk), "dashboard-admin"))
+
+
+class PublicV3HintTests(ScreenBase):
+    HINT = "To put this dataset through the review process, make it private first."
+
+    def test_hint_for_beta_owner_of_public_null_dataset_only(self):
+        self.set_state(None, public=True)
+        html = self.status_page()
+        self.assertIn(self.HINT, html)
+        self.assertEqual(testids(html, ACTIONS), set())
+        self.assertNotIn("/lifecycle/", html)
+        self.assertIsNone(BANNED.search(visible_text(html[html.index(self.HINT) - 200:][:400])))
+        # co-owner too
+        User.objects.filter(pk=self.stranger.pk).update(role="beta_tester")
+        co = User.objects.get(pk=self.stranger.pk)
+        DatasetUser.objects.create(dataset_id=self.ds, user_id=co, role="owner")
+        self.assertIn(self.HINT, self.status_page(co))
+        # negatives, each beside the presence above
+        self.assertNotIn(self.HINT, self.status_page(self.editor))              # staff, not an owner
+        User.objects.filter(pk=self.owner.pk).update(role="normal")
+        self.assertNotIn(self.HINT, self.status_page(User.objects.get(pk=self.owner.pk)))  # no beta
+        self.set_state(None, public=False)                                       # private: the Start control instead
+        User.objects.filter(pk=self.owner.pk).update(role="beta_tester")
+        html = self.status_page(User.objects.get(pk=self.owner.pk))
+        self.assertNotIn(self.HINT, html)
+        self.assertIn('data-testid="lifecycle-start"', html)
+        for state, public in (("draft", False), ("published", True), ("withdrawn", False)):
+            self.set_state(state, public=public)
+            html = self.status_page(User.objects.get(pk=self.owner.pk))
+            self.assertIn('data-testid="lifecycle-panel"', html)
+            self.assertNotIn(self.HINT, html, state)

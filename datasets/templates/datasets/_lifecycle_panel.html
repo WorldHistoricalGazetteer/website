@@ -1,4 +1,5 @@
 {% load static %}
+{% if public_hint %}<p class="small text-secondary mb-2" data-testid="lifecycle-public-hint">To put this dataset through the review process, make it private first.</p>{% endif %}
 {% if show and start_only %}
 <div id="ds_lifecycle" class="ds-card mb-2" data-testid="lifecycle-panel" data-state="none">
   <p class="ds-card-header">Review and publication <span class="badge bg-warning text-dark ms-1">beta</span></p>
