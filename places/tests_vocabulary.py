@@ -13,7 +13,12 @@ from django.test import SimpleTestCase
 
 ROOT = Path(__file__).resolve().parent.parent
 FILES = ["whg/webpack/js/atlasRecord.js", "whg/webpack/js/attest.js",
-         "whg/webpack/js/enrichment.js"]
+         "whg/webpack/js/enrichment.js",
+         # The contributor feed and its map (place#338).
+         "whg/webpack/js/matchFeed.js", "whg/webpack/js/matchFeedMap.js"]
+# How many literals each file must yield, so a parser that stops early is caught (the map module
+# is small; every other file has well over 50).
+MIN_LITERALS = {"whg/webpack/js/matchFeedMap.js": 20}
 BANNED = re.compile(r"attest|accession|reconcil", re.I)
 
 # (regex on the literal, reason). A literal is excused only if, after removing every match of
@@ -77,7 +82,8 @@ class VocabularyGuardTests(SimpleTestCase):
     def test_no_banned_words_in_visible_strings(self):
         for rel in FILES:
             src = (ROOT / rel).read_text()
-            self.assertGreater(len(literals(src)), 50, f"{rel}: read too few literals; guard is not looking")
+            self.assertGreater(len(literals(src)), MIN_LITERALS.get(rel, 50),
+                               f"{rel}: read too few literals; guard is not looking")
             self.assertEqual(violations(src), [], rel)
 
     def test_guard_can_fail(self):

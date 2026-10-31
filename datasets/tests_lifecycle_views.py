@@ -87,7 +87,10 @@ class LifecycleViewTests(LifecycleBase):
         self.client.force_login(self.editor)
         theirs = self.client.get(f"/datasets/{self.ds.pk}/lifecycle/").json()
         self.assertNotIn("links", theirs["checks"])
-        self.assertEqual(len(theirs["checks"]["checks"]), len(mine["checks"]["checks"]))
+        # The same checks, plus the editors' sample check (datasets/qc_sample.py), which the
+        # owner's report never carries.
+        self.assertEqual([c["key"] for c in theirs["checks"]["checks"]],
+                         [c["key"] for c in mine["checks"]["checks"]] + ["gateway_sample"])
 
     def test_sensitivity_saved_only_when_valid(self):
         # the base dataset is answered "no"/"no" so it can be submitted; start from unanswered

@@ -14,6 +14,11 @@ five ``{place_id, title}`` so the editor can go and look.
 Not checked here (yet): whether link identifiers resolve (§4e asks for a sample of 50
 through the gateway; it is reported as ``not_checked`` so that an absent check is not read
 as a pass).
+
+The editors' report may also carry ``gateway_sample`` (``datasets/qc_sample.py``): a small,
+reproducible sample of records searched for suggestions, run in the background and read from
+the submission event. It is added only when an editor asks for the editors' report
+(``sample_for``), never to the owner's report and never to the summary kept at submission.
 """
 import datetime
 
@@ -25,11 +30,13 @@ SENSITIVITY_FIELDS = ("sensitivity_indigenous", "sensitivity_restricted")
 OWNER_ONLY_KEYS = ("links",)
 
 
-def _check(key, label, status, count=None, detail="", examples=None, fix=None):
+def _check(key, label, status, count=None, detail="", examples=None, fix=None, verdict=None):
     out = {"key": key, "label": label, "status": status, "count": count, "detail": detail,
            "examples": list(examples or [])[:EXAMPLES]}
     if fix:
         out["fix"] = fix
+    if verdict:
+        out["verdict"] = verdict
     return out
 
 
@@ -238,11 +245,16 @@ def link_counts(ds):
     }
 
 
-def qc_report(ds, audience="editor"):
-    """The checks for ``ds``. ``audience`` is ``editor`` (no link counts, Q11) or ``owner``."""
+def qc_report(ds, audience="editor", sample_for=None):
+    """The checks for ``ds``. ``audience`` is ``editor`` (no link counts, Q11) or ``owner``.
+    ``sample_for``, an editor, adds the sample check to the editors' report (queued in the
+    background if not yet taken); it is ignored for the owner's report."""
     if audience not in ("editor", "owner"):
         raise ValueError("audience must be 'editor' or 'owner'")
     checks = [fn(ds) for fn in CHECKS]
+    if audience == "editor" and sample_for is not None:
+        from datasets.qc_sample import sample_check
+        checks.append(sample_check(ds, requested_by=sample_for))
     report = {
         "dataset": ds.pk,
         "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),

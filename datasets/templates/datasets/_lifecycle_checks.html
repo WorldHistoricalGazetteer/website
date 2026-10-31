@@ -5,7 +5,7 @@
     {% elif c.status == "fail" %}<span class="text-danger" aria-label="must be fixed">&#10007;</span>
     {% elif c.status == "warn" %}<span class="text-warning" aria-label="worth a look">!</span>
     {% else %}<span class="text-secondary" aria-label="not checked">&ndash;</span>{% endif %}
-    <strong>{{ c.label }}</strong>{% if c.count is not None %} ({{ c.count }}){% endif %}{% if c.status == "not_checked" %} <span class="text-secondary">not checked</span>{% endif %}
+    <strong>{{ c.label }}</strong>{% if c.count is not None %} ({{ c.count }}){% endif %}{% if c.verdict %} <span class="{% if c.verdict == 'ok' %}text-success{% elif c.verdict == 'look closer' %}text-warning-emphasis{% else %}text-secondary{% endif %}" data-testid="check-verdict">{{ c.verdict }}</span>{% elif c.status == "not_checked" %} <span class="text-secondary">not checked</span>{% endif %}
     {% if c.detail %}<br><span class="text-secondary">{{ c.detail }}</span>{% endif %}
     {% if c.examples %}<br><span class="text-secondary">For example:
       {% for e in c.examples %}<a href="{% url 'atlas-record' e.place_id %}" target="_blank">{{ e.title|default:e.place_id }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}

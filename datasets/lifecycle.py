@@ -223,8 +223,18 @@ def validation_failed(dataset, errors=None):
                        act=lambda ds: {"errors": list(errors or [])[:20]})
 
 
+def _queue_suggestions(ds):
+    """The dataset has just become ready for linking: prepare suggestions for its records
+    after the commit (``tasks_candidates.auto_generate_candidates``: idempotent, beta-gated,
+    capped like any run). Never raises into the transition."""
+    from datasets.tasks_candidates import queue_auto_generation
+    queue_auto_generation(ds.pk)
+
+
 def validation_passed(dataset):
-    return _transition(dataset, "pass_validation", None, reason="validation passed")
+    """The file is valid: the dataset is a private draft and suggestions are prepared."""
+    return _transition(dataset, "pass_validation", None, _queue_suggestions,
+                       reason="validation passed")
 
 
 # ---------------------------------------------------------------------------
@@ -233,13 +243,15 @@ def validation_passed(dataset):
 
 def start(dataset, actor):
     """The owner opts a v3-era dataset (``lifecycle_state`` NULL) into the v4 lifecycle: it
-    becomes a private draft, which then needs editorial review before it can be published.
+    becomes a private draft, which then needs editorial review before it can be published,
+    and suggestions for its records are prepared (after the commit).
     Only ever on an explicit request, never automatically; refused for a dataset that is
     already public (the review process is for datasets not yet published)."""
     def act(ds):
         _require(ds.user_can_manage(actor))
         if ds.public:
             raise LifecycleRefused(409, "this dataset is already public")
+        _queue_suggestions(ds)
     return _transition(dataset, "start", actor, act, reason="review process started by the owner")
 
 

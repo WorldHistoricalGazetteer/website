@@ -1567,6 +1567,8 @@ def finalise_task(dataset, user, test_mode, hit_summary, logger):
 
 # place#338: background candidate generation (queue `recon`); imported so autodiscovery registers it.
 from datasets.tasks_candidates import generate_candidates  # noqa: E402,F401
+# place#334 Phase 3: the editors' sample check (queue `recon`); imported for the same reason.
+from datasets.tasks_qc import qc_gateway_sample  # noqa: E402,F401
 
 
 def _reingest_config():

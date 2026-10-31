@@ -1,0 +1,13 @@
+{% extends "base_email.html" %}
+
+{% block content %}
+    {% if refresh %}
+    <p>New datasets have been added to WHG since we last looked for matches to your dataset, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>], so we have looked again.</p>
+    {% else %}
+    <p>We have looked for places in WHG that may be the same as the records in your dataset, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>].</p>
+    {% endif %}
+    <p>We checked {{ records_checked }} record{{ records_checked|pluralize }}, and {{ with_suggestions }} of them ha{{ with_suggestions|pluralize:"s,ve" }} at least one suggestion.{% if limited %} Not every record was checked this time; the rest will be checked later.{% endif %}</p>
+    <p>These are only suggestions: nothing is linked until you choose. You can go through them, decide which are the same place, and Link them here:</p>
+    <p><a href="{{ feed_url }}">{{ feed_url }}</a></p>
+    <p>If you have any questions, please contact our editor at {{ reply_to }}.</p>
+{% endblock %}

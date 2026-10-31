@@ -3,7 +3,9 @@
 One page (``/datasets/<id>/matches/``) and its JSON:
 
 * ``GET  matches/candidates/?tier=&offset=`` a page of records with their suggestions, in the
-  plan's order (4c): confident, ambiguous, weak, none; later and unqueried on their own tabs;
+  plan's order (4c): confident, ambiguous, weak, none; later and unqueried on their own tabs.
+  Each record and each suggestion carries ``location`` ([lon, lat] or null) for the feed map.
+  A contributed suggestion whose dataset the viewer may not see now is left out entirely;
 * ``POST matches/review/`` one decision about one record: ``link`` (Same place), ``reject``
   (Not the same place; optionally also recorded as a ``distinct`` Link), ``none`` (None of
   these fits), ``later`` (Not sure yet), ``reopen`` (undo);
@@ -85,21 +87,93 @@ def progress(ds):
     }
 
 
-def _candidate_json(c):
+def lon_lat(v):
+    """``[lon, lat]`` (rounded to 5 places, about a metre) from a 2+ list of finite numbers in
+    range, else None. The feed map is given nothing it would have to second-guess."""
+    import math
+    if not isinstance(v, (list, tuple)) or len(v) < 2:
+        return None
+    try:
+        lon, lat = float(v[0]), float(v[1])
+    except (TypeError, ValueError):
+        return None
+    if not (math.isfinite(lon) and math.isfinite(lat)) or not (-180 <= lon <= 180 and -90 <= lat <= 90):
+        return None
+    return [round(lon, 5), round(lat, 5)]
+
+
+def visible_contributed_pks(user, cands):
+    """Of the contributed (``whg:<ds>:<src>``) suggestions in ``cands``, the dataset pks whose
+    content ``user`` may see NOW, in one query (``api.dataset_access``: public and not embargoed,
+    or inside the circle). A suggestion was filtered for whoever generated it, at that time; the
+    person looking may be a different collaborator, and a dataset may have gone private or under
+    embargo since. A dataset that no longer exists is not in the answer, so its point is withheld."""
+    from api.dataset_access import parse_contributed_id, visible_dataset_pks
+    pks = set()
+    for c in cands:
+        parsed = parse_contributed_id(c.candidate_id) if str(c.candidate_id).startswith("whg:") else None
+        if parsed:
+            pks.add(parsed[0])
+    return visible_dataset_pks(user, pks) if pks else set()
+
+
+def candidate_visible(c, visible_pks):
+    """False for a contributed (``whg:``) suggestion whose dataset the viewer may not see now
+    (private, embargoed, deleted, or an id that names no dataset). Such a suggestion is left out
+    of the feed ENTIRELY: no title, id, dataset or point, no number in the list. Authority
+    suggestions are always shown."""
+    cid = str(c.candidate_id or "")
+    if not cid.startswith("whg:"):
+        return True
+    from api.dataset_access import parse_contributed_id
+    parsed = parse_contributed_id(cid)
+    return parsed is not None and parsed[0] in visible_pks
+
+
+def candidate_location(c, visible_pks):
+    """``(location, withheld)`` for one suggestion: its representative point from the card the
+    gateway answered with, unless it is a contributed record the viewer may not see now (then
+    ``(None, True)``: never its coordinates)."""
+    cid = str(c.candidate_id or "")
+    if cid.startswith("whg:"):
+        from api.dataset_access import parse_contributed_id
+        parsed = parse_contributed_id(cid)
+        if parsed is None or parsed[0] not in visible_pks:
+            return None, True
+    return lon_lat((c.card or {}).get("repr_point")), False
+
+
+def record_location(place):
+    """The record's own representative point (centroid of all its geometries), or None."""
+    try:
+        return lon_lat(place.repr_point)
+    except Exception:  # noqa: BLE001 — a broken geometry is "no location", never a 500
+        return None
+
+
+def _candidate_json(c, visible_pks=frozenset()):
     sig = c.signals or {}
+    location, withheld = candidate_location(c, visible_pks)
+    card = dict(c.card or {})
+    if withheld:
+        card.pop("repr_point", None)
     return {"id": c.id, "candidate_id": c.candidate_id, "title": c.candidate_title, "namespace": c.namespace,
             "tier": c.tier, "rank": c.rank, "status": c.status, "confidence": c.gateway_confidence,
             "km": sig.get("km"), "composite": sig.get("composite"),
             "demoted": str(sig.get("type_sanity", "ok")) != "ok",
-            "explanation": c.explanation or {}, "card": c.card or {}}
+            "location": location, "location_withheld": withheld,
+            "explanation": c.explanation or {}, "card": card}
 
 
-def _record_json(st, cands):
+def _record_json(st, cands, visible_pks=frozenset()):
     p = st.place
     return {"place": p.pk, "title": p.title, "src_id": p.src_id, "subject_id": f"whg:{p.pk}",
             "tier": st.tier, "state": st.state, "has_geometry": st.has_geometry,
+            "location": record_location(p),
             "minmax": p.minmax, "note": st.note, "last_failure": st.last_failure,
-            "candidates": [_candidate_json(c) for c in cands]}
+            # Ranks are renumbered over what is shown, so a hidden suggestion leaves no gap.
+            "candidates": [{**_candidate_json(c, visible_pks), "rank": n}
+                           for n, c in enumerate(cands, start=1)]}
 
 
 @login_required
@@ -129,14 +203,18 @@ def feed_candidates(request, id):
     order = {"confident": ("has_geometry", "-shared_count", "place_id"),
              "ambiguous": ("-shared_count", "place_id")}.get(tab, ("place_id",))
     qs = (RecordReviewState.objects.filter(dataset=ds).filter(_tab_q(tab))
-          .select_related("place").order_by(*order))
+          .select_related("place").prefetch_related("place__geoms").order_by(*order))
     total = qs.count()
     page = list(qs[offset:offset + PAGE_SIZE])
     cands = {}
     for c in (MatchCandidate.objects.filter(place_id__in=[s.place_id for s in page])
               .exclude(status="stale").order_by("place_id", "rank")):
         cands.setdefault(c.place_id, []).append(c)
-    records = [_record_json(s, [c for c in cands.get(s.place_id, []) if c.generation_id == s.generation_id])
+    # One visibility query per load; hidden suggestions are dropped before anything is serialised.
+    visible_pks = visible_contributed_pks(request.user, [c for cs in cands.values() for c in cs])
+    records = [_record_json(s, [c for c in cands.get(s.place_id, [])
+                                if c.generation_id == s.generation_id and candidate_visible(c, visible_pks)],
+                            visible_pks)
                for s in page]
     return JsonResponse({"tier": tab, "offset": offset, "total": total, "records": records,
                          "next": offset + PAGE_SIZE if offset + PAGE_SIZE < total else None,
