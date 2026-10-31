@@ -380,9 +380,12 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
 
                 # --- Primary link ---
                 if tid not in links_task_ids:
+                    # One id for link and citations alike. The former `auth == "whg"` ->
+                    # json['place_id'] alternative was unreachable (this branch admits only
+                    # wd/tgn) and, for WHG hits, Hit.authrecord_id is the whg_id (place#342).
                     link_identifier = link_uri(
                         task.task_name,
-                        authrecord_id if auth != "whg" else hit_json.get("place_id"),
+                        authrecord_id,
                         dataset="geonames" if hit_gn else None,
                     )
                     links_to_create.append(PlaceLink(
