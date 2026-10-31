@@ -20,7 +20,7 @@ import { constraintChipsHTML, bindConstraintChips, esc } from './constraintChips
 const root = document.getElementById('match_feed');
 const S = {
   tab: root.dataset.tab, records: [], idx: 0, offset: 0, next: null, selected: new Set(),
-  undo: [], relaxed: new Set(), searchResults: null, searchChips: [], distinctAsk: null,
+  undo: [], relaxed: new Set(), searchResults: null, handSel: null, searchChips: [], distinctAsk: null,
 };
 const NOTES = {
   confident: 'The suggestion and your record agree on the name and at least one other thing. Check before you confirm: a perfect name can still be a lake or a station named after the place.',
@@ -30,7 +30,7 @@ const NOTES = {
   later: 'Records you marked "Not sure yet". They stay here until you decide; nothing here expires.',
   unqueried: 'The search service did not answer for these records yet. They will be tried again; this is not "nothing found".',
 };
-window.__whgMatchFeed = { ready: false, tab: S.tab, saves: 0, map: { state: 'idle', renders: 0, basemap: null } };
+window.__whgMatchFeed = { ready: false, tab: S.tab, saves: 0, map: { state: 'idle', renders: 0, basemap: null, hand: [] } };
 
 function csrf() {
   const m = document.querySelector('meta[name="csrf-token"]');
@@ -76,7 +76,7 @@ function nsLabel(ns) {
 
 function candHTML(c, i, opts) {
   const card = c.card || {};
-  const sel = S.selected.has(i);
+  const sel = opts.hand ? S.handSel === i : S.selected.has(i);
   const cls = ['mf-cand', sel ? 'mf-cand--selected' : '', c.status === 'accepted' ? 'mf-cand--accepted' : '',
     c.status === 'rejected' ? 'mf-cand--rejected' : ''].join(' ');
   const facts = [
@@ -102,7 +102,7 @@ function candHTML(c, i, opts) {
                 aria-label="Not the same place: ${esc(card.title || c.title)}">Not the same place</button>`}
       </div>`;
   return `<li class="${cls}" data-i="${i}" data-candidate="${esc(c.candidate_id)}">
-      <div><span class="mf-key">${i + 1}</span><span class="fw-semibold">${esc(card.title || c.title)}</span>
+      <div><span class="mf-key">${opts.hand ? 's' : ''}${i + 1}</span><span class="fw-semibold">${esc(card.title || c.title)}</span>
         <span class="text-secondary small ms-1">${esc(c.candidate_id)}</span>${done}</div>
       <div class="small text-secondary">${facts}</div>
       ${other.length ? `<div class="small text-secondary">also: ${other.map(esc).join(', ')}</div>` : ''}
@@ -130,6 +130,7 @@ function renderRecord() {
   const box = document.getElementById('mf_record');
   const r = current();
   S.searchResults = null;
+  S.handSel = null;
   if (!r) { box.innerHTML = '<p class="text-secondary" id="mf_empty">Nothing to review in this tab.</p>'; renderMap(); return; }
   const cands = r.candidates || [];
   const tierBadge = r.tier === 'unqueried'
@@ -182,7 +183,9 @@ let mapFailed = false;
 
 function mapView(r) {
   const cands = r.candidates || [];
-  const focus = S.selected.size ? S.selected : new Set(cands.length ? [0] : []);
+  // A hand-search result the person has picked takes the focus; the suggestions go grey.
+  const handFocus = S.handSel !== null && S.handSel !== undefined;
+  const focus = handFocus ? new Set() : (S.selected.size ? S.selected : new Set(cands.length ? [0] : []));
   const points = [];
   const missing = [];
   const withheld = [];
@@ -191,7 +194,14 @@ function mapView(r) {
     else if (c.location_withheld) withheld.push(i + 1);
     else missing.push(i + 1);
   });
-  return { record: Array.isArray(r.location) ? { title: r.title, location: r.location } : null, points, missing, withheld };
+  // Hand-search results (shown below the suggestions, labelled s1, s2...): muted pins too.
+  const hand = [];
+  const handMissing = [];
+  (S.searchResults || []).forEach((c, i) => {
+    if (Array.isArray(c.location)) hand.push({ i, title: (c.card && c.card.title) || c.title, location: c.location, focus: S.handSel === i });
+    else handMissing.push(`s${i + 1}`);
+  });
+  return { record: Array.isArray(r.location) ? { title: r.title, location: r.location } : null, points, missing, withheld, hand, handMissing };
 }
 
 function mapCaption(r, v) {
@@ -201,6 +211,8 @@ function mapCaption(r, v) {
   if (v.points.length) parts.push('numbers: suggestions, as in the list; the one you chose (else the first) is larger, the others grey');
   if (v.missing.length) parts.push(`not on the map (no location): ${v.missing.join(', ')}`);
   if (v.withheld.length) parts.push(`not on the map (location not available to you): ${v.withheld.join(', ')}`);
+  if (v.hand.length) parts.push('s1, s2…: your own search results (click one to see it here)');
+  if (v.handMissing.length) parts.push(`search results not on the map (no location): ${v.handMissing.join(', ')}`);
   if (window.__whgMatchFeed.map.basemap === 'blank') parts.push('the background map could not be loaded');
   return parts.join(' · ');
 }
@@ -210,6 +222,7 @@ function mapDone(state, v) {
   m.state = state;
   m.record = v && v.record ? v.record.location : null;
   m.points = v ? v.points.map((p) => ({ i: p.i, focus: p.focus, location: p.location })) : [];
+  m.hand = v ? v.hand.map((p) => ({ i: p.i, focus: p.focus, location: p.location })) : [];
   m.renders += 1;
 }
 
@@ -232,6 +245,7 @@ function ensureMap() {
           if (S.selected.has(i)) S.selected.delete(i); else S.selected.add(i);
           renderRecord();
         },
+        onPickHand: (i) => pickHand(i),
         onBasemap: (state) => {
           window.__whgMatchFeed.map.basemap = state;
           if (state === 'blank') renderMap();
@@ -256,7 +270,7 @@ function renderMap() {
   const none = document.getElementById('mf_map_none');
   const caption = document.getElementById('mf_map_caption');
   document.getElementById('mf_map_failed').hidden = true;
-  if (!v.record && !v.points.length) {
+  if (!v.record && !v.points.length && !v.hand.length) {
     // A clear "no location" state, never an empty box.
     box.hidden = true;
     none.hidden = false;
@@ -415,6 +429,7 @@ async function search() {
   const out = document.getElementById('mf_search_results');
   out.innerHTML = '<li class="text-secondary small">Searching…</li>';
   const res = await getJSON(url);
+  if (current() !== r) return;   // the person moved on while the search ran
   const cx = document.getElementById('mf_search_cx');
   S.searchChips = res.data.constraints || [];
   cx.innerHTML = constraintChipsHTML(S.searchChips, S.relaxed);
@@ -424,8 +439,21 @@ async function search() {
     return;
   }
   S.searchResults = res.data.results || [];
+  S.handSel = null;
   out.innerHTML = S.searchResults.map((c, i) => candHTML({ ...c, id: null, status: 'suggested' }, i, { hand: true }).replace(/data-act="link-one"/g, 'data-act="link-hand"'))
     .join('') || '<li class="text-secondary small">Nothing found for that name.</li>';
+  // The results join the map as muted pins; the feed works if this does not.
+  try { renderMap(); } catch (err) { console.warn('The feed map could not show the search results:', err); }
+}
+
+// Pick a hand-search result to look at (and, with its own button, to link): it takes the map focus.
+function pickHand(i) {
+  if (!S.searchResults || !S.searchResults[i]) return;
+  S.handSel = S.handSel === i ? null : i;
+  document.querySelectorAll('#mf_search_results .mf-cand').forEach((li) => {
+    li.classList.toggle('mf-cand--selected', Number(li.dataset.i) === S.handSel);
+  });
+  try { renderMap(); } catch (err) { console.warn('The feed map could not be updated:', err); }
 }
 
 root.addEventListener('click', (e) => {
@@ -435,6 +463,8 @@ root.addEventListener('click', (e) => {
   if (qi) { S.idx = Number(qi.dataset.qi); S.selected.clear(); S.distinctAsk = null; render(); return; }
   const b = e.target.closest('[data-act]');
   if (!b) {
+    const hl = e.target.closest('#mf_search_results .mf-cand');
+    if (hl) { pickHand(Number(hl.dataset.i)); return; }
     const li = e.target.closest('#mf_cands .mf-cand');
     if (li) { const i = Number(li.dataset.i); if (S.selected.has(i)) S.selected.delete(i); else S.selected.add(i); renderRecord(); }
     return;
@@ -447,7 +477,7 @@ root.addEventListener('click', (e) => {
   else if (act === 'distinct-no') { S.distinctAsk = null; renderRecord(); }
   else if (act === 'link-hand') {
     const c = S.searchResults && S.searchResults[Number(b.dataset.i)];
-    if (c) review({ action: 'link', target: c.candidate_id, relation: relation() });
+    if (c) { S.handSel = Number(b.dataset.i); review({ action: 'link', target: c.candidate_id, relation: relation() }); }
   } else if (act === 'none') review({ action: 'none' });
   else if (act === 'later') review({ action: 'later' });
   else if (act === 'undo') undo();

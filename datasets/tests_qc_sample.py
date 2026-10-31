@@ -318,6 +318,9 @@ class EditorsOnlyTests(ScreenBase):
         p = patch("datasets.qc_sample._enqueue")
         self.enqueue = p.start()
         self.addCleanup(p.stop)
+        q = patch("datasets.qc_links._enqueue")              # the link check queues its own
+        q.start()
+        self.addCleanup(q.stop)
 
     def keys(self, user):
         self.client.force_login(user)

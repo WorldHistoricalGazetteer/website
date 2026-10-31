@@ -31,6 +31,9 @@
 .mf-map-pin--focus { z-index: 2; }
 .mf-map-pin--muted { --pin: #adb5bd; opacity: .8; }
 .mf-map-pin--muted .mf-map-marker { color: #212529; width: 20px; height: 20px; font-size: .7rem; }
+.mf-map-pin--hand .mf-map-marker { border-radius: 4px; width: auto; min-width: 22px; padding: 0 3px; }
+.mf-map-pin--hand.mf-map-pin--focus { --pin: #6f42c1; }
+.mf-map-pin--hand.mf-map-pin--focus .mf-map-marker { height: 26px; }
 .mf-map-pin--linked .mf-map-marker { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #198754; }
 .mf-map-pin--declined { opacity: .5; }
 .mf-map-pin--declined .mf-map-marker { text-decoration: line-through; }

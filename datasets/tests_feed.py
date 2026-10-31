@@ -205,6 +205,75 @@ class FeedSearchTests(FeedTestBase):
         self.assertEqual((row.suggested_by, row.candidate_id), ("manual", None))
 
 
+class FeedSearchLocationTests(FeedTestBase):
+    """Hand-search results carry ``location`` by the rules of the suggestions: a contributed
+    result only if the viewer may see its dataset now (else left out entirely), authority results
+    always, coordinates validated and rounded to 5 places."""
+
+    SECRET = [12.34567, 45.67891]   # a point that must never appear in a refused response
+
+    def search(self, q="Ware Priory"):
+        r = self.c.get(self.base + f"search/?place={self.ware.pk}&q={q.replace(' ', '+')}")
+        self.assertEqual(r.status_code, 200)
+        return r.content.decode(), r.json()
+
+    def test_hand_search_results_have_a_location_and_hidden_ones_are_absent(self):
+        from datasets.models import Dataset
+        other_user = get_user_model().objects.create_user(username="feed_hs", email="hs@example.org",
+                                                          password="pw", given_name="H", surname="S")
+        Dataset.objects.filter(pk=self.hidden.pk).update(owner=other_user)       # private, not ours
+        self.place("Ware Priory", "o9", tuple(self.SECRET), ds=self.other)
+        self.place("Ware Priory Zqx Secret", "x9", tuple(self.SECRET), ds=self.hidden)
+        self.fake.by_query["Ware Priory"] = response(
+            hit("gn:44", "Ware Priory", (0.0300123456, 51.8120987654), types=[GN_TOWN]),
+            hit("wd:Q44", "Ware Priory", (400, 51.8)),                                   # bad coordinates
+            hit("wd:Q45", "Ware Priory"),                                               # no point
+            hit(f"whg:{self.other.pk}:o9", "Ware Priory Open Grange", tuple(self.SECRET), types=[GN_TOWN]),
+            hit(f"whg:{self.hidden.pk}:x9", "Ware Priory Zqx Secret", tuple(self.SECRET), types=[GN_TOWN]))
+        secret_id = f"whg:{self.hidden.pk}:x9"
+        body, d = self.search()
+        by_id = {x["candidate_id"]: x for x in d["results"]}
+        # Present: authority rounded to 5 places, bad and missing points are null, a visible contribution served.
+        self.assertEqual(by_id["gn:44"]["location"], [0.03001, 51.8121])
+        self.assertEqual((by_id["wd:Q44"]["location"], by_id["wd:Q44"]["location_withheld"]), (None, False))
+        self.assertEqual((by_id["wd:Q45"]["location"], by_id["wd:Q45"]["location_withheld"]), (None, False))
+        open_id = f"whg:{self.other.pk}:o9"
+        self.assertEqual((by_id[open_id]["location"], by_id[open_id]["location_withheld"]), (self.SECRET, False))
+        # Absent: the private result, entirely (id, title, point), anywhere in the response.
+        self.assertNotIn(secret_id, by_id)
+        for needle in (secret_id, "Zqx Secret"):
+            self.assertNotIn(needle, body)
+        # Made public, the same request serves it with its point.
+        Dataset.objects.filter(pk=self.hidden.pk).update(public=True)
+        body, d = self.search()
+        by_id = {x["candidate_id"]: x for x in d["results"]}
+        self.assertEqual(by_id[secret_id]["location"], self.SECRET)
+        self.assertIn("Zqx Secret", body)
+
+    def test_the_feed_rule_holds_even_if_the_gateway_filter_is_loosened(self):
+        """``candidates.filter_hits`` is the first line; the feed applies the suggestions' own rule
+        again, so a private result that got past it is still not served."""
+        from datasets.models import Dataset
+        from unittest.mock import patch
+        other_user = get_user_model().objects.create_user(username="feed_h2", email="h2@example.org",
+                                                          password="pw", given_name="H", surname="T")
+        Dataset.objects.filter(pk=self.hidden.pk).update(owner=other_user)
+        self.place("Ware Priory Zqx Secret", "x9", tuple(self.SECRET), ds=self.hidden)
+        self.fake.by_query["Ware Priory"] = response(
+            hit("gn:44", "Ware Priory", (0.03, 51.812), types=[GN_TOWN]),
+            hit(f"whg:{self.hidden.pk}:x9", "Ware Priory Zqx Secret", tuple(self.SECRET), types=[GN_TOWN]))
+        with patch.object(candidates, "filter_hits", lambda hits, *a, **k: list(hits)):
+            body, d = self.search()
+            self.assertEqual([x["candidate_id"] for x in d["results"]], ["gn:44"])
+            self.assertNotIn("Zqx Secret", body)
+            self.assertNotIn("12.34567", body)
+            Dataset.objects.filter(pk=self.hidden.pk).update(public=True)
+            body, d = self.search()
+            self.assertEqual(sorted(x["candidate_id"] for x in d["results"]),
+                             sorted(["gn:44", f"whg:{self.hidden.pk}:x9"]))
+            self.assertIn("Zqx Secret", body)
+
+
 class LinksProgressSectionTests(FeedTestBase):
     TPL = Template("{% load match_feed_tags %}{% links_progress ds %}")
 
