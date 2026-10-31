@@ -5,9 +5,16 @@ Opt-in, because it starts a browser and a live server:
     WHG_BROWSER_TESTS=1 WHG_FEED_BUNDLE_DIR=<dir> GDAL_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgdal.so.34 \\
         venv/bin/python manage.py test datasets.tests_feed_browser --settings=whg.settings_localtest
 
-``WHG_FEED_BUNDLE_DIR`` serves ``match_feed.bundle.js``/``.css`` from a scratch build (the entry is
-new and ``static/webpack`` is the lead's to rebuild); without it the committed static file is used,
-which does not exist yet, and every check fails (as the harness control requires).
+``WHG_FEED_BUNDLE_DIR`` serves ``match_feed.bundle.js``/``.css`` and its lazy chunks (the feed map:
+``match-feed-map.<hash>.js`` and a vendors chunk) from a scratch build, because ``static/webpack``
+is rebuilt only at promotion. Build one outside the repo with the entry alone, e.g. a config that
+spreads ``webpack.config.js`` with ``watch: false``, ``cache: false``,
+``entry: {match_feed: './whg/webpack/js/matchFeed.js'}`` and ``output.path`` set to the scratch dir,
+run from the repo root (``.env/.env`` must exist, as for any bundle build). Without it the
+committed static files are used, which predate the map, so the map checks fail.
+
+``FeedMapBrowserTests`` aborts every host other than the live server (the basemap style too, so the
+map must fall back to a plain background); ``WHG_FEED_SHOT=<png>`` saves a picture to look at.
 
 The gateway answer is RECORDED: the CRC response for "Coventry" captured on 2026-10-21
 (``scripts/fixtures/cluster_parity/real_coventry_2026-10-21.json``), trimmed to 20 hits and served
@@ -37,6 +44,35 @@ BUNDLE_DIR = os.environ.get("WHG_FEED_BUNDLE_DIR") or ""
 BLOCKED_HOSTS = ("analytics.whgazetteer.org", "errors.whgazetteer.org", "plausible", "computingplace.org")
 FIXTURE = os.path.join(settings.BASE_DIR, "scripts", "fixtures", "cluster_parity", "real_coventry_2026-10-21.json")
 COVENTRY_GN = "gn:2652221"
+
+
+def bundle_file(url):
+    """The scratch-build file for a ``/static/webpack/`` URL (the entry and its lazy chunks: the
+    feed map is ``match-feed-map.<hash>.js`` plus a vendors chunk), or None."""
+    if not BUNDLE_DIR or "/static/webpack/" not in url:
+        return None
+    name = url.rsplit("/", 1)[-1].split("?", 1)[0]
+    path = os.path.join(BUNDLE_DIR, name)
+    return path if os.path.isfile(path) else None
+
+
+def feed_route(route, block_bundle=False, block=(), external=None, local=None):
+    """Serve the scratch bundle; abort the analytics hosts, anything named in ``block``, and (when
+    ``local`` is given) every host that is not the live server, noting them in ``external``."""
+    url = route.request.url
+    if any(h in url for h in BLOCKED_HOSTS) or (block_bundle and "match_feed.bundle" in url) \
+            or any(b in url for b in block):
+        return route.abort()
+    if local and not url.startswith(local) and not url.startswith("data:") and not url.startswith("blob:"):
+        if external is not None:
+            external.add(url.split("/")[2])
+        return route.abort()
+    path = bundle_file(url)
+    if path:
+        ctype = {"css": "text/css", "svg": "image/svg+xml"}.get(path.rsplit(".", 1)[-1], "application/javascript")
+        with open(path, "rb") as f:
+            return route.fulfill(status=200, body=f.read(), content_type=ctype)
+    return route.continue_()
 
 
 def recorded_coventry():
@@ -103,19 +139,7 @@ class FeedBrowserTests(LiveServerTestCase):
                           "url": self.live_server_url}])
         page = ctx.new_page()
 
-        def route_all(route):
-            url = route.request.url
-            if any(h in url for h in BLOCKED_HOSTS) or (block_bundle and "match_feed.bundle" in url):
-                return route.abort()
-            name = url.rsplit("/", 1)[-1].split("?", 1)[0]
-            path = os.path.join(BUNDLE_DIR, name)
-            if BUNDLE_DIR and name.startswith("match_feed.bundle") and os.path.isfile(path):
-                with open(path, "rb") as f:
-                    return route.fulfill(status=200, body=f.read(),
-                                         content_type="text/css" if name.endswith(".css") else "application/javascript")
-            return route.continue_()
-
-        page.route("**/*", route_all)
+        page.route("**/*", lambda route: feed_route(route, block_bundle))
         return page
 
     def wait_for(self, page, expr, timeout_ms=20000):
@@ -184,3 +208,228 @@ class FeedBrowserTests(LiveServerTestCase):
         passed = {k: v for k, v in results.items() if v}
         self.assertEqual(passed, {}, f"checks passed on a page with no feed bundle: {passed}")
         self.assertIn("Link your records: Parishes", page.content())  # the page was served; only its bundle is missing
+
+
+# The positions the map test reads: each marker's centre on screen against MapLibre's own
+# projection of the coordinates it claims to show (data-lng / data-lat), inside the map box.
+MARKERS_JS = """() => {
+  const box = document.getElementById('mf_map');
+  const st = (window.__whgMatchFeed || {}).map || {};
+  const m = st.instance;
+  if (!box || !m || typeof m.project !== 'function') return null;
+  const br = box.getBoundingClientRect();
+  return [...box.querySelectorAll('[data-role]')].map((el) => {
+    const r = el.getBoundingClientRect();
+    const ll = [Number(el.dataset.lng), Number(el.dataset.lat)];
+    const p = m.project(ll);
+    // A pin stands on its point (anchor bottom); the record's star is centred on it.
+    const cx = r.left + r.width / 2 - br.left;
+    const cy = (el.dataset.anchor === 'bottom' ? r.bottom : r.top + r.height / 2) - br.top;
+    return { role: el.dataset.role, i: el.dataset.i == null ? null : Number(el.dataset.i), ll,
+             dx: Math.abs(cx - p.x), dy: Math.abs(cy - p.y),
+             inside: cx >= 0 && cy >= 0 && cx <= br.width && cy <= br.height };
+  });
+}"""
+
+
+@unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
+class FeedMapBrowserTests(LiveServerTestCase):
+    """The feed map: the record (★) and the suggestion in focus, the others muted; it follows the
+    person from suggestion to suggestion and record to record; a record with no location says so;
+    a map that cannot load leaves the feed working. Also "Which one, if any?": nothing is linked
+    until a suggestion is chosen, and "Not the same place" offers the second step.
+
+    Every host other than the live server is aborted (and listed), so the basemap style cannot be
+    fetched: the map must fall back to a plain background and still place its markers. Nothing
+    leaves the machine."""
+    serialized_rollback = True
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
+        super().setUpClass()
+        from playwright.sync_api import sync_playwright
+        cls._pw = sync_playwright().start()
+        # Software GL kept as insurance (~/.claude/memory/playwright-maplibre-headless-testing.md).
+        cls.browser = cls._pw.chromium.launch(
+            headless=True, args=["--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader"])
+        print(f"\n[feed map] bundle from {BUNDLE_DIR or 'static/webpack/'}")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls.browser.close()
+            cls._pw.stop()
+        finally:
+            super().tearDownClass()
+
+    def setUp(self):
+        from datasets.models import Dataset
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        from places.models import Place, PlaceGeom
+        self.fake = GatewayFake()
+        for target, fn in (("api.crc_client.crc_search_status", self.fake),
+                           ("api.crc_client.requests.post", no_network),
+                           ("api.crc_client.requests.get", no_network)):
+            p = patch(target, side_effect=fn)
+            p.start()
+            self.addCleanup(p.stop)
+        self.user = get_user_model().objects.create_user(username="mfm_beta", email="mfm@example.org", password="pw",
+                                                         given_name="M", surname="M", role="beta_tester")
+        with patch("datasets.signals.doi"):
+            self.ds = Dataset.objects.create(owner=self.user, label="mfm338", title="Parishes map", description="D",
+                                             creator="X", public=False, ds_status="uploaded")
+        self.gen = CandidateGeneration.objects.create(dataset=self.ds, requested_by=self.user, status="finished",
+                                                      recipe=candidates.build_recipe(self.ds))
+
+        def rec(title, src, xy, hits):
+            pl = Place.objects.create(title=title, src_id=src, dataset=self.ds, ccodes=[])
+            if xy:
+                PlaceGeom.objects.create(place=pl, geom=Point(*xy, srid=4326),
+                                         jsonb={"type": "Point", "coordinates": list(xy)})
+            self.fake.by_query[title] = response(*hits)
+            return pl, candidates.record_candidates(pl, self.gen, self.user)
+
+        # Two records in "Which one, if any?", far enough apart that the map must move.
+        self.brox_xy, self.brox_c = (-0.02, 51.75), [(-0.02, 51.751), (-0.02, 51.756)]
+        self.wark_xy, self.wark_c = (-1.59, 52.28), [(-1.59, 52.281), (-1.585, 52.284)]
+        self.brox, t1 = rec("Broxbourne", "m1", self.brox_xy,
+                            [hit("gn:6", "Broxbourne", self.brox_c[0], types=[GN_TOWN]),
+                             hit("wd:Q7", "Broxbourne", self.brox_c[1], types=[GN_TOWN])])
+        self.wark, t2 = rec("Warwick", "m2", self.wark_xy,
+                            [hit("gn:16", "Warwick", self.wark_c[0], types=[GN_TOWN]),
+                             hit("wd:Q17", "Warwick", self.wark_c[1], types=[GN_TOWN])])
+        # A record with no location whose only suggestion has none either.
+        self.nowhere, self.nowhere_tier = rec("Nowhere Parva", "m3", None, [hit("wd:Q99", "Nowhere Parva")])
+        self.tiers = (t1, t2)
+        # The list (and the map's numbers) follow the stored rank: put the expected points in it.
+        from datasets.models_matching import MatchCandidate
+        xy = {"gn:6": self.brox_c[0], "wd:Q7": self.brox_c[1], "gn:16": self.wark_c[0], "wd:Q17": self.wark_c[1]}
+        for name, pl in (("brox_c", self.brox), ("wark_c", self.wark)):
+            ids = list(MatchCandidate.objects.filter(place=pl, generation=self.gen).order_by("rank")
+                       .values_list("candidate_id", flat=True))
+            setattr(self, name, [xy[i] for i in ids])
+            setattr(self, name + "_ids", ids)
+
+    def new_page(self, block_bundle=False, block=()):
+        ctx = self.browser.new_context(viewport={"width": 1400, "height": 1000})
+        c = Client()
+        c.force_login(self.user)
+        ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME, "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
+                          "url": self.live_server_url}])
+        page = ctx.new_page()
+        self.external = set()
+        page.route("**/*", lambda route: feed_route(route, block_bundle, block, self.external, self.live_server_url))
+        return page
+
+    def wait_for(self, page, expr, timeout_ms=30000, arg=None):
+        try:
+            page.wait_for_function(expr, arg=arg, timeout=timeout_ms)
+            return True
+        except Exception:  # noqa: BLE001 — a timeout is a finding
+            return False
+
+    def renders(self, page):
+        return page.evaluate("(((window.__whgMatchFeed || {}).map || {}).renders) || 0")
+
+    def placed(self, page, want):
+        """True when every expected marker (role, i, [lon, lat]) is on the map, inside the box and
+        where MapLibre projects its coordinates (within 3 px)."""
+        ok = self.wait_for(page, f"""(want) => {{
+            const ms = ({MARKERS_JS})();
+            if (!ms) return false;
+            return want.every(([role, i, ll]) => ms.some((m) => m.role === role && (i === null || m.i === i)
+                && Math.abs(m.ll[0] - ll[0]) < 1e-6 && Math.abs(m.ll[1] - ll[1]) < 1e-6
+                && m.inside && m.dx < 3 && m.dy < 3));
+        }}""", arg=want, timeout_ms=20000)
+        return ok
+
+    def flow(self, page):
+        r = {}
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        r["ready"] = self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true")
+        r["map_drawn"] = self.wait_for(page, "window.__whgMatchFeed.map.state === 'ok' && window.__whgMatchFeed.map.renders >= 1")
+        title = page.evaluate("(document.getElementById('mf_record_title') || {}).textContent || ''")
+        r["first_record"] = title.startswith("Broxbourne")
+        # Both points: the record and the suggestion in focus (the first), the other one muted.
+        r["record_and_suggestion_shown"] = self.placed(page, [["record", None, list(self.brox_xy)],
+                                                               ["focus", 0, list(self.brox_c[0])],
+                                                               ["other", 1, list(self.brox_c[1])]])
+        if os.environ.get("WHG_FEED_SHOT"):      # optional: a picture to look at, never compared
+            page.screenshot(path=os.environ["WHG_FEED_SHOT"], full_page=True)
+        # "Which one, if any?": Enter with nothing chosen links nothing and says why.
+        page.keyboard.press("Enter")
+        r["must_choose"] = self.wait_for(page, "(document.getElementById('mf_live') || {}).textContent.startsWith('Which one, if any?')", 5000)
+        r["nothing_linked_unchosen"] = (r["must_choose"] and page.evaluate("window.__whgMatchFeed.saves") == 0)
+        # Choose the second suggestion: the map follows.
+        before = self.renders(page)
+        page.keyboard.press("2")
+        r["map_follows_choice"] = (self.wait_for(page, f"window.__whgMatchFeed.map.renders > {before}", 10000)
+                                   and self.placed(page, [["focus", 1, list(self.brox_c[1])],
+                                                          ["other", 0, list(self.brox_c[0])],
+                                                          ["record", None, list(self.brox_xy)]]))
+        # Next record: the record's own point moves.
+        before = self.renders(page)
+        page.keyboard.press("ArrowRight")
+        r["next_record"] = self.wait_for(page, "(document.getElementById('mf_record_title') || {}).textContent.startsWith('Warwick')", 10000)
+        r["map_follows_record"] = (self.wait_for(page, f"window.__whgMatchFeed.map.renders > {before}", 10000)
+                                   and self.placed(page, [["record", None, list(self.wark_xy)],
+                                                          ["focus", 0, list(self.wark_c[0])]])
+                                   and not page.evaluate(f"""() => ({MARKERS_JS})().some((m) => m.role === 'record'
+                                        && Math.abs(m.ll[1] - {self.brox_xy[1]}) < 1e-6)"""))
+        # "Not the same place" in this tier: set aside, then the second step is offered.
+        page.click("#mf_cands [data-act=reject-one][data-i='1']")
+        r["second_step_offered"] = self.wait_for(page, "!!document.querySelector('.mf-distinct-ask')", 10000)
+        page.click(".mf-distinct-ask [data-act=distinct-no]")
+        r["second_step_declined"] = self.wait_for(page, "!document.querySelector('.mf-distinct-ask')", 5000)
+        from api.models import ContributorAttestation
+        from datasets.models_matching import MatchCandidate
+        r["set_aside_not_said"] = (r["second_step_offered"]
+                                   and MatchCandidate.objects.get(place=self.wark, candidate_id=self.wark_c_ids[1]).status == "rejected"
+                                   and not ContributorAttestation.objects.filter(user=self.user).exists())
+        # A record with no location at all: a clear "no location" state, never an empty box.
+        if self.nowhere_tier == "ambiguous":     # the same tab, after Warwick (ordered by place id)
+            page.keyboard.press("ArrowRight")
+        else:
+            page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier={self.nowhere_tier}")
+            self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true")
+        r["no_location_record"] = self.wait_for(page, "(document.getElementById('mf_record_title') || {}).textContent.startsWith('Nowhere')", 10000)
+        r["no_location_state"] = self.wait_for(page, """window.__whgMatchFeed.map.state === 'no-location'
+            && !document.getElementById('mf_map_none').hidden && document.getElementById('mf_map').hidden
+            && document.getElementById('mf_map_none').offsetHeight > 100
+            && document.getElementById('mf_map_none').textContent.includes('No location')""", 10000)
+        return r
+
+    def test_map_shows_both_points_and_follows_the_person(self):
+        self.assertEqual(self.tiers, ("ambiguous", "ambiguous"))
+        page = self.new_page()
+        results = self.flow(page)
+        print(f"[feed map] basemap: {page.evaluate('window.__whgMatchFeed.map.basemap')}; "
+              f"external hosts refused: {sorted(self.external)}")
+        failed = {k: v for k, v in results.items() if not v}
+        self.assertEqual(failed, {}, results)
+
+    def test_feed_works_when_the_map_cannot_load(self):
+        """The map chunk blocked: the panel says so, and a Link is still made from the keyboard."""
+        page = self.new_page(block=("match-feed-map.",))
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true"))
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.map.state === 'unavailable' "
+                                            "&& !document.getElementById('mf_map_failed').hidden", 20000))
+        page.keyboard.press("1")
+        page.keyboard.press("Enter")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000))
+        from api.models import ContributorAttestation
+        self.assertEqual(ContributorAttestation.objects.filter(user=self.user).count(), 1)
+
+    def test_harness_can_fail(self):
+        """The same checks with the page bundle blocked: every one must fail."""
+        page = self.new_page(block_bundle=True)
+        with patch.object(self, "wait_for", lambda p, e, t=30000, arg=None: FeedMapBrowserTests.wait_for(self, p, e, 1500, arg)):
+            try:
+                results = self.flow(page)
+            except Exception as exc:  # noqa: BLE001 — a flow that cannot even run has failed every check
+                results = {"flow_raised": False, "error": str(exc)[:80] and False}
+        passed = {k: v for k, v in results.items() if v}
+        self.assertEqual(passed, {}, f"checks passed on a page with no feed bundle: {passed}")
+        self.assertIn("Link your records: Parishes map", page.content())

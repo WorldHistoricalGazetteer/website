@@ -431,9 +431,11 @@ def card(h):
     out = {"title": h.get("title") or "", "names": names, "types": _type_words(h),
            "ccodes": [x for x in (h.get("ccodes") or []) if x][:5],
            "namespace": clustering.hit_namespace(h) or str(clustering.hit_id(h) or "").split(":", 1)[0]}
-    rp = h.get("repr_point")
-    if isinstance(rp, list) and len(rp) >= 2:
-        out["repr_point"] = rp[:2]
+    # The feed map reads ``repr_point`` ([lon, lat]); a hit that carries only ``point``
+    # ([lat, lon]) is turned round here, so it is shown rather than dropped.
+    ll = clustering.hit_lat_lng(h)
+    if ll:
+        out["repr_point"] = [ll[1], ll[0]]
     tr = clustering.hit_temporal(h)
     if tr:
         out["temporal_range"] = tr[:2]

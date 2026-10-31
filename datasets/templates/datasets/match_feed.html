@@ -54,13 +54,30 @@
       <button type="button" class="btn btn-sm btn-link" id="mf_more" hidden>More records</button>
     </div>
     <div class="col-lg-9">
-      <div id="mf_record" class="mf-record" aria-live="off"></div>
-      <div class="visually-hidden" id="mf_live" aria-live="polite"></div>
+      <div class="row g-3">
+        <div class="col-xl-7">
+          <div id="mf_record" class="mf-record" aria-live="off"></div>
+          <div class="visually-hidden" id="mf_live" aria-live="polite"></div>
+        </div>
+        <div class="col-xl-5 order-first order-xl-last">
+          <section class="mf-map-panel" id="mf_map_panel" aria-label="Map of this record and its suggestions" hidden>
+            <div class="mf-map" id="mf_map"></div>
+            <div class="mf-map-empty" id="mf_map_none" hidden>
+              <i class="fas fa-map-marker-alt me-1" aria-hidden="true"></i>
+              <span id="mf_map_none_text">No location to show.</span>
+            </div>
+            <div class="mf-map-empty" id="mf_map_failed" hidden>
+              The map could not be shown in this browser. Everything else on this page works.
+            </div>
+            <p class="small text-secondary mt-1 mb-0" id="mf_map_caption"></p>
+          </section>
+        </div>
+      </div>
     </div>
   </div>
   <p class="small text-secondary mt-3">
     Keys: <kbd>1</kbd>–<kbd>9</kbd> choose · <kbd>Enter</kbd> Same place · <kbd>x</kbd> Not the same place ·
-    <kbd>n</kbd> None of these fits · <kbd>l</kbd> Not sure yet · <kbd>u</kbd> undo · <kbd>s</kbd> search ·
+    <kbd>n</kbd> None of these fits · <kbd>l</kbd> Not sure yet (moves it to Later) · <kbd>u</kbd> undo · <kbd>s</kbd> search ·
     <kbd>←</kbd>/<kbd>→</kbd> move
   </p>
 </div>
