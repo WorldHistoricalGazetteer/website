@@ -1,4 +1,5 @@
 {% extends "main/base_webpack.html" %}
+{% load lifecycle_tags %}
 
 {% block extra_head %}
 <style>
@@ -14,6 +15,7 @@
 
   <div id="container" class="container mt-2">
     <div class="ps-2"><h5>Admin Dashboard</h5></div>
+    {% review_waiting_notice user %}
     <ul class="nav nav-tabs" id="adminTabs" role="tablist">
       <li class="nav-item" role="presentation">
         <a class="nav-link active" id="datasets-tab" data-bs-toggle="tab" href="#datasets" role="tab"

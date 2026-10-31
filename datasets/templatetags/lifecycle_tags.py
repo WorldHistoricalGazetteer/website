@@ -60,7 +60,8 @@ def panel_context(ds, user):
     if ds.lifecycle_state is None:
         # v3-era: nothing but the opt-in, and only where the endpoint would take it.
         if not can["start"]:
-            return {"show": False}
+            # A PUBLIC v3 dataset cannot opt in (ruling 2026-10-31): say how, in one sentence.
+            return {"show": False, "public_hint": bool(ds.public)}
         return {"show": True, "start_only": True, "ds": ds, "start_confirm": START_CONFIRM}
     summary = lifecycle.status_summary(ds, user) or {}
     by = summary.get("usually_by")
@@ -107,3 +108,13 @@ def is_review_editor(user):
 def lifecycle_panel(context, ds):
     request = context.get("request")
     return panel_context(ds, getattr(request, "user", None))
+
+
+@register.inclusion_tag("datasets/_review_waiting.html")
+def review_waiting_notice(user):
+    """The dashboard line for editors: how many datasets wait for review. Nothing for anyone
+    but the review page's own audience, and nothing at zero."""
+    if not is_review_editor(user):
+        return {"count": 0}
+    from datasets.views_lifecycle import waiting_for_review
+    return {"count": len(waiting_for_review(user))}

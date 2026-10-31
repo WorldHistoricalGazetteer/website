@@ -1,0 +1,1 @@
+{% if count %}<p class="mb-2" data-testid="dashboard-review-waiting"><a href="{% url 'datasets:lifecycle-review-queue' %}">{{ count }} dataset{{ count|pluralize }} waiting for review</a></p>{% endif %}

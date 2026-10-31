@@ -1,4 +1,5 @@
 {% extends "main/base_webpack.html" %}
+{% load lifecycle_tags %}
 {% block title %}<title>WHG::Dashboard</title>{% endblock %}
 {% block extra_head %}
 <style>
@@ -95,6 +96,7 @@
       Profile<i class="fas fa-user mx-2"></i>
     </a>
   </div>
+  {% review_waiting_notice user %}
   <div class="row">
     <!-- column 1: Datasets -->
     <div class="col-md-4">
