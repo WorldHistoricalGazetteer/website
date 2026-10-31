@@ -409,6 +409,77 @@ class FeedMapBrowserTests(LiveServerTestCase):
         failed = {k: v for k, v in results.items() if not v}
         self.assertEqual(failed, {}, results)
 
+    HAND_XY = [(-0.05, 51.74), (0.01, 51.77)]   # two search results with a point; a third has none
+
+    def hand_flow(self, page):
+        """Search by hand: the results join the map as muted pins (s1, s2); picking one focuses it
+        and greys the suggestions; the result with no point is counted, not drawn."""
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        self.fake.by_query["Brox Hand"] = response(
+            hit("gn:70", "Brox Hand One", self.HAND_XY[0], types=[GN_TOWN]),
+            hit("gn:71", "Brox Hand Two", self.HAND_XY[1], types=[GN_TOWN]),
+            hit("wd:Q72", "Brox Hand Three"))
+        r = {}
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        r["ready"] = self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true")
+        r["map_drawn"] = self.wait_for(page, "window.__whgMatchFeed.map.state === 'ok' && window.__whgMatchFeed.map.renders >= 1")
+        before = self.renders(page)
+        page.fill("#mf_search_q", "Brox Hand")
+        page.click("[data-act=search]")
+        r["results_listed"] = self.wait_for(page, "document.querySelectorAll('#mf_search_results .mf-cand').length === 3", 15000)
+        # Muted pins for the two results with a point, beside the record, the focused suggestion and the other.
+        r["hand_pins_muted"] = (self.wait_for(page, f"window.__whgMatchFeed.map.renders > {before}", 10000)
+                                and self.placed(page, [["hand", 0, list(self.HAND_XY[0])], ["hand", 1, list(self.HAND_XY[1])],
+                                                       ["record", None, list(self.brox_xy)],
+                                                       ["focus", 0, list(self.brox_c[0])], ["other", 1, list(self.brox_c[1])]]))
+        r["no_point_counted"] = "search results not on the map (no location): s3" in page.evaluate(
+            "document.getElementById('mf_map_caption').textContent")
+        # Pick the second result: it is the focus, the suggestions are grey.
+        before = self.renders(page)
+        page.click("#mf_search_results .mf-cand[data-i='1'] .fw-semibold")
+        r["picked_result_focused"] = (self.wait_for(page, f"window.__whgMatchFeed.map.renders > {before}", 10000)
+                                      and self.placed(page, [["hand-focus", 1, list(self.HAND_XY[1])],
+                                                             ["hand", 0, list(self.HAND_XY[0])],
+                                                             ["other", 0, list(self.brox_c[0])],
+                                                             ["other", 1, list(self.brox_c[1])],
+                                                             ["record", None, list(self.brox_xy)]])
+                                      and not page.evaluate(f"() => ({MARKERS_JS})().some((m) => m.role === 'focus')"))
+        # Linking it still works from the list, and nothing was linked before.
+        from api.models import ContributorAttestation
+        r["nothing_linked_yet"] = not ContributorAttestation.objects.filter(user=self.user).exists()
+        page.click("#mf_search_results .mf-cand[data-i='1'] [data-act=link-hand]")
+        r["hand_link_saved"] = self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000)
+        return r
+
+    def test_hand_search_results_appear_on_the_map(self):
+        page = self.new_page()
+        results = self.hand_flow(page)
+        failed = {k: v for k, v in results.items() if not v}
+        self.assertEqual(failed, {}, results)
+
+    def test_hand_search_works_when_the_map_cannot_load(self):
+        """With the map chunk blocked, searching and linking by hand still work."""
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        self.fake.by_query["Brox Hand"] = response(hit("gn:70", "Brox Hand One", self.HAND_XY[0], types=[GN_TOWN]))
+        page = self.new_page(block=("match-feed-map.",))
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.map.state === 'unavailable'", 20000))
+        page.fill("#mf_search_q", "Brox Hand")
+        page.click("[data-act=search]")
+        self.assertTrue(self.wait_for(page, "document.querySelectorAll('#mf_search_results .mf-cand').length === 1", 15000))
+        page.click("#mf_search_results [data-act=link-hand]")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000))
+
+    def test_hand_flow_harness_can_fail(self):
+        page = self.new_page(block_bundle=True)
+        with patch.object(self, "wait_for", lambda p, e, t=30000, arg=None: FeedMapBrowserTests.wait_for(self, p, e, 1500, arg)):
+            try:
+                results = self.hand_flow(page)
+            except Exception:  # noqa: BLE001 — a flow that cannot even run has failed every check
+                results = {}
+        passed = {k: v for k, v in results.items() if v}
+        self.assertEqual(passed, {}, f"hand-search checks passed with no feed bundle: {passed}")
+
     def test_feed_works_when_the_map_cannot_load(self):
         """The map chunk blocked: the panel says so, and a Link is still made from the keyboard."""
         page = self.new_page(block=("match-feed-map.",))

@@ -24,7 +24,7 @@ const ML = () => window.whg_maplibre;
 // container: the map's element. onPick(i): a suggestion's marker was clicked.
 // onBasemap(state): 'ok' | 'blank' when the basemap could not be loaded.
 // Returns { map, update(view), resize() } or throws when no map can be made (no WebGL).
-export function createFeedMap(container, { onPick, onBasemap } = {}) {
+export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {}) {
   const M = ML();
   const map = new M.Map({
     container,
@@ -88,14 +88,37 @@ export function createFeedMap(container, { onPick, onBasemap } = {}) {
     }
   }
 
+  function addHand(h, all) {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = `mf-map-pin mf-map-pin--hand ${h.focus ? 'mf-map-pin--focus' : 'mf-map-pin--muted'}`;
+    const dot = document.createElement('span');
+    dot.className = 'mf-map-marker';
+    dot.textContent = `s${h.i + 1}`;
+    el.appendChild(dot);
+    el.dataset.role = h.focus ? 'hand-focus' : 'hand';
+    el.dataset.anchor = 'bottom';
+    el.dataset.i = String(h.i);
+    el.dataset.lng = String(h.location[0]);
+    el.dataset.lat = String(h.location[1]);
+    el.setAttribute('aria-label', `Search result s${h.i + 1}: ${h.title}`);
+    el.title = `s${h.i + 1}. ${h.title}`;
+    el.addEventListener('click', (e) => { e.stopPropagation(); if (onPickHand) onPickHand(h.i); });
+    marker(el, h.location, 'bottom');
+    all.push(h.location);
+  }
+
   // view: { record: {title, location:[lon,lat]} | null,
-  //         points: [{i, title, location:[lon,lat], focus:bool, status}] }
+  //         points: [{i, title, location:[lon,lat], focus:bool, status}],
+  //         hand: [{i, title, location:[lon,lat], focus:bool}] }  (the person's own search results)
   function update(view) {
     markers.forEach((m) => m.remove());
     markers = [];
     const primary = [];
     const all = [];
     // Muted first, so the focused markers and the record sit on top.
+    // Search results first of all (muted, labelled s1, s2...): beneath the suggestions.
+    (view.hand || []).filter((h) => !h.focus).forEach((h) => addHand(h, all));
     const pts = [...view.points].sort((a, b) => Number(a.focus) - Number(b.focus));
     pts.forEach((p) => {
       // A pin standing ON its point (anchor bottom), so it never hides the record's star there.
@@ -120,6 +143,7 @@ export function createFeedMap(container, { onPick, onBasemap } = {}) {
       all.push(p.location);
       if (p.focus) primary.push(p.location);
     });
+    (view.hand || []).filter((h) => h.focus).forEach((h) => { addHand(h, all); primary.push(h.location); });
     if (view.record && view.record.location) {
       const el = document.createElement('div');
       el.className = 'mf-map-marker mf-map-marker--record';

@@ -353,6 +353,28 @@ def constraint_chips(generation, place):
     return chips
 
 
+def hand_results(scored, user):
+    """Hand-search results as the feed serves them, each with ``location`` ([lon, lat] or null)
+    by the SAME rules as a stored suggestion (``candidate_visible`` / ``candidate_location``): a
+    contributed (``whg:``) result is served only if ``user`` may see its dataset now, and is left
+    out ENTIRELY otherwise (no title, id or point); authority results are always served. This
+    holds even if the gateway filter upstream (``candidates.filter_hits``) is ever loosened."""
+    from types import SimpleNamespace
+    rows = [SimpleNamespace(candidate_id=c["id"], card=c["card"], scored=c) for c in scored]
+    visible_pks = visible_contributed_pks(user, rows)
+    out = []
+    for row in rows:
+        if not candidate_visible(row, visible_pks):
+            continue
+        c = row.scored
+        location, withheld = candidate_location(row, visible_pks)
+        out.append({"candidate_id": c["id"], "title": c["card"]["title"], "namespace": c["card"]["namespace"],
+                    "confidence": c["confidence"], "km": c["km"], "demoted": not c["sane"],
+                    "location": location, "location_withheld": withheld,
+                    "explanation": c["explanation"], "card": c["card"]})
+    return out
+
+
 @login_required
 @require_GET
 def feed_search(request, id):
@@ -385,9 +407,7 @@ def feed_search(request, id):
         return JsonResponse({"answered": False, "failure": failure or "error", "constraints": chips,
                              "results": []}, status=200)
     _tier, scored, _rec = candidates.assess(place, data, request.user)
-    results = [{"candidate_id": c["id"], "title": c["card"]["title"], "namespace": c["card"]["namespace"],
-                "confidence": c["confidence"], "km": c["km"], "demoted": not c["sane"],
-                "explanation": c["explanation"], "card": c["card"]} for c in scored[:20]]
+    results = hand_results(scored[:20], request.user)
     return JsonResponse({"answered": True, "q": q, "constraints": chips, "results": results})
 
 
