@@ -137,7 +137,7 @@ class OwnerPanelStateTests(ScreenBase):
         ("submitted", False, set()),
         ("in_review", False, set()),
         ("changes_requested", False, {"lifecycle-submit", "lifecycle-sensitivity"}),
-        ("declined", False, set()),
+        ("declined", False, {"lifecycle-submit", "lifecycle-sensitivity"}),  # may be submitted again (2026-10-31)
         ("accepted", False, {"lifecycle-publish"}),
         ("published", True, {"lifecycle-withdraw"}),
         ("withdrawn", False, {"lifecycle-submit", "lifecycle-sensitivity"}),

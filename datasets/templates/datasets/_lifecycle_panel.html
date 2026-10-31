@@ -44,8 +44,9 @@
         data-url="{% url 'datasets:lifecycle-submit' ds.id %}">
     <label class="small d-block mb-1" for="lifecycle_note">Note for the editor (optional)</label>
     <textarea id="lifecycle_note" name="note" rows="2" class="form-control form-control-sm mb-1"></textarea>
-    <button type="submit" class="btn btn-sm btn-primary">{% if ds.lifecycle_state == "changes_requested" or ds.lifecycle_state == "withdrawn" %}Submit again for review{% else %}Submit for review{% endif %}</button>
+    <button type="submit" class="btn btn-sm btn-primary" data-testid="lifecycle-submit-button"{% if submit_blocked %} disabled aria-describedby="lifecycle_submit_blocked"{% endif %}>{% if submit_again %}Submit again for review{% else %}Submit for review{% endif %}</button>
     <span class="lifecycle-error text-danger small ms-2" role="alert"></span>
+    {% if submit_blocked %}<p id="lifecycle_submit_blocked" class="small text-danger mb-0 mt-1" data-testid="lifecycle-submit-blocked">{{ submit_blocked }} Use "Save answers" above first.</p>{% endif %}
   </form>
   {% endif %}
   {% if can.publish %}

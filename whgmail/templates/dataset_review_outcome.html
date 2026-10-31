@@ -11,7 +11,7 @@
     {% else %}
     <p>We are sorry: the editor has <b>not accepted</b> this dataset for publication, for this reason:</p>
     <blockquote>{{ comments|linebreaksbr }}</blockquote>
-    <p>Your dataset is still yours, and still private. If you upload a revised version you can submit it again.</p>
+    <p>Your dataset is still yours, and still private. You can edit the dataset and submit it for review again from its page.</p>
     {% endif %}
     {% if outcome == "accept" and comments %}<p>The editor added: {{ comments|linebreaksbr }}</p>{% endif %}
     <p>If you have any questions, please contact our editor at {{ reply_to }}.</p>

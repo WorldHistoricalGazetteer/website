@@ -177,12 +177,27 @@ def check_attribution(ds):
                   "Missing: " + ", ".join(missing) + ".")
 
 
+def sensitivity_unanswered(ds):
+    """Why the sensitivity declaration is not complete, or "" when it is. "Answered" means both
+    questions hold a real answer ("no", "yes" or "unsure"); NULL or blank is unanswered, never
+    "no". A "yes" also needs the owner's note (the form refuses one without)."""
+    if any(getattr(ds, f, None) in (None, "") for f in SENSITIVITY_FIELDS):
+        return ("Answer the two questions on Indigenous and sensitive data before submitting "
+                "this dataset for review.")
+    if ("yes" in [getattr(ds, f) for f in SENSITIVITY_FIELDS]
+            and not (getattr(ds, "sensitivity_note", "") or "").strip()):
+        return ("You answered Yes to a sensitivity question: say briefly what is sensitive "
+                "before submitting this dataset for review.")
+    return ""
+
+
 def check_sensitivity(ds):
     answers = {f: getattr(ds, f, None) for f in SENSITIVITY_FIELDS}
     if any(v in (None, "") for v in answers.values()):
         return _check("sensitivity", "Sensitivity declaration", "warn",
                       detail="The two questions on Indigenous and sensitive data have not "
-                             "both been answered.")
+                             "both been answered; the dataset cannot be submitted for "
+                             "review until they are.")
     flagged = [f for f, v in answers.items() if v in ("yes", "unsure")]
     if flagged:
         note = (getattr(ds, "sensitivity_note", "") or "").strip()

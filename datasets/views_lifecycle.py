@@ -64,6 +64,8 @@ def allowed_actions(ds, user):
     return {
         "start": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["start"][0]
         and not ds.public,
+        # Offered whenever the state allows it; whether the sensitivity questions are answered
+        # is the endpoint's refusal (and the panel's explanation), not a missing button.
         "submit": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["submit"][0]
         and not ds.public,
         "publish": manage and ds.lifecycle_state in lifecycle.TRANSITIONS["publish"][0],

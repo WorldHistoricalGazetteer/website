@@ -90,6 +90,9 @@ class LifecycleViewTests(LifecycleBase):
         self.assertEqual(len(theirs["checks"]["checks"]), len(mine["checks"]["checks"]))
 
     def test_sensitivity_saved_only_when_valid(self):
+        # the base dataset is answered "no"/"no" so it can be submitted; start from unanswered
+        Dataset.objects.filter(pk=self.ds.pk).update(sensitivity_indigenous=None,
+                                                     sensitivity_restricted=None)
         self.client.force_login(self.owner)
         r = self.post("sensitivity/", {"sensitivity_indigenous": "yes",
                                         "sensitivity_restricted": "no"})

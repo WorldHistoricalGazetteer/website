@@ -54,7 +54,7 @@
         <div id="ds_status_guide" class="col-md-7">
           {% if ds.index_pending_since and ds.public %}
           {% if ds.index_failure_reason %}
-          <p id="ds_index_pending" class="alert alert-warning py-2 mb-2" data-testid="index-pending">This dataset could not be added to the search index automatically. The WHG team has been told and will look into it.</p>
+          <p id="ds_index_pending" class="alert alert-warning py-2 mb-2" data-testid="index-pending">This dataset could not be added to the search index automatically. Please contact the WHG team if it is still not searchable in a day or so.</p>
           {% else %}
           <p id="ds_index_pending" class="alert alert-info py-2 mb-2" data-testid="index-pending">Waiting to be added to the search index</p>
           {% endif %}
