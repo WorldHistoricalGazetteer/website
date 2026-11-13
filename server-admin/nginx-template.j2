@@ -89,12 +89,12 @@ server {
 
     # Static content and media files
     location /data_dumps/ {
-        alias /home/whgadmin/sites/data_dumps/;
+        alias {{ SITES_DIR }}/data_dumps/;
         autoindex off;  # Disable directory listing
     }
 
     location /media/ {
-        alias /home/whgadmin/sites/{{ ENV_CONTEXT }}/media/;
+        alias {{ SITES_DIR }}/{{ ENV_CONTEXT }}/media/;
     }
 
     # place#310: uploaded dataset files (user_<name>/) and exports (downloads/) belong to a dataset
@@ -111,10 +111,10 @@ server {
 
     location /protected-media/ {
         internal;
-        alias /home/whgadmin/sites/{{ ENV_CONTEXT }}/media/;
+        alias {{ SITES_DIR }}/{{ ENV_CONTEXT }}/media/;
     }
 
     location /static/ {
-        alias /home/whgadmin/sites/{{ ENV_CONTEXT }}/static/;
+        alias {{ SITES_DIR }}/{{ ENV_CONTEXT }}/static/;
     }
 }

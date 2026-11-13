@@ -1,3 +1,10 @@
+{# Rootless Podman on an SELinux host (see deployment/stacks/whg/README.md). Both are opt-in; unset, this renders
+   exactly what it always did.
+   MOUNT_LABEL=z   relabels every host bind mount (shared label, so the containers can all read the code tree).
+   USERNS_WHG=keep-id:uid=1000,gid=1000   makes the host user the container's uid 1000 in the WHG-image services, so the
+   checkout stays host-owned and deploy.sh can still git fetch/reset it. Leave Postgres alone: it needs a FRESH, host-owned
+   data directory (it chowns it to itself); restoring existing data needs `podman unshare chown -R 999:999 <dir>`. #}
+{% set MOUNT_SUFFIX = (':' ~ MOUNT_LABEL) if MOUNT_LABEL else '' %}
 networks:
   {{ ENV_CONTEXT }}:
     driver: bridge
@@ -24,16 +31,19 @@ services:
     platform: linux/amd64
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: web_{{ ENV_CONTEXT }}_{{ BRANCH }}
+{% if USERNS_WHG %}
+    userns_mode: "{{ USERNS_WHG }}"
+{% endif %}
     {% if MEM_LIMIT_WEB is defined %}
     mem_limit: {{ MEM_LIMIT_WEB }}
     {% endif %}
     volumes:
-      - {{ BASE_DIR }}:/app
-      - {{ BASE_DIR }}/entrypoints/entrypoint-web.sh:/entrypoint.sh
+      - {{ BASE_DIR }}:/app{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/entrypoints/entrypoint-web.sh:/entrypoint.sh{{ MOUNT_SUFFIX }}
       - shared-tmp:/var/tmp
     {% if not ENV_CONTEXT == 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs{{ MOUNT_SUFFIX }}
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps{{ MOUNT_SUFFIX }}
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
@@ -67,7 +77,7 @@ services:
     logging:
       driver: local
     volumes:
-      - {{ BASE_DIR }}:/app
+      - {{ BASE_DIR }}:/app{{ MOUNT_SUFFIX }}
     entrypoint: ["/app/entrypoints/entrypoint-webpack.sh"]
     restart: unless-stopped
 {% endif %}
@@ -85,14 +95,14 @@ services:
       - "127.0.0.1:{{ DB_PORT }}:{{ DB_PORT_INTERNAL }}"
     volumes:
     {% if ENV_CONTEXT == 'local' %}
-      - {{ DB_DIR }}:/var/lib/postgresql/data
-      - {{ BASE_DIR }}/entrypoints/entrypoint-postgres-local.sh:/docker-entrypoint-initdb.d/10_postgis.sh
-      - {{ BASE_DIR }}/data:/app/data
+      - {{ DB_DIR }}:/var/lib/postgresql/data{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/entrypoints/entrypoint-postgres-local.sh:/docker-entrypoint-initdb.d/10_postgis.sh{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/data:/app/data{{ MOUNT_SUFFIX }}
     {% else %}
-      - /home/whgadmin/databases/{{ ENV_CONTEXT }}:/var/lib/postgresql/data
+      - {{ DATABASES_DIR }}/{{ ENV_CONTEXT }}:/var/lib/postgresql/data{{ MOUNT_SUFFIX }}
     {% endif %}
-      - {{ BASE_DIR }}/server-admin/restore_db_from_dump.sh:/tmp/restore_db_from_dump.sh
-      - {{ BASE_DIR }}/compose/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - {{ BASE_DIR }}/server-admin/restore_db_from_dump.sh:/tmp/restore_db_from_dump.sh{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/compose/pg_hba.conf:/etc/postgresql/pg_hba.conf{{ MOUNT_SUFFIX }}
     env_file: {{ BASE_DIR }}/.env/.env
     command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     restart: unless-stopped
@@ -120,7 +130,7 @@ services:
       - "127.0.0.1:{{ REDIS_PORT }}:6379"
     {% if not ENV_CONTEXT == 'local' %}
     volumes:
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs{{ MOUNT_SUFFIX }}
     {% endif %}
     restart: unless-stopped
     healthcheck:
@@ -138,17 +148,20 @@ services:
 {% endif %}
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: celery-worker_{{ ENV_CONTEXT }}_{{ BRANCH }}
+{% if USERNS_WHG %}
+    userns_mode: "{{ USERNS_WHG }}"
+{% endif %}
     hostname: celery_worker
     {% if MEM_LIMIT_CELERY_WORKER is defined %}
     mem_limit: {{ MEM_LIMIT_CELERY_WORKER }}
     {% endif %}
     volumes:
-      - {{ BASE_DIR }}:/app
-      - {{ BASE_DIR }}/entrypoints/entrypoint-celery.sh:/entrypoint.sh
+      - {{ BASE_DIR }}:/app{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/entrypoints/entrypoint-celery.sh:/entrypoint.sh{{ MOUNT_SUFFIX }}
       - shared-tmp:/var/tmp
     {% if ENV_CONTEXT != 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs{{ MOUNT_SUFFIX }}
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps{{ MOUNT_SUFFIX }}
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
@@ -165,15 +178,18 @@ services:
       - {{ ENV_CONTEXT }}
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: celery-beat_{{ ENV_CONTEXT }}_{{ BRANCH }}
+{% if USERNS_WHG %}
+    userns_mode: "{{ USERNS_WHG }}"
+{% endif %}
     {% if MEM_LIMIT_CELERY_BEAT is defined %}
     mem_limit: {{ MEM_LIMIT_CELERY_BEAT }}
     {% endif %}
     volumes:
-      - {{ BASE_DIR }}:/app
-      - {{ BASE_DIR }}/entrypoints/entrypoint-celery-beat.sh:/entrypoint.sh
+      - {{ BASE_DIR }}:/app{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/entrypoints/entrypoint-celery-beat.sh:/entrypoint.sh{{ MOUNT_SUFFIX }}
     {% if not ENV_CONTEXT == 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs{{ MOUNT_SUFFIX }}
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps{{ MOUNT_SUFFIX }}
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
@@ -189,17 +205,20 @@ services:
       - {{ ENV_CONTEXT }}
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: celery-flower_{{ ENV_CONTEXT }}_{{ BRANCH }}
+{% if USERNS_WHG %}
+    userns_mode: "{{ USERNS_WHG }}"
+{% endif %}
     {% if MEM_LIMIT_FLOWER is defined %}
     mem_limit: {{ MEM_LIMIT_FLOWER }}
     {% endif %}
     ports:
       - "127.0.0.1:{{ FLOWER_PORT }}:5555"
     volumes:
-      - {{ BASE_DIR }}:/app
-      - {{ BASE_DIR }}/entrypoints/entrypoint-flower.sh:/entrypoint.sh
+      - {{ BASE_DIR }}:/app{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/entrypoints/entrypoint-flower.sh:/entrypoint.sh{{ MOUNT_SUFFIX }}
     {% if not ENV_CONTEXT == 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs{{ MOUNT_SUFFIX }}
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps{{ MOUNT_SUFFIX }}
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
@@ -289,6 +308,43 @@ services:
       retries: 5
       start_period: 300s
       timeout: 15s
+{% endif %}
+
+{% if TILES_DIR is defined and TILES_DIR %}
+  # Static tile server for tiles.whgazetteer.org (place#335). Rendered only on a host that sets
+  # TILES_DIR in env_template.py, so a host that does not run its own tile server (today's dev and
+  # prod) is unaffected. It serves the MBTiles that the indexing side rsyncs into TILES_DIR; it builds
+  # nothing and writes nothing: the tree is mounted read-only and the container filesystem is
+  # read-only (only /tmp is writable, in memory).
+  #
+  # TILES_DIR has the layout the tile droplet has always had: configs/config.json, fonts/, sprites/,
+  # styles/ and tiles/*.mbtiles (config.json's `options.paths.root` is `../`, i.e. TILES_DIR itself).
+  # It must be owned by the deploy user; the container runs as that uid (TILESERVER_USER, default
+  # 1000:1000) so no root-owned file ever appears in it and the rsync pushes keep working.
+  #
+  # Pinned to the same major version the tile droplet has run (4.7.0). Moving to v5 is a separate,
+  # deliberate step. The port is published on loopback only; the host nginx vhost (deployment repo,
+  # which carries the Origin allow-list and rate limit) is the only way in from outside.
+  # TILES_MOUNT_OPTS lets a SELinux/Podman host say `ro,z`.
+  tileserver:
+    networks:
+      - {{ ENV_CONTEXT }}
+    image: {{ TILESERVER_IMAGE|default('maptiler/tileserver-gl-light') }}:{{ TILESERVER_IMAGE_TAG|default('v4.7.0') }}
+    container_name: tileserver_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    user: "{{ TILESERVER_USER|default('1000:1000') }}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    {% if MEM_LIMIT_TILESERVER is defined %}
+    mem_limit: {{ MEM_LIMIT_TILESERVER }}
+    {% endif %}
+    command: ["--config", "/data/configs/config.json"]
+    volumes:
+      - {{ TILES_DIR }}:/data:{{ TILES_MOUNT_OPTS|default('ro') }}
+    ports:
+      - "127.0.0.1:{{ TILESERVER_PORT|default('8080') }}:8080"
+    restart: unless-stopped
+
 {% endif %}
 
   {% if ENV_CONTEXT == 'local' %}
