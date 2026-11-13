@@ -1460,6 +1460,21 @@ def normalise_query_params(params):
     query_text = params.get("query", "").strip() or None
     size = int(params.get("limit", params.get("size", 100)))
 
+    # `offset` pages a result list. Only `mode: "familysearch"` is served by one source, so only there
+    # does an offset mean something: a hybrid (legacy + gateway) merge cannot be paged coherently.
+    # Refused rather than ignored, so a client never mistakes page 1 for page 2. (Not `start`: that is
+    # the temporal start year.)
+    offset = 0
+    if params.get("offset") not in (None, "", 0, "0"):
+        if str(params.get("mode") or "").lower() != "familysearch":
+            raise ValueError('`offset` is supported only with mode "familysearch".')
+        try:
+            offset = int(params["offset"])
+        except (TypeError, ValueError):
+            raise ValueError("`offset` must be a non-negative integer.")
+        if offset < 0:
+            raise ValueError("`offset` must be a non-negative integer.")
+
     bounds = None
 
     # Nearby (circle)
@@ -1541,6 +1556,7 @@ def normalise_query_params(params):
     return {
         "query_text": query_text,
         "size": size,
+        "offset": offset,
         "bounds": bounds,
         "lat": lat,
         "lng": lng,
@@ -1609,6 +1625,12 @@ def reconcile_place_es(query, user=None, hidden=None):
     # per-geometry shape flag, so its hits would arrive unfiltered and re-enter the ranking.
     area_only_requested = _truthy_flag(raw_q.get("area_only"))
     suppress_legacy = (spatially_scoped or area_only_requested) and gateway_in_play
+    # `mode: "familysearch"` is a query SYNTAX the gateway parses (quoted hierarchy, wildcards, typeId, ...);
+    # the legacy index would search the raw q string as plain text and return noise ranked beside real
+    # results. The gateway serves `whg` too (place#183), so nothing is lost. Never run the legacy arm.
+    familysearch_mode = str(raw_q.get("mode") or "").lower() == "familysearch"
+    if familysearch_mode:
+        suppress_legacy = True
 
     # 1. Legacy ES search — skip when the caller excluded "whg", or when an unenforceable containment
     #    scope is active and the gateway will serve the (properly scoped) results.
@@ -1747,6 +1769,11 @@ def reconcile_place_es(query, user=None, hidden=None):
     gw_excluded = crc_meta.get("namespaces_excluded")
     if gw_excluded is not None:
         extra["namespaces_excluded"] = sorted(set(gw_excluded) - (_hidden_ns or set()))
+
+    # How the gateway interpreted a FamilySearch q string (clauses, ignored parts, phonetic: false).
+    # Present only for that mode, and only when the gateway reported it.
+    if familysearch_mode and crc_meta.get("familysearch") is not None:
+        extra["familysearch"] = crc_meta["familysearch"]
 
     # 3. Merge: legacy first, then CRC
     all_hits = legacy_hits + crc_hits

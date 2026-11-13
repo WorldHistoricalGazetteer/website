@@ -552,6 +552,15 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     # Forward it as query_vector and force phonetic mode so the gateway ranks by it directly, skipping
     # its own server-side embed. Harmless on older gateways (they ignore the unknown field).
     embedding = raw.get("embedding")
+    _familysearch = str(body["mode"] or "").lower() == "familysearch"
+    if _familysearch:
+        # A FamilySearch `q` string is parsed by the gateway as lexical syntax. A client embedding
+        # must neither turn it into a phonetic search nor be sent: the mode is deliberately non-phonetic.
+        embedding = None
+        body["mode"] = "familysearch"
+        _offset = raw.get("offset")
+        if _offset not in (None, "", 0, "0"):
+            body["offset"] = max(0, int(_offset))
     if isinstance(embedding, (list, tuple)) and len(embedding) == 128:
         body["query_vector"] = list(embedding)
         body["mode"] = "phonetic"
@@ -762,8 +771,60 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         # was consulted-and-suppressed rather than searched-and-empty. Absent on an older gateway.
         if data.get("namespaces_excluded") is not None:
             meta["namespaces_excluded"] = data["namespaces_excluded"]
+        # How the gateway read a `mode: "familysearch"` q string: the parsed clauses, what was ignored or
+        # could not be honoured, and `phonetic: false`. Present only for that mode.
+        if data.get("familysearch") is not None:
+            meta["familysearch"] = data["familysearch"]
 
     return _adapt_hits(data)
+
+
+# Fields of the gateway's /api/genealogy/place request that a caller may set. Anything else is dropped
+# rather than forwarded, so this proxy cannot be used to reach gateway parameters it does not document.
+GENEALOGY_FIELDS = ("service", "place", "places", "form", "order", "separator", "mode", "size",
+                    "country_hint", "start_year", "end_year", "relax", "parse_only", "namespaces")
+
+
+def crc_genealogy(payload: dict, user=None) -> tuple[int, dict]:
+    """POST the allow-listed fields of ``payload`` to the gateway's ``/api/genealogy/place``.
+
+    Returns ``(status, body)``. The gateway's own 422s (bad service, too many places) come back
+    unchanged so the caller sees the real reason; a gateway that is down or unreachable is 502/504 with
+    a plain message, never an empty 200 that would look like "no match".
+    """
+    if not _is_enabled(user):
+        return 503, {"error": _disabled_reason()}
+    body = {k: payload[k] for k in GENEALOGY_FIELDS if k in payload}
+    url = f"{_gateway_url()}/api/genealogy/place"
+    try:
+        resp = requests.post(url, json=body, headers=_headers(), timeout=max(_timeout(), 30))
+    except requests.Timeout:
+        logger.warning("CRC gateway genealogy timeout")
+        return 504, {"error": "The gazetteer service timed out. Retry, or send fewer places."}
+    except requests.RequestException as e:
+        logger.warning("CRC gateway genealogy error: %s", e)
+        return 502, {"error": "The gazetteer service is temporarily unavailable."}
+    try:
+        data = resp.json()
+    except ValueError:
+        data = {"error": "unreadable gateway response"}
+    if resp.status_code >= 500:
+        logger.warning("CRC gateway genealogy HTTP %s", resp.status_code)
+        return 502, {"error": "The gazetteer service is temporarily unavailable."}
+    return resp.status_code, data
+
+
+def crc_genealogy_services(user=None) -> tuple[int, dict]:
+    """The gateway's genealogy service profiles (documented vs assumed)."""
+    if not _is_enabled(user):
+        return 503, {"error": _disabled_reason()}
+    try:
+        resp = requests.get(f"{_gateway_url()}/api/genealogy/services", headers=_headers(), timeout=_timeout())
+        resp.raise_for_status()
+        return 200, resp.json()
+    except requests.RequestException as e:
+        logger.warning("CRC gateway genealogy/services error: %s", e)
+        return 502, {"error": "The gazetteer service is temporarily unavailable."}
 
 
 def crc_fetch_places(place_ids: list[str], user=None,

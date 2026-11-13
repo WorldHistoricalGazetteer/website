@@ -10,6 +10,7 @@ from .reconcile import ReconciliationView, SuggestEntityView, ExtendProposeView,
 from .views_entity import CustomSwaggerUIView, EntityDetailView, EntityFeatureView, EntityPreviewView, \
     EntityUpdateView, EntityDeleteView, EntityCreateView
 from .views_context import whg_context
+from .views_genealogy import GenealogyPlaceView, GenealogyServicesView
 from .views_locus import locus_entity, locus_entity_api
 from .views_indexing import (
     ContributorAttestationView,
@@ -44,6 +45,8 @@ urlpatterns = [
     path('reconcile/properties', ExtendProposeView.as_view(), name='extend-propose'),
     path('reconcile/authority-datasets', AuthorityDatasetsView.as_view(), name='authority-datasets'),
     path('reconcile/periods/suggest', PeriodSuggestView.as_view(), name='reconcile-period-suggest'),
+    path("genealogy/place", GenealogyPlaceView.as_view(), name="genealogy_place"),
+    path("genealogy/services", GenealogyServicesView.as_view(), name="genealogy_services"),
     path("suggest/entity", SuggestEntityView.as_view(), name="suggest_entity"),
     path("suggest/property", SuggestPropertyView.as_view(), name="suggest_property"),
 
