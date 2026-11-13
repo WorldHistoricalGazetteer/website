@@ -162,6 +162,11 @@ export function failureText(kind, what = 'This') {
     }
 }
 
+/** A server-supplied message (e.g. why a wildcard pattern was refused) as escaped HTML. */
+export function messageHtml(text) {
+    return _escape(String(text == null ? '' : text));
+}
+
 /** As failureText, but HTML (escaped text; the beta case is plain, with no link). */
 export function failureHtml(kind, what = 'This') {
     return kind === 'beta' ? betaAccessHtml() : _escape(failureText(kind, what));

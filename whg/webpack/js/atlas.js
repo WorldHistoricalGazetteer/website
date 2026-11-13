@@ -24,7 +24,7 @@ import PlaceList from './atlasPlaceList.js';
 import { setWebTemplates, renderAttestControl, isBetaUser, LOCUS_PAGE_URL, LOCUS_TOKEN_PARAM } from './gazetteerInteraction.js';
 import { idbGet, idbPut, loadAatVocab, aatVocabLoadError } from './aatVocab.js';
 import { variantLabels } from './toponyms.js';
-import { atlasNotice, fetchJSON, failureHtml } from './atlasNotice.js';
+import { atlasNotice, fetchJSON, failureHtml, messageHtml } from './atlasNotice.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -2978,7 +2978,10 @@ function initiateGatewaySearch(options) {
         const noRes = document.getElementById('atlas_no_results');
         if (noRes) noRes.style.display = 'none';
         const cls = (kind === 'beta') ? 'text-body' : 'text-danger';
-        resultsDiv.innerHTML = `<div class="p-3 ${cls}">${failureHtml(kind, 'Search')}</div>`;
+        // A 400 that carries a message is the user's query being refused (e.g. a wildcard pattern that
+        // would scan every name): say why, in the server's words, rather than "Search failed".
+        const refusal = (kind === 'error' && data && data.failure === 'invalid' && data.message) ? data.message : null;
+        resultsDiv.innerHTML = `<div class="p-3 ${refusal ? 'text-body' : cls}">${refusal ? messageHtml(refusal) : failureHtml(kind, 'Search')}</div>`;
     });
 }
 
