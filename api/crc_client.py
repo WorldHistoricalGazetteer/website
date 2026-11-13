@@ -21,6 +21,7 @@ Access is environment-controlled:
 """
 
 import logging
+import re
 
 import requests
 from django.conf import settings
@@ -257,6 +258,15 @@ def crc_geometry(place_id: str, user=None, meta: dict | None = None,
 DEFAULT_SEARCH_SIZE = 100
 
 
+_WILDCARD_CHARS = re.compile(r"\\.|([*?])", re.DOTALL)
+
+
+def has_wildcard(text: str) -> bool:
+    """True when ``text`` contains an unescaped ``*`` or ``?`` (a backslash escapes the next character,
+    so ``caf\\?`` is the literal text ``caf?``). The same rule as the gateway's ``wildcard.has_wildcard``."""
+    return any(m.group(1) for m in _WILDCARD_CHARS.finditer(text or ""))
+
+
 def crc_search(options: dict, user=None) -> dict | None:
     """Fail-safe wrapper over :func:`crc_search_status` — the response, or None.
 
@@ -323,6 +333,13 @@ def crc_search_status(options: dict, user=None,
     _mode = options.get("mode")
     if _mode not in _valid_modes:
         _mode = "exact" if options.get("exact") else "fuzzy"
+
+    # Wildcards: an UNESCAPED `*` or `?` anywhere in the text switches the search to wildcard matching
+    # whatever the match-type dropdown says (FamilySearch's syntax: `*` any run, `?` one character, `\\`
+    # escapes). The gateway refuses patterns that would scan every name (leading wildcard, fewer than three
+    # letters first) with a message, which is passed back so the user is told how to write it.
+    if has_wildcard(options.get("qstr") or ""):
+        _mode = "wildcard"
 
     body = {
         "query": (options.get("qstr") or "").strip() or None,
@@ -449,6 +466,14 @@ def crc_search_status(options: dict, user=None,
                 return resp.json(), None
             logger.warning("CRC gateway POST /api/search %s: %s",
                            resp.status_code, resp.text[:200])
+            if resp.status_code == 422 and body.get("mode") == "wildcard":
+                try:
+                    detail = resp.json().get("detail")
+                except ValueError:
+                    detail = None
+                if isinstance(detail, str) and meta is not None:
+                    meta["message"] = detail
+                    return None, "invalid"
             return None, "error"
         except requests.Timeout as exc:
             logger.warning("CRC gateway /api/search timed out (attempt %d): %s",

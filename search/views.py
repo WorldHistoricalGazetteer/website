@@ -627,6 +627,11 @@ def _gateway_search_response(options, user, extra=None, hit_record_urls=False):
             "clustering_params": None, "toponym_stoplist": [],
             "request": meta.get("request"),
         }
+        if failure == "invalid":
+            # The gateway refused the wildcard pattern. A 400 with its message, not a 503: the service is
+            # fine and the user can fix the query, so the client must not raise the "offline" banner.
+            return JsonResponse({**empty, **extra, "gateway": True, "failure": "invalid",
+                                 "error": "invalid search", "message": meta.get("message")}, status=400)
         if failure == "timeout":
             # A read timeout is NOT reported as gateway-down: the service is up
             # and merely slow for this query, and claiming otherwise raises a
