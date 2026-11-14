@@ -11,6 +11,8 @@ server {
 
 server {
     listen 443 ssl;
+    listen 443 quic;   # HTTP/3; the reuseport catch-all is in the host's conf.d/00-whg-edge.conf
+    add_header Alt-Svc 'h3=":443"; ma=86400' always;
     server_name {{ NGINX_SERVER_NAME }};
 
     # SSL configuration
@@ -19,7 +21,13 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf; # Managed by Certbot
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # Managed by Certbot
 
+    # Crawler blocklist and the app rate-limit zone live in the host's conf.d/00-whg-edge.conf
+    # (deployment repo): this vhost needs that file installed first. $whg_block is 1 for a self-declared
+    # bot User-Agent with no API credential (Django's middleware stays as the backstop).
+    if ($whg_block) { return 403; }
+
     location / {
+        limit_req zone=app_rl burst=100 nodelay;
         # CORS Settings
         if ($request_method = 'OPTIONS') {
             add_header 'Access-Control-Allow-Origin' '*';
@@ -63,6 +71,7 @@ server {
     # with "GET, POST" before Django saw it. The body cap must exceed WORKBENCH_BODY_MAX_BYTES (2 MiB)
     # so that an oversize snapshot gets Django's JSON 413 rather than nginx's HTML one.
     location /reconciliation/ {
+        limit_req zone=app_rl burst=100 nodelay;
         client_max_body_size 4m;
         proxy_pass http://127.0.0.1:{{ APP_PORT }};
         proxy_set_header Host $host;
@@ -102,6 +111,7 @@ server {
     # with X-Accel-Redirect to the internal location below. A regex location wins over the /media/
     # prefix above. Everything else under /media/ stays public and is served directly.
     location ~ ^/media/(user_[^/]+|downloads)/ {
+        limit_req zone=app_rl burst=100 nodelay;
         proxy_pass http://127.0.0.1:{{ APP_PORT }};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

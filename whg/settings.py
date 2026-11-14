@@ -222,6 +222,7 @@ BLOCKED_USER_AGENT_SUBSTRINGS = [
     "DotBot",                       # Dotbot (SEO)
     "BLEXBot",                      # SEO / performance bot
     "Bytespider",                   # TikTok/ByteDance crawler
+    "ElevenlabsCrawler",            # ElevenLabs AI crawler (added 2026-11-14; ~17k requests/day)
     "YandexBot",                    # Russian search engine
     "Baidu",                        # Chinese search engine
     "PetalBot",                     # Huawei crawler
