@@ -11,6 +11,8 @@ server {
 
 server {
     listen 443 ssl;
+    listen 443 quic;   # HTTP/3; the reuseport catch-all is in the host's conf.d/00-whg-edge.conf
+    add_header Alt-Svc 'h3=":443"; ma=86400' always;
     server_name {{ NGINX_SERVER_NAME }};
 
     # SSL configuration
