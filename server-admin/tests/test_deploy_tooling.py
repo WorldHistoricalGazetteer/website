@@ -253,7 +253,7 @@ class TileserverServiceTests(unittest.TestCase):
                       SUBNET='10.9.0.0/16')
         for k in ('TILES_DIR', 'TILESERVER_IMAGE', 'TILESERVER_IMAGE_TAG', 'TILESERVER_USER', 'TILESERVER_PORT',
                   'TILES_MOUNT_OPTS', 'MEM_LIMIT_TILESERVER', 'OLLAMA_NETWORK', 'OLLAMA_HOST_CONTEXT',
-                  'MOUNT_LABEL', 'USERNS_WHG'):
+                  'MOUNT_LABEL', 'USERNS_WHG', 'RECON_WORKER_CONTEXT', 'MEM_LIMIT_CELERY_RECON'):
             values.pop(k, None)
         values.update(extra)
         return yaml.safe_load(Template(text).render(values))['services']
@@ -283,6 +283,50 @@ class TileserverServiceTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ReconWorkerTests(TileserverServiceTests):
+    """place#334: prod gets a dedicated single-process worker for the `recon` queue; every other stack
+    keeps one worker that consumes both queues, so no queue is ever left without a consumer."""
+
+    def queues(self, svc):
+        return [e.split('=', 1)[1] for e in svc['environment'] if e.startswith('CELERY_QUEUES=')]
+
+    def test_absent_by_default_and_the_worker_keeps_both_queues(self):
+        svcs = self.services()
+        self.assertNotIn('celery_recon', svcs)
+        self.assertEqual(self.queues(svcs['celery_worker']), ['celery,recon'])
+
+    def test_absent_in_a_stack_that_is_not_the_named_context(self):
+        svcs = self.services(RECON_WORKER_CONTEXT='some-other-context')
+        self.assertNotIn('celery_recon', svcs)
+        self.assertEqual(self.queues(svcs['celery_worker']), ['celery,recon'])
+
+    def test_present_in_the_named_context_and_splits_the_queues(self):
+        svcs = self.services(RECON_WORKER_CONTEXT='whgazetteer-org')
+        self.assertEqual(self.queues(svcs['celery_worker']), ['celery'])
+        recon = svcs['celery_recon']
+        self.assertEqual(self.queues(recon), ['recon'])
+        self.assertIn('CELERY_CONCURRENCY=1', recon['environment'])      # one generation job at a time
+        self.assertEqual(recon['container_name'], 'celery-recon_whgazetteer-org_main')
+        # same image and mounts as the worker it was split from
+        self.assertEqual(recon['image'], svcs['celery_worker']['image'])
+        self.assertEqual(recon['volumes'], svcs['celery_worker']['volumes'])
+
+    def test_every_queue_has_a_consumer_in_every_configuration(self):
+        for extra in ({}, {'RECON_WORKER_CONTEXT': 'whgazetteer-org'}, {'RECON_WORKER_CONTEXT': 'zzz'}):
+            svcs = self.services(**extra)
+            consumed = set()
+            for name in ('celery_worker', 'celery_recon'):
+                if name in svcs:
+                    for q in self.queues(svcs[name]):
+                        consumed |= set(q.split(','))
+            self.assertEqual(consumed, {'celery', 'recon'}, extra)
+
+    def test_entrypoint_passes_concurrency_and_name_only_when_set(self):
+        text = (ROOT / 'entrypoints/entrypoint-celery.sh').read_text()
+        self.assertIn('${CELERY_CONCURRENCY:+--concurrency "$CELERY_CONCURRENCY"}', text)
+        self.assertIn('${CELERY_WORKER_NAME:+-n "$CELERY_WORKER_NAME"}', text)
 
 
 class RootlessVariantTests(TileserverServiceTests):

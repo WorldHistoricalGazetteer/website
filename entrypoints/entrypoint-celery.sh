@@ -14,5 +14,8 @@ wait_for_db
 echo "Starting Celery worker..."
 # place#338: also consume the `recon` queue (background candidate generation, CELERY_TASK_ROUTES).
 # Override with CELERY_QUEUES to run a dedicated recon worker.
-exec celery -A whg worker --loglevel=debug -Q "${CELERY_QUEUES:-celery,recon}"
+# CELERY_CONCURRENCY / CELERY_WORKER_NAME are set only for the dedicated recon worker (compose).
+exec celery -A whg worker --loglevel=debug -Q "${CELERY_QUEUES:-celery,recon}" \
+    ${CELERY_CONCURRENCY:+--concurrency "$CELERY_CONCURRENCY"} \
+    ${CELERY_WORKER_NAME:+-n "$CELERY_WORKER_NAME"}
 

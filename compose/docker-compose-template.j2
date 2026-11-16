@@ -166,13 +166,55 @@ services:
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
       - DJANGO_SETTINGS_MODULE=whg.settings
-      # place#338: the default queue plus `recon` (background candidate generation).
+      # place#338: the default queue plus `recon` (background candidate generation), unless this
+      # stack runs a dedicated recon worker (RECON_WORKER_CONTEXT, below), which then owns `recon`.
+{% if RECON_WORKER_CONTEXT is defined and RECON_WORKER_CONTEXT == ENV_CONTEXT %}
+      - CELERY_QUEUES=celery
+{% else %}
       - CELERY_QUEUES=celery,recon
+{% endif %}
     depends_on:
       - redis
       - {{ DB_HOST }}
     restart: unless-stopped
 
+{% if RECON_WORKER_CONTEXT is defined and RECON_WORKER_CONTEXT == ENV_CONTEXT %}
+  # place#334 / #338: a dedicated worker for the `recon` queue (candidate generation), so a long
+  # run of gateway calls can never hold the slots that mail, exports and dataset tasks need.
+  # One process, one task at a time: the plan's rule is a single generation job in flight, paced
+  # by RECON_BG_QPS. Only rendered in the stack named by RECON_WORKER_CONTEXT (production).
+  celery_recon:
+    networks:
+      - {{ ENV_CONTEXT }}
+    image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
+    container_name: celery-recon_{{ ENV_CONTEXT }}_{{ BRANCH }}
+{% if USERNS_WHG %}
+    userns_mode: "{{ USERNS_WHG }}"
+{% endif %}
+    hostname: celery_recon
+    {% if MEM_LIMIT_CELERY_RECON is defined %}
+    mem_limit: {{ MEM_LIMIT_CELERY_RECON }}
+    {% endif %}
+    volumes:
+      - {{ BASE_DIR }}:/app{{ MOUNT_SUFFIX }}
+      - {{ BASE_DIR }}/entrypoints/entrypoint-celery.sh:/entrypoint.sh{{ MOUNT_SUFFIX }}
+      - shared-tmp:/var/tmp
+    {% if ENV_CONTEXT != 'local' %}
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs{{ MOUNT_SUFFIX }}
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps{{ MOUNT_SUFFIX }}
+    {% endif %}
+    env_file: {{ BASE_DIR }}/.env/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=whg.settings
+      - CELERY_QUEUES=recon
+      - CELERY_CONCURRENCY=1
+      - CELERY_WORKER_NAME=recon@%h
+    depends_on:
+      - redis
+      - {{ DB_HOST }}
+    restart: unless-stopped
+
+{% endif %}
   celery_beat:
     networks:
       - {{ ENV_CONTEXT }}

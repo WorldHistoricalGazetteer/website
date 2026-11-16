@@ -318,6 +318,10 @@ case "$ACTION" in
             SERVICES="web"
             if [ "$WITH_CELERY" = true ]; then
                 SERVICES="web celery_worker celery_beat"
+                # the dedicated recon worker exists only where the stack renders it
+                if $COMPOSE config --services 2>/dev/null | grep -qx celery_recon; then
+                    SERVICES="$SERVICES celery_recon"
+                fi
             fi
             echo "── Restarting: $SERVICES"
             $COMPOSE restart $SERVICES
