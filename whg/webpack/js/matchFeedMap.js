@@ -113,15 +113,16 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     if (cam) { jump(cam); relayout(); }
   }
 
-  // The record and as many of the nearest suggestions as keep a regional zoom.
-  function fitNear() {
+  // The record (plus anything that must stay in view) and as many of the nearest suggestions and
+  // search results as keep a regional zoom.
+  function fitNear(must = []) {
     if (!view) return;
-    const anchor = view.record && view.record.location ? view.record.location : (pins[0] && pins[0].location);
+    const anchor = view.record && view.record.location ? view.record.location : (pins[0] && pins[0].location) || (must[0]);
     if (!anchor) return;
     const d = (p) => (p[0] - anchor[0]) ** 2 + (p[1] - anchor[1]) ** 2;
-    const sorted = pins.map((p) => p.location).sort((a, b) => d(a) - d(b));
-    let set = [anchor];
-    let cam = { center: anchor, zoom: 10 };
+    const sorted = [...pins.map((p) => p.location), ...(view.hand || []).map((h) => h.location)].sort((a, b) => d(a) - d(b));
+    let set = [anchor, ...must];
+    let cam = cameraFor(set) || { center: anchor, zoom: 10 };
     for (const p of sorted) {
       const test = [...set, p];
       if (same(test)) { set = test; continue; }
@@ -241,20 +242,22 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
   // One chip per direction for the suggestions outside the view: their numbers and how far away.
   function layoutChips() {
     chipLayer.textContent = '';
-    if (!pins.length) return;
+    if (!pins.length && !(view && view.hand && view.hand.length)) return;
     const b = map.getBounds();
     const w = container.clientWidth;
     const h = container.clientHeight;
     if (!w || !h) return;
     const buckets = new Map();
-    pins.forEach((p) => {
+    const items = [...pins.map((p) => ({ label: String(p.i + 1), location: p.location, km: p.km })),
+      ...((view && view.hand) || []).map((h) => ({ label: `s${h.i + 1}`, location: h.location, km: null }))];
+    items.forEach((p) => {
       if (b.contains(p.location)) return;
       const pt = map.project(p.location);
       const dx = pt.x - w / 2;
       const dy = pt.y - h / 2;
       const k = ((Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) % 8) + 8) % 8;
       const e = buckets.get(k) || { nums: [], kms: [], dx: 0, dy: 0 };
-      e.nums.push(p.i + 1);
+      e.nums.push(p.label);
       if (p.km != null) e.kms.push(p.km);
       e.dx += dx; e.dy += dy;
       buckets.set(k, e);
@@ -262,7 +265,7 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     buckets.forEach((e, k) => {
       const dx = e.dx / e.nums.length;
       const dy = e.dy / e.nums.length;
-      const scale = Math.min((w / 2 - 34) / (Math.abs(dx) || 1), (h / 2 - 16) / (Math.abs(dy) || 1));
+      const scale = Math.min((w / 2 - 6) / (Math.abs(dx) || 1), (h / 2 - 14) / (Math.abs(dy) || 1));
       const lo = e.kms.length ? Math.round(Math.min(...e.kms)) : null;
       const hi = e.kms.length ? Math.round(Math.max(...e.kms)) : null;
       const dist = lo == null ? '' : (lo === hi ? `${lo.toLocaleString('en')} km` : `${lo.toLocaleString('en')}–${hi.toLocaleString('en')} km`);
@@ -273,6 +276,8 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
       chip.dataset.members = e.nums.join(',');
       chip.style.left = `${Math.round(w / 2 + dx * scale)}px`;
       chip.style.top = `${Math.round(h / 2 + dy * scale)}px`;
+      // Anchored to the side it points at, so the text stays inside the map.
+      chip.style.transform = `translate(${dx > w * 0.15 ? '-100%' : (dx < -w * 0.15 ? '0' : '-50%')}, -50%)`;
       chip.textContent = `${ARROWS[k]} ${e.nums.join(', ')}${dist ? ` · ${dist}` : ''}`;
       chip.setAttribute('aria-label', `Suggestion${e.nums.length > 1 ? 's' : ''} ${e.nums.join(', ')} ${e.nums.length > 1 ? 'are' : 'is'} off the map to the ${WORDS[k]}${dist ? `, ${dist} away` : ''}. Fit all.`);
       chip.addEventListener('click', (ev) => { ev.stopPropagation(); fitAll(); });
@@ -313,11 +318,7 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     map.resize();
     if (opts.refit !== false) {
       const focusHand = (next.hand || []).find((h) => h.focus);
-      if (focusHand) {
-        const pts = [focusHand.location];
-        if (next.record && next.record.location) pts.unshift(next.record.location);
-        jump(cameraFor(pts));
-      } else fitNear();
+      fitNear(focusHand ? [focusHand.location] : []);
     }
     relayout();
   }

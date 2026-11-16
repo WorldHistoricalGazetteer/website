@@ -344,7 +344,9 @@ function recordCardHTML(r) {
   return `<div class="mf-record-card" data-tour="record">
       <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
         <h2 class="h5 mb-0" id="mf_record_title" dir="auto">${esc(r.title)}${tierBadge}</h2>
-        <span class="small text-secondary">${esc(r.src_id)}</span>
+        <span class="small text-secondary d-flex align-items-center gap-1">${esc(r.src_id)}
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-2" data-act="prev" aria-label="Previous record">&larr;</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-act="next" aria-label="Next record">&rarr;</button></span>
       </div>
       ${meta ? `<div class="small text-secondary mt-1">${meta}</div>` : ''}${why}${later}
     </div>`;
@@ -361,16 +363,13 @@ function barHTML(r, t) {
         <button type="button" class="btn btn-sm btn-outline-warning" data-act="none">None of these fits <kbd>n</kbd></button>` : ''}
         ${waiting ? '' : '<button type="button" class="btn btn-sm btn-outline-secondary" data-act="later" data-tour="later">Not sure yet <kbd>l</kbd></button>'}
         <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo" ${S.undo.length ? '' : 'disabled'}>Undo <kbd>u</kbd></button>
-        <span class="ms-auto"></span>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="prev" aria-label="Previous record">&larr;</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="next" aria-label="Next record">&rarr;</button>
       </div>
-      ${has ? `<div class="form-check small mt-2 mb-0">
-        <input class="form-check-input" type="checkbox" id="mf_publish" ${S.publish ? 'checked' : ''}>
-        <label class="form-check-label" for="mf_publish">Also share the "Not the same" decisions I marked myself as statements others can see (never the filled-in ones)</label></div>` : ''}
       <input type="text" class="form-control form-control-sm mt-2" id="mf_note" maxlength="2000" dir="auto"
              value="${esc(S.note)}" placeholder="Note (optional): why you decided" aria-label="Note">
       ${has ? `<details class="small mt-2" id="mf_advanced"><summary>More options</summary>
+        <div class="form-check mt-1">
+          <input class="form-check-input" type="checkbox" id="mf_publish" ${S.publish ? 'checked' : ''}>
+          <label class="form-check-label" for="mf_publish">Also share the "Not the same" decisions I marked myself as statements others can see (never the ones the page filled in)</label></div>
         <div class="mt-1">How closely do the record and the place match?</div>
         <div class="form-check"><input class="form-check-input" type="radio" name="mf_relation" id="mf_rel_close" value="closeMatch" ${S.relation === 'exactMatch' ? '' : 'checked'}>
           <label class="form-check-label" for="mf_rel_close">Same place (the usual choice: they are about the same place)</label></div>

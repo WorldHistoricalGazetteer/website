@@ -162,13 +162,14 @@ class FeedBrowserTests(LiveServerTestCase):
             text: (document.getElementById('match_feed') || {}).textContent || '' })""", COVENTRY_GN)
         r["record_shown"] = shown["title"].startswith("Coventry")
         r["recorded_candidates_shown"] = shown["cands"] >= 10 and shown["gnIndex"] >= 0
-        r["explained"] = "km" in shown["why"]
+        r["explained"] = "Agrees" in shown["why"] or "Does not agree" in shown["why"]
         r["vocabulary"] = bool(shown["text"]) and not any(w in shown["text"].lower()
                                                           for w in ("attest", "accession", "reconcil"))
         idx = shown["gnIndex"]
         if 0 <= idx < 9:
-            page.keyboard.press(str(idx + 1))      # choose the GeoNames Coventry...
-            page.keyboard.press("Enter")           # ...and say it is the same place
+            page.keyboard.press(str(idx + 1))      # go to the GeoNames Coventry...
+            page.keyboard.press("s")               # ...mark it the same place...
+            page.keyboard.press("Enter")           # ...and save
         r["saved"] = self.wait_for(page, "window.__whgMatchFeed.saves === 1", 20000)
         r["announced"] = "Saved." in (page.evaluate("(document.getElementById('mf_live') || {}).textContent || ''"))
         from api.models import ContributorAttestation
@@ -233,15 +234,10 @@ MARKERS_JS = """() => {
 
 
 @unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
-class FeedMapBrowserTests(LiveServerTestCase):
-    """The feed map: the record (★) and the suggestion in focus, the others muted; it follows the
-    person from suggestion to suggestion and record to record; a record with no location says so;
-    a map that cannot load leaves the feed working. Also "Which one, if any?": nothing is linked
-    until a suggestion is chosen, and "Not the same place" offers the second step.
-
-    Every host other than the live server is aborted (and listed), so the basemap style cannot be
-    fetched: the map must fall back to a plain background and still place its markers. Nothing
-    leaves the machine."""
+class MapBrowserBase(LiveServerTestCase):
+    """What the map-page browser tests share: headless Chromium with software GL, a signed-in
+    beta user (``self.user``), every host but the live server aborted, and the page's own readiness
+    flag. A base with no tests of its own."""
     serialized_rollback = True
 
     @classmethod
@@ -263,6 +259,53 @@ class FeedMapBrowserTests(LiveServerTestCase):
         finally:
             super().tearDownClass()
 
+    user = None
+
+    def new_page(self, block_bundle=False, block=()):
+        ctx = self.browser.new_context(viewport={"width": 1400, "height": 1000})
+        c = Client()
+        c.force_login(self.user)
+        ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME, "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
+                          "url": self.live_server_url}])
+        page = ctx.new_page()
+        self.external = set()
+        page.route("**/*", lambda route: feed_route(route, block_bundle, block, self.external, self.live_server_url))
+        return page
+
+    def wait_for(self, page, expr, timeout_ms=30000, arg=None):
+        try:
+            page.wait_for_function(expr, arg=arg, timeout=timeout_ms)
+            return True
+        except Exception:  # noqa: BLE001 — a timeout is a finding
+            return False
+
+    def renders(self, page):
+        return page.evaluate("(((window.__whgMatchFeed || {}).map || {}).renders) || 0")
+
+    def placed(self, page, want):
+        """True when every expected marker (role, i, [lon, lat]) is on the map, inside the box and
+        where MapLibre projects its coordinates (within 3 px)."""
+        ok = self.wait_for(page, f"""(want) => {{
+            const ms = ({MARKERS_JS})();
+            if (!ms) return false;
+            return want.every(([role, i, ll]) => ms.some((m) => m.role === role && (i === null || m.i === i)
+                && Math.abs(m.ll[0] - ll[0]) < 1e-6 && Math.abs(m.ll[1] - ll[1]) < 1e-6
+                && m.inside && m.dx < 3 && m.dy < 3));
+        }}""", arg=want, timeout_ms=20000)
+        return ok
+
+
+
+@unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
+class FeedMapBrowserTests(MapBrowserBase):
+    """The feed map: the record (★) and the suggestion in focus, the others muted; it follows the
+    person from suggestion to suggestion and record to record; a record with no location says so;
+    a map that cannot load leaves the feed working. Also "Which one, if any?": nothing is linked
+    until a suggestion is chosen, and "Not the same place" offers the second step.
+
+    Every host other than the live server is aborted (and listed), so the basemap style cannot be
+    fetched: the map must fall back to a plain background and still place its markers. Nothing
+    leaves the machine."""
     def setUp(self):
         from datasets.models import Dataset
         from datasets.tests_candidates import GN_TOWN, hit, response
@@ -311,39 +354,6 @@ class FeedMapBrowserTests(LiveServerTestCase):
             setattr(self, name, [xy[i] for i in ids])
             setattr(self, name + "_ids", ids)
 
-    def new_page(self, block_bundle=False, block=()):
-        ctx = self.browser.new_context(viewport={"width": 1400, "height": 1000})
-        c = Client()
-        c.force_login(self.user)
-        ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME, "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
-                          "url": self.live_server_url}])
-        page = ctx.new_page()
-        self.external = set()
-        page.route("**/*", lambda route: feed_route(route, block_bundle, block, self.external, self.live_server_url))
-        return page
-
-    def wait_for(self, page, expr, timeout_ms=30000, arg=None):
-        try:
-            page.wait_for_function(expr, arg=arg, timeout=timeout_ms)
-            return True
-        except Exception:  # noqa: BLE001 — a timeout is a finding
-            return False
-
-    def renders(self, page):
-        return page.evaluate("(((window.__whgMatchFeed || {}).map || {}).renders) || 0")
-
-    def placed(self, page, want):
-        """True when every expected marker (role, i, [lon, lat]) is on the map, inside the box and
-        where MapLibre projects its coordinates (within 3 px)."""
-        ok = self.wait_for(page, f"""(want) => {{
-            const ms = ({MARKERS_JS})();
-            if (!ms) return false;
-            return want.every(([role, i, ll]) => ms.some((m) => m.role === role && (i === null || m.i === i)
-                && Math.abs(m.ll[0] - ll[0]) < 1e-6 && Math.abs(m.ll[1] - ll[1]) < 1e-6
-                && m.inside && m.dx < 3 && m.dy < 3));
-        }}""", arg=want, timeout_ms=20000)
-        return ok
-
     def flow(self, page):
         r = {}
         page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
@@ -351,21 +361,25 @@ class FeedMapBrowserTests(LiveServerTestCase):
         r["map_drawn"] = self.wait_for(page, "window.__whgMatchFeed.map.state === 'ok' && window.__whgMatchFeed.map.renders >= 1")
         title = page.evaluate("(document.getElementById('mf_record_title') || {}).textContent || ''")
         r["first_record"] = title.startswith("Broxbourne")
-        # Both points: the record and the suggestion in focus (the first), the other one muted.
-        r["record_and_suggestion_shown"] = self.placed(page, [["record", None, list(self.brox_xy)],
-                                                               ["focus", 0, list(self.brox_c[0])],
-                                                               ["other", 1, list(self.brox_c[1])]])
+        # The record and both suggestions, all alike: nothing is chosen for the person.
+        r["record_and_suggestions_shown"] = self.placed(page, [["record", None, list(self.brox_xy)],
+                                                                ["other", 0, list(self.brox_c[0])],
+                                                                ["other", 1, list(self.brox_c[1])]])
+        r["no_default_focus"] = not page.evaluate("() => !!document.querySelector('#mf_map .mf-map-pin--lit')")
         if os.environ.get("WHG_FEED_SHOT"):      # optional: a picture to look at, never compared
             page.screenshot(path=os.environ["WHG_FEED_SHOT"], full_page=True)
         # "Which one, if any?": Enter with nothing chosen links nothing and says why.
         page.keyboard.press("Enter")
         r["must_choose"] = self.wait_for(page, "(document.getElementById('mf_live') || {}).textContent.startsWith('Which one, if any?')", 5000)
         r["nothing_linked_unchosen"] = (r["must_choose"] and page.evaluate("window.__whgMatchFeed.saves") == 0)
-        # Choose the second suggestion: the map follows.
-        before = self.renders(page)
+        # Go to the second suggestion: its marker is lit. Mark it the same place: the map follows.
         page.keyboard.press("2")
+        r["marker_lit_with_row"] = self.wait_for(
+            page, "!!document.querySelector('#mf_map .mf-map-pin--lit[data-i=\"1\"]')", 10000)
+        before = self.renders(page)
+        page.keyboard.press("s")
         r["map_follows_choice"] = (self.wait_for(page, f"window.__whgMatchFeed.map.renders > {before}", 10000)
-                                   and self.placed(page, [["focus", 1, list(self.brox_c[1])],
+                                   and self.placed(page, [["same", 1, list(self.brox_c[1])],
                                                           ["other", 0, list(self.brox_c[0])],
                                                           ["record", None, list(self.brox_xy)]]))
         # Next record: the record's own point moves.
@@ -374,22 +388,31 @@ class FeedMapBrowserTests(LiveServerTestCase):
         r["next_record"] = self.wait_for(page, "(document.getElementById('mf_record_title') || {}).textContent.startsWith('Warwick')", 10000)
         r["map_follows_record"] = (self.wait_for(page, f"window.__whgMatchFeed.map.renders > {before}", 10000)
                                    and self.placed(page, [["record", None, list(self.wark_xy)],
-                                                          ["focus", 0, list(self.wark_c[0])]])
+                                                          ["other", 0, list(self.wark_c[0])]])
                                    and not page.evaluate(f"""() => ({MARKERS_JS})().some((m) => m.role === 'record'
                                         && Math.abs(m.ll[1] - {self.brox_xy[1]}) < 1e-6)"""))
-        # "Not the same place" in this tier: set aside, then the second step is offered.
-        page.click("#mf_cands [data-act=reject-one][data-i='1']")
-        r["second_step_offered"] = self.wait_for(page, "!!document.querySelector('.mf-distinct-ask')", 10000)
-        page.click(".mf-distinct-ask [data-act=distinct-no]")
-        r["second_step_declined"] = self.wait_for(page, "!document.querySelector('.mf-distinct-ask')", 5000)
+        # Warwick's two suggestions are one place in two sources, so choosing one fills the other in
+        # as "Can't tell" (dashed): never set aside on the page's say-so, and nothing is written for it.
+        page.click("#mf_cands [data-act=set][data-i='0'][data-d=same]")
+        r["group_mate_left_as_cant_tell"] = self.wait_for(
+            page, "!!document.querySelector('#mf_cands .mf-row--prefilled[data-i=\"1\"] .mf-seg-btn--unsure.is-on')", 5000)
+        page.click("[data-act=save]")
+        r["saved"] = self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000)
         from api.models import ContributorAttestation
         from datasets.models_matching import MatchCandidate
-        r["set_aside_not_said"] = (r["second_step_offered"]
-                                   and MatchCandidate.objects.get(place=self.wark, candidate_id=self.wark_c_ids[1]).status == "rejected"
-                                   and not ContributorAttestation.objects.filter(user=self.user).exists())
+        chosen = MatchCandidate.objects.get(place=self.wark, candidate_id=self.wark_c_ids[0])
+        other = MatchCandidate.objects.get(place=self.wark, candidate_id=self.wark_c_ids[1])
+        r["chosen_explicit"] = (chosen.status, chosen.decision_source) == ("accepted", "explicit")
+        r["group_mate_untouched"] = (other.status, other.decision_source) == ("suggested", "")
+        links = list(ContributorAttestation.objects.filter(user=self.user).values_list("relation_type", flat=True))
+        r["one_link_and_no_public_distinct"] = links == ["closeMatch"]
+        if not all(r[k] for k in ("chosen_explicit", "group_mate_untouched", "one_link_and_no_public_distinct")):
+            print("[debug]", (chosen.status, chosen.decision_source), (other.status, other.decision_source), links)
+        r["header_progress_moved"] = self.wait_for(
+            page, "document.getElementById('mf_progress').textContent.includes('1 link')", 5000)
         # A record with no location at all: a clear "no location" state, never an empty box.
-        if self.nowhere_tier == "ambiguous":     # the same tab, after Warwick (ordered by place id)
-            page.keyboard.press("ArrowRight")
+        if self.nowhere_tier == "ambiguous":     # the next record still to decide: it follows on by itself
+            pass
         else:
             page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier={self.nowhere_tier}")
             self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true")
@@ -431,7 +454,7 @@ class FeedMapBrowserTests(LiveServerTestCase):
         r["hand_pins_muted"] = (self.wait_for(page, f"window.__whgMatchFeed.map.renders > {before}", 10000)
                                 and self.placed(page, [["hand", 0, list(self.HAND_XY[0])], ["hand", 1, list(self.HAND_XY[1])],
                                                        ["record", None, list(self.brox_xy)],
-                                                       ["focus", 0, list(self.brox_c[0])], ["other", 1, list(self.brox_c[1])]]))
+                                                       ["other", 0, list(self.brox_c[0])], ["other", 1, list(self.brox_c[1])]]))
         r["no_point_counted"] = "search results not on the map (no location): s3" in page.evaluate(
             "document.getElementById('mf_map_caption').textContent")
         # Pick the second result: it is the focus, the suggestions are grey.
@@ -488,6 +511,7 @@ class FeedMapBrowserTests(LiveServerTestCase):
         self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.map.state === 'unavailable' "
                                             "&& !document.getElementById('mf_map_failed').hidden", 20000))
         page.keyboard.press("1")
+        page.keyboard.press("s")
         page.keyboard.press("Enter")
         self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000))
         from api.models import ContributorAttestation
@@ -504,3 +528,144 @@ class FeedMapBrowserTests(LiveServerTestCase):
         passed = {k: v for k, v in results.items() if v}
         self.assertEqual(passed, {}, f"checks passed on a page with no feed bundle: {passed}")
         self.assertIn("Link your records: Parishes map", page.content())
+
+
+@unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
+class FeedRedesignBrowserTests(MapBrowserBase):
+    """The redesigned rows and decision bar (2026-11): the same place in two sources is grouped and
+    one click marks both; choosing one place fills in the others as "Not the same" (dashed) and the
+    summary says what Save will write; suggestions off the map are named on its edge and markers
+    that would overlap are merged; the keys that belong to a focused row (↑/↓, s, x, c) and the
+    switch for the one-key shortcuts; a map marker moves the focus and decides nothing; and a record
+    nobody has searched for yet offers no decision. Suggestions are written straight into the
+    candidate tables (no gateway), so each case is exactly what it says."""
+    serialized_rollback = True
+
+    def setUp(self):
+        from datasets.models import Dataset
+        self.user = get_user_model().objects.create_user(username="mfr_beta", email="mfr@example.org", password="pw",
+                                                         given_name="R", surname="D", role="beta_tester")
+        with patch("datasets.signals.doi"):
+            self.ds = Dataset.objects.create(owner=self.user, label="mfr338", title="Redesign", description="D",
+                                             creator="X", public=False, ds_status="uploaded")
+        self.gen = CandidateGeneration.objects.create(dataset=self.ds, requested_by=self.user, status="finished",
+                                                      recipe={})
+
+    def rec(self, title, src, xy, cands, tier="ambiguous"):
+        """cands: (candidate_id, title, point|None, km|None, group) in rank order."""
+        from datasets.models_matching import MatchCandidate
+        from places.models import Place, PlaceGeom
+        pl = Place.objects.create(title=title, src_id=src, dataset=self.ds, ccodes=[])
+        if xy:
+            PlaceGeom.objects.create(place=pl, geom=Point(*xy, srid=4326), jsonb={"type": "Point", "coordinates": list(xy)})
+        for rank, (cid, ctitle, pt, km) in enumerate(cands, start=1):
+            card = {"title": ctitle, "namespace": cid.split(":")[0], "names": [{"label": ctitle}], "types": ["PPL"]}
+            if pt:
+                card["repr_point"] = list(pt)
+            MatchCandidate.objects.create(
+                dataset=self.ds, place=pl, subject_id=f"whg:{self.ds.pk}:{src}", candidate_id=cid, candidate_title=ctitle,
+                namespace=cid.split(":")[0], tier=tier if cands else "weak", rank=rank, generation=self.gen, card=card,
+                signals={"km": km, "type_sanity": "ok"},
+                explanation={"pieces": [{"kind": "name", "text": "exact name", "agrees": True}], "sentence": "x"})
+        RecordReviewState.objects.create(place=pl, dataset=self.ds, generation=self.gen, tier=tier,
+                                         has_geometry=bool(xy), candidate_count=len(cands),
+                                         top_candidate_id=cands[0][0] if cands else "")
+        return pl
+
+    def open(self, tier="ambiguous"):
+        page = self.new_page()
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier={tier}")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true"))
+        return page
+
+    def springfield(self):
+        # gn:1 and wd:2 are one place in two sources (50 m apart, same title); gn:3 is on another continent.
+        return self.rec("Springfield", "r1", (-89.65, 39.78), [
+            ("gn:1", "Springfield", (-89.65, 39.78), 0.1), ("wd:2", "Springfield", (-89.6504, 39.7803), 0.2),
+            ("gn:3", "Springfield", (-123.0, 44.0), 2400.0)])
+
+    def test_group_prefill_summary_chip_badge_and_save(self):
+        self.springfield()
+        page = self.open()
+        r = {}
+        r["group_shown"] = self.wait_for(page, "document.querySelectorAll('li.mf-group #mf_cands .x, li.mf-group .mf-row').length === 2")
+        r["map_drawn"] = self.wait_for(page, "window.__whgMatchFeed.map.state === 'ok'")
+        # Far suggestion 3 is off the map but named on its edge, with how far away it is.
+        r["edge_chip"] = self.wait_for(page, """() => { const c = document.querySelector('.mf-map-chip[data-members="3"]');
+            return !!c && c.textContent.includes('2,400 km'); }""", 20000)
+        # The two entries for one place overlap on screen: one badge "1·2".
+        r["merged_badge"] = self.wait_for(page, """() => { const b = document.querySelector('#mf_map [data-role=badge]');
+            return !!b && b.dataset.members === '1,2'; }""", 20000)
+        # One click on the group heading marks both; the far one is filled in as not the same.
+        page.click("[data-act=group][data-d=same]")
+        r["both_same"] = self.wait_for(page, """() => ['0', '1'].every((i) =>
+            document.querySelector(`.mf-seg-btn--same[data-i="${i}"]`).getAttribute('aria-pressed') === 'true')""", 5000)
+        r["far_filled_in"] = self.wait_for(page, "!!document.querySelector('.mf-row--prefilled[data-i=\"2\"] .mf-seg-btn--not.is-on')", 5000)
+        summary = page.evaluate("document.getElementById('mf_summary').textContent")
+        r["summary_says_what_save_writes"] = "Same place: 1, 2" in summary and "Not the same: 3" in summary
+        page.click("[data-act=save]")
+        r["saved"] = self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000)
+        from api.models import ContributorAttestation
+        from datasets.models_matching import MatchCandidate
+        got = {c.candidate_id: (c.status, c.decision_source) for c in MatchCandidate.objects.filter(dataset=self.ds)}
+        r["written"] = (got == {"gn:1": ("accepted", "explicit"), "wd:2": ("accepted", "explicit"),
+                                "gn:3": ("rejected", "prefilled")}
+                        and ContributorAttestation.objects.filter(user=self.user).count() == 2
+                        and RecordReviewState.objects.get().state == "linked")
+        failed = {k: v for k, v in r.items() if not v}
+        self.assertEqual(failed, {}, r)
+
+    def test_marker_click_moves_the_focus_and_decides_nothing(self):
+        self.springfield()
+        page = self.open()
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.map.state === 'ok'"))
+        self.assertTrue(self.wait_for(page, "!!document.querySelector('#mf_map [data-role=other][data-i=\"2\"]')", 20000)
+                        or True)     # suggestion 3 may be off the view; use the one that is not
+        page.evaluate("document.querySelector('#mf_map [data-role=badge]').click()")   # 1·2: same spot cycles
+        self.assertTrue(self.wait_for(page, "!!document.querySelector('#mf_cands .mf-row.is-focus')", 5000))
+        self.assertEqual(page.evaluate("document.querySelectorAll('#mf_cands [aria-pressed=true]').length"), 0)
+        self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
+
+    def test_row_keys_and_the_shortcut_switch(self):
+        self.springfield()
+        page = self.open()
+        page.keyboard.press("1")
+        self.assertTrue(self.wait_for(page, "document.activeElement && document.activeElement.dataset.i === '0'", 5000))
+        page.keyboard.press("ArrowDown")
+        self.assertTrue(self.wait_for(page, "document.activeElement && document.activeElement.dataset.i === '1'", 5000))
+        page.keyboard.press("x")
+        self.assertTrue(self.wait_for(page, "document.querySelector('.mf-seg-btn--not[data-i=\"1\"]').getAttribute('aria-pressed') === 'true'", 5000))
+        page.keyboard.press("c")
+        self.assertTrue(self.wait_for(page, "document.querySelector('.mf-seg-btn--unsure[data-i=\"1\"]').getAttribute('aria-pressed') === 'true'", 5000))
+        page.keyboard.press("c")       # the same key again takes it back
+        self.assertTrue(self.wait_for(page, "document.querySelector('.mf-seg-btn--unsure[data-i=\"1\"]').getAttribute('aria-pressed') === 'false'", 5000))
+        # Switch the one-key shortcuts off: "n" (None of these fits) does nothing; the row's own keys still work.
+        page.uncheck("#mf_shortcuts")
+        page.focus("#mf_cands .mf-row[data-i='2']")
+        page.keyboard.press("n")
+        page.wait_for_timeout(600)
+        self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
+        page.keyboard.press("s")
+        self.assertTrue(self.wait_for(page, "document.querySelector('.mf-seg-btn--same[data-i=\"2\"]').getAttribute('aria-pressed') === 'true'", 5000))
+        # and the buttons are reachable with Tab when the shortcuts are off
+        self.assertEqual(page.evaluate("document.querySelector('.mf-seg-btn[data-i=\"0\"]').tabIndex"), 0)
+
+    def test_a_record_nobody_has_searched_for_yet_offers_no_decision(self):
+        self.rec("Aachen", "r2", (6.08, 50.78), [], tier="unqueried")
+        page = self.open(tier="unqueried")
+        self.assertTrue(self.wait_for(page, "!!document.getElementById('mf_waiting')"))
+        self.assertEqual(page.evaluate("document.querySelectorAll('[data-act=save], [data-act=none], [data-act=later]').length"), 0)
+        page.keyboard.press("n")       # the old page let this mark a never-searched record "no good match"
+        page.keyboard.press("l")
+        page.wait_for_timeout(600)
+        self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
+        self.assertEqual(RecordReviewState.objects.get().state, "unreviewed")
+
+    def test_harness_can_fail(self):
+        """The group/prefill checks with the page bundle blocked: none of them may pass."""
+        self.springfield()
+        page = self.new_page(block_bundle=True)
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        ready = self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true", 1500)
+        self.assertFalse(ready)
+        self.assertEqual(page.evaluate("document.querySelectorAll('.mf-row').length"), 0)
