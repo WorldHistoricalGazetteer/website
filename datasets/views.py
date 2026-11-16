@@ -532,6 +532,11 @@ class DatasetStatusView(LoginRequiredMixin, EditOnPostMixin, UpdateView, Dataset
     form_class = DatasetDetailModelForm
     template_name = 'datasets/ds_status.html'
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user    # place#344: who may set public / owner / featured
+        return kwargs
+
     def get_object(self):
         # Private datasets are private: 404 unless owner/collaborator/staff/admin.
         return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
@@ -602,6 +607,11 @@ class DatasetMetadataView(LoginRequiredMixin, EditOnPostMixin, UpdateView, Datas
     redirect_field_name = 'redirect_to'
     form_class = DatasetDetailModelForm
     template_name = 'datasets/ds_metadata.html'
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user    # place#344: who may set public / owner / featured
+        return kwargs
 
     def form_valid(self, form):
         data = form.cleaned_data
