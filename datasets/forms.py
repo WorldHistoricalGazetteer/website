@@ -233,7 +233,15 @@ class DatasetDetailModelForm(forms.ModelForm):
         return label
 
     def clean_public(self):
-        return refuse_private_if_accessioned(self.instance, self.cleaned_data.get('public'))
+        public = refuse_private_if_accessioned(self.instance, self.cleaned_data.get('public'))
+        # place#334 / #344: a dataset in the v4 lifecycle goes public only through lifecycle.publish
+        # (after the mandatory review); this form is the v3 route and must not bypass it.
+        state = getattr(self.instance, 'lifecycle_state', None)
+        if self.instance.pk and public and not self.instance.public and state not in (None, '', 'published'):
+            raise forms.ValidationError(
+                'This dataset is in the review process. It is published from its status page once '
+                'a reviewer has accepted it.')
+        return public
 
     file = forms.FileField(required=False)
 
@@ -268,7 +276,18 @@ class DatasetDetailModelForm(forms.ModelForm):
     format = forms.ChoiceField(choices=FORMATS, initial="delimited")
 
     def __init__(self, *args, **kwargs):
+        # ``user``: who is submitting. place#344: ``public`` is an editorial decision (the page only
+        # offers the control to editors) and ``owner`` / ``featured`` are staff-only, but the form used
+        # to accept all three from any editor of the dataset. Disabled fields ignore posted values.
+        # No user given = locked (the safe default).
+        user = kwargs.pop('user', None)
+        from datasets.lifecycle import is_editor as lifecycle_is_editor
         super(DatasetDetailModelForm, self).__init__(*args, **kwargs)
+        if not (user is not None and lifecycle_is_editor(user)):
+            self.fields['public'].disabled = True
+        if not (user is not None and (user.is_staff or user.is_superuser)):
+            for name in ('owner', 'featured'):
+                self.fields[name].disabled = True
         for field in self.fields.values():
             field.error_messages = {'required': 'The field {fieldname} is required'.format(
                 fieldname=field.label)}
