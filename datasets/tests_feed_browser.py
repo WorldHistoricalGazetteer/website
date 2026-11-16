@@ -650,6 +650,19 @@ class FeedRedesignBrowserTests(MapBrowserBase):
         # and the buttons are reachable with Tab when the shortcuts are off
         self.assertEqual(page.evaluate("document.querySelector('.mf-seg-btn[data-i=\"0\"]').tabIndex"), 0)
 
+    def test_tabs_are_a_tablist_with_a_panel_and_arrow_keys(self):
+        self.springfield()
+        self.rec("Edinburgh", "r3", (-3.19, 55.95), [("gn:9", "Edinburgh", (-3.19, 55.95), 0.1)], tier="confident")
+        page = self.open(tier="confident")
+        self.assertEqual(page.evaluate("document.getElementById('mf_panel').getAttribute('role')"), "tabpanel")
+        self.assertEqual(page.evaluate("document.querySelectorAll('.mf-tabs [tabindex=\"0\"]').length"), 1)   # roving
+        page.focus(".mf-tabs [data-tab=confident]")
+        page.keyboard.press("ArrowRight")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.tab === 'ambiguous'", 5000))
+        self.assertTrue(self.wait_for(page, "document.getElementById('mf_panel').getAttribute('aria-labelledby') === 'mf_tab_ambiguous'", 5000))
+        self.assertTrue(self.wait_for(page, "(document.getElementById('mf_record_title') || {}).textContent.startsWith('Springfield')", 5000))
+        self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)         # moving between tabs decides nothing
+
     def test_a_record_nobody_has_searched_for_yet_offers_no_decision(self):
         self.rec("Aachen", "r2", (6.08, 50.78), [], tier="unqueried")
         page = self.open(tier="unqueried")

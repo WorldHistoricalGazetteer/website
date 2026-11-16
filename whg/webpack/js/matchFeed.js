@@ -578,6 +578,8 @@ async function load(tab, append) {
     const on = b.dataset.tab === tab;
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
+    b.tabIndex = on ? 0 : -1;
+    if (on) document.getElementById('mf_panel').setAttribute('aria-labelledby', b.id);
   });
   document.getElementById('mf_tab_note').textContent = NOTES[tab] || '';
   const res = await getJSON(`${root.dataset.candidatesUrl}?tier=${encodeURIComponent(tab)}&offset=${S.offset}`);
@@ -814,6 +816,17 @@ document.addEventListener('keydown', (e) => {
   const inField = /INPUT|TEXTAREA|SELECT/.test(tag);
   if (inField || e.metaKey || e.ctrlKey || e.altKey) {
     if (e.key === 'Enter' && e.target.id === 'mf_search_q') { e.preventDefault(); search(); }
+    return;
+  }
+  // The tab strip is its own keyboard region: arrows, Home and End move between the tabs.
+  if (e.target && e.target.closest && e.target.closest('.mf-tabs') && /^(ArrowLeft|ArrowRight|Home|End)$/.test(e.key)) {
+    const tabs = [...document.querySelectorAll('.mf-tabs [data-tab]')];
+    const at = tabs.indexOf(e.target.closest('[data-tab]'));
+    const to = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1
+      : (at + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    e.preventDefault();
+    tabs[to].focus();
+    load(tabs[to].dataset.tab);
     return;
   }
   // The map is its own keyboard region: its arrow keys pan it, never change the record.

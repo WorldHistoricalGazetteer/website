@@ -40,6 +40,7 @@
     {% for key, label, n in tabs %}
     <li class="nav-item" role="presentation">
       <button type="button" class="nav-link{% if key == tab %} active{% endif %}" data-tab="{{ key }}" role="tab"
+              id="mf_tab_{{ key }}" aria-controls="mf_panel" tabindex="{% if key == tab %}0{% else %}-1{% endif %}"
               aria-selected="{% if key == tab %}true{% else %}false{% endif %}">
         {{ label }} <span class="badge bg-secondary mf-tab-count" data-count-for="{{ key }}">{{ n }}</span>
       </button>
@@ -48,7 +49,7 @@
   </ul>
   <p class="small text-secondary mt-2 mb-2" id="mf_tab_note"></p>
 
-  <div class="row g-3">
+  <div class="row g-3" id="mf_panel" role="tabpanel" aria-labelledby="mf_tab_{{ tab }}">
     <div class="col-lg-2">
       <ol class="list-group mf-queue" id="mf_queue" aria-label="Records in this tab" data-tour="queue"></ol>
       <button type="button" class="btn btn-sm btn-link" id="mf_more" hidden>More records</button>
