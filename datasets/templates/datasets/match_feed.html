@@ -9,7 +9,7 @@
 {% block title %}<title>Link your records: {{ ds.title }}</title>{% endblock %}
 
 {% block content %}
-<div class="container-fluid mf-page" id="match_feed"
+<div class="container mf-page" id="match_feed"
      data-dataset="{{ ds.id }}" data-tab="{{ tab }}" data-record="{{ record }}"
      data-candidates-url="{% url 'datasets:ds_matches_candidates' ds.id %}"
      data-review-url="{% url 'datasets:ds_matches_review' ds.id %}"
