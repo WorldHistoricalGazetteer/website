@@ -1,36 +1,64 @@
-// The contributor feed, "Link your records" (place#334 4c/4d/4i, Phase 2: place#338).
+// The contributor feed, "Link your records" (place#334 4c/4d/4i, Phase 2: place#338; redesign 2026-11).
 //
-// One record at a time: its suggestions, best first, each with the sentence saying why it was
-// suggested and what disagrees. Decisions go to /datasets/<id>/matches/review/, which writes Links
-// through the same rules as the Link sheet. Words on screen: "Link", "Same place", "Not the same
-// place", "None of these fits", "Not sure yet". No bulk confirm in this phase.
+// One record at a time. Each suggestion is one compact row with three states: "Same place",
+// "Not the same" and "Can't tell". Nothing starts decided, except in "Likely the same place",
+// where the first suggestion starts as the same place (shown as provisional: Enter confirms it).
+// Marking a row "Same place" fills in the OTHER rows as "Not the same" (dashed: provisional, shown,
+// and changeable), because choosing one place is evidence about the rest; each decision is sent
+// with how it arose (explicit | prefilled | default), so a negative the person marked themselves
+// is told apart from one the page filled in. One summary line says exactly what Save will write.
+// Suggestions that are one place in two sources (the server's ``group``) sit together and each
+// keeps its own decision and its own Link: nothing is merged.
 //
-// "Which one, if any?" (the ambiguous tier, 4c): one decision per record, so nothing is linked until
-// a suggestion is chosen (no default to the first), and "Not the same place" there offers, as a
-// second step, to record it as a Link others can see. Elsewhere it only sets the suggestion aside.
-// "Not sure yet" moves a record to the Later tab, which is always reachable and never expires.
+// Decisions go to /datasets/<id>/matches/review/ (``decide``), which writes Links through the same
+// rules as the Link sheet. Words on screen: "Link", "Same place", "Not the same place", "None of
+// these fits", "Not sure yet". No bulk confirm.
 //
-// The map (matchFeedMap.js) is a lazy chunk: if it cannot load, the feed works without it.
+// "Which one, if any?" (the ambiguous tier): nothing is linked until a row is marked.
+// The map (matchFeedMap.js) is a lazy chunk: if it cannot load, the feed works without it. Clicking
+// a map marker only moves the focus to its row; it never records a decision.
 //
 // window.__whgMatchFeed.ready is the page's readiness flag (browser tests wait on it, not on timers);
-// window.__whgMatchFeed.map.renders moves each time the map panel is redrawn.
+// .map.renders moves each time the map panel is redrawn; .regions says which regions are drawn
+// (record, rows, map, bar) so a guided tour can wait on state, not on timers.
 import '../css/matchFeed.css';
 import { constraintChipsHTML, bindConstraintChips, esc } from './constraintChips';
 
 const root = document.getElementById('match_feed');
 const S = {
-  tab: root.dataset.tab, records: [], idx: 0, offset: 0, next: null, selected: new Set(),
-  undo: [], relaxed: new Set(), searchResults: null, handSel: null, searchChips: [], distinctAsk: null,
+  tab: root.dataset.tab, records: [], idx: 0, offset: 0, next: null,
+  dec: new Map(),            // row index -> { d: 'same'|'not'|'unsure', src: 'explicit'|'prefilled'|'default' }
+  focus: null,               // the row with the focus (roving tabindex, map highlight)
+  undo: [], relaxed: new Set(), searchResults: null, handSel: null, searchChips: [],
+  shortcuts: store('local', 'mf.shortcuts') !== 'off',
+  publish: store('session', 'mf.publish') === '1',
+  note: '', relation: 'closeMatch',   // kept across redraws; both reset when the record changes
 };
 const NOTES = {
   confident: 'The suggestion and your record agree on the name and at least one other thing. Check before you confirm: a perfect name can still be a lake or a station named after the place.',
-  ambiguous: 'Which one, if any? More than one place fits, or only the name agrees. Choose the one that is the same place (1–9), or say None of these fits.',
+  ambiguous: 'More than one place fits, or only the name agrees. Mark the one that is the same place, or say None of these fits.',
   weak: 'Weak suggestions: optional. Looking is up to you.',
   none: 'Nothing usable was found. That is normal; search by hand if you know a spelling, or leave it.',
   later: 'Records you marked "Not sure yet". They stay here until you decide; nothing here expires.',
-  unqueried: 'The search service did not answer for these records yet. They will be tried again; this is not "nothing found".',
+  unqueried: 'The search service has not answered for these records yet. They will be tried again; this is not "nothing found".',
 };
-window.__whgMatchFeed = { ready: false, tab: S.tab, saves: 0, map: { state: 'idle', renders: 0, basemap: null, hand: [] } };
+const FAILURES = {
+  timeout: 'the search service was too slow to answer', unreachable: 'the search service could not be reached',
+  disabled: 'suggestions were switched off for this run', error: 'the search service reported an error',
+};
+window.__whgMatchFeed = {
+  ready: false, tab: S.tab, saves: 0, map: { state: 'idle', renders: 0, basemap: null, hand: [] },
+  regions: { record: false, rows: false, map: false, bar: false },
+};
+
+function store(kind, key, value) {
+  try {
+    const s = kind === 'local' ? window.localStorage : window.sessionStorage;
+    if (value === undefined) return s.getItem(key);
+    s.setItem(key, value);
+  } catch (_) { /* private window, blocked storage: the page works without it */ }
+  return null;
+}
 
 function csrf() {
   const m = document.querySelector('meta[name="csrf-token"]');
@@ -64,6 +92,12 @@ function updateCounts(counts) {
   });
 }
 
+function updateProgress(p) {
+  const el = document.getElementById('mf_progress');
+  if (!el || !p) return;
+  el.textContent = `${p.reviewed} / ${p.records} reviewed · ${p.links} link${p.links === 1 ? '' : 's'}`;
+}
+
 function years(mm) {
   if (!Array.isArray(mm) || mm.length < 2 || (mm[0] == null && mm[1] == null)) return '';
   return `${mm[0] ?? ''}–${mm[1] ?? ''}`;
@@ -74,127 +108,358 @@ function nsLabel(ns) {
     whg: 'WHG contribution', pl: 'Pleiades' }[ns] || ns;
 }
 
-function candHTML(c, i, opts) {
-  const card = c.card || {};
-  const sel = opts.hand ? S.handSel === i : S.selected.has(i);
-  const cls = ['mf-cand', sel ? 'mf-cand--selected' : '', c.status === 'accepted' ? 'mf-cand--accepted' : '',
-    c.status === 'rejected' ? 'mf-cand--rejected' : ''].join(' ');
-  const facts = [
-    `<span class="badge text-bg-light border">${esc(nsLabel(card.namespace || c.namespace))}</span>`,
-    card.types && card.types.length ? `<span>${esc(card.types.join(', '))}</span>` : '',
-    c.km != null ? `<span>${c.km < 1 ? 'under 1 km' : `${Math.round(c.km)} km`}</span>` : '',
-    years(card.temporal_range) ? `<span>${esc(years(card.temporal_range))}</span>` : '',
-    card.ccodes && card.ccodes.length ? `<span>${esc(card.ccodes.join(', '))}</span>` : '',
-    c.location_withheld ? '<span>location not available to you</span>'
-      : (c.location === null ? '<span>no location</span>' : ''),
-  ].filter(Boolean).join(' · ');
-  const other = (card.names || []).map((n) => n.label).filter((l) => l && l !== card.title).slice(0, 3);
-  const why = (c.explanation && c.explanation.sentence) || '';
-  const warn = c.demoted
-    ? '<div class="small mf-warn"><i class="fas fa-triangle-exclamation me-1"></i>This looks like a feature named after a place (a building, lake, station…), not the place itself.</div>' : '';
-  const done = c.status === 'accepted' ? '<span class="badge bg-success ms-1">linked</span>'
-    : c.status === 'rejected' ? '<span class="badge bg-secondary ms-1">not this one</span>' : '';
-  const actions = opts.readOnly ? '' : `
-      <div class="mt-1 d-flex flex-wrap gap-1">
-        <button type="button" class="btn btn-sm btn-success" data-act="link-one" data-i="${i}"
-                aria-label="Same place: ${esc(card.title || c.title)}">Same place</button>
-        ${opts.hand ? '' : `<button type="button" class="btn btn-sm btn-outline-secondary" data-act="reject-one" data-i="${i}"
-                aria-label="Not the same place: ${esc(card.title || c.title)}">Not the same place</button>`}
-      </div>`;
-  return `<li class="${cls}" data-i="${i}" data-candidate="${esc(c.candidate_id)}">
-      <div><span class="mf-key">${opts.hand ? 's' : ''}${i + 1}</span><span class="fw-semibold">${esc(card.title || c.title)}</span>
-        <span class="text-secondary small ms-1">${esc(c.candidate_id)}</span>${done}</div>
-      <div class="small text-secondary">${facts}</div>
-      ${other.length ? `<div class="small text-secondary">also: ${other.map(esc).join(', ')}</div>` : ''}
-      ${why ? `<div class="mf-why">${esc(why)}</div>` : ''}
-      ${warn}${actions}
-      ${!opts.hand && S.distinctAsk === i ? `<div class="mt-1 small alert alert-secondary py-1 mb-0 mf-distinct-ask" role="group" aria-label="Also record it">
-        Also record that these are not the same place? It becomes a Link others can see.
-        <button type="button" class="btn btn-sm btn-outline-dark ms-1" data-act="distinct-yes" data-i="${i}">Record it</button>
-        <button type="button" class="btn btn-sm btn-link" data-act="distinct-no">No thanks</button></div>` : ''}
-    </li>`;
+// ── Plain words for feature codes (a historian should not have to read "PPLA3") ──────────────────
+const GN_KIND = {
+  PPL: 'populated place', PPLA: 'seat of a first-order division', PPLA2: 'seat of a second-order division',
+  PPLA3: 'seat of a third-order division', PPLA4: 'seat of a fourth-order division', PPLC: 'capital',
+  PPLG: 'seat of government', PPLH: 'historical populated place', PPLQ: 'abandoned populated place',
+  PPLW: 'destroyed populated place', PPLX: 'section of a populated place', PPLL: 'populated locality',
+  ADM1: 'first-order division', ADM2: 'second-order division', ADM3: 'third-order division',
+  ADM4: 'fourth-order division', ADMD: 'administrative division', PCLI: 'country', PCLH: 'historical country',
+  HSTS: 'historical site', RUIN: 'ruin', CSTL: 'castle', CH: 'church', MSTY: 'monastery', TMPL: 'temple',
+  ISL: 'island', MT: 'mountain', RGN: 'region', STM: 'stream', LK: 'lake', AIRP: 'airport', RSTN: 'railway station',
+  BLDG: 'building', PRK: 'park', FRT: 'fort', ANS: 'archaeological site', CMTY: 'cemetery', MUS: 'museum',
+};
+const WD_KIND = {
+  Q515: 'city', Q486972: 'human settlement', Q532: 'village', Q3957: 'town', Q5119: 'capital city',
+  Q1549591: 'big city', Q1093829: 'city of the United States', Q839954: 'archaeological site',
+  Q2977: 'cathedral', Q6256: 'country', Q35657: 'US state', Q5393308: 'Buddhist temple',
+  Q10864048: 'first-level administrative division',
+};
+// The first code we can put in words, or ''. The raw codes stay in a tooltip, never in the way.
+function kindOf(card) {
+  for (const raw of (card && card.types) || []) {
+    const t = String(raw);
+    const code = t.includes('.') ? t.split('.').pop() : t;
+    if (GN_KIND[code]) return GN_KIND[code];
+    if (WD_KIND[t]) return WD_KIND[t];
+    const osm = t.match(/^(?:place|historic|amenity|building)=(.+)$/);
+    if (osm) return osm[1].replace(/_/g, ' ');
+  }
+  return '';
+}
+
+function distText(km) {
+  if (km == null) return '';
+  return km < 1 ? 'under 1 km away' : `${Math.round(km).toLocaleString('en')} km away`;
+}
+
+// The "why" from the explanation's pieces, in words: what agrees, what does not. Distance is shown
+// on its own and a code we cannot put in words is left out (its sentence would be a raw code).
+function whyText(c) {
+  const pieces = (c.explanation && c.explanation.pieces) || [];
+  if (!pieces.length) return (c.explanation && c.explanation.sentence) || '';
+  const say = (p) => {
+    if (p.kind === 'distance' || p.kind === 'country') return '';
+    if (p.kind === 'type') return kindOf({ types: [p.text] }) || '';
+    return p.text;
+  };
+  const yes = pieces.filter((p) => p.agrees === true).map(say).filter(Boolean);
+  const no = pieces.filter((p) => p.agrees === false).map(say).filter(Boolean);
+  const out = [];
+  if (yes.length) out.push(`Agrees: ${yes.join(', ')}.`);
+  if (no.length) out.push(`Does not agree: ${no.join(', ')}.`);
+  return out.join(' ');
+}
+
+function warnText(c) {
+  if (!c.demoted) return '';
+  const k = kindOf(c.card);
+  return k ? `Probably not the place itself: this looks like a ${k} named after it.`
+    : 'Probably not the place itself: this looks like a building, region or other feature named after it.';
 }
 
 function current() { return S.records[S.idx] || null; }
+function settled(c) { return c.status === 'accepted' || c.status === 'rejected'; }
+function isDecided(r) { return S.tab === 'later' ? r.state !== 'later' : r.state !== 'unreviewed'; }
+
+// ── Decisions: the three states, and what choosing one place does to the others ───────────────────
+function recompute(r) {
+  for (const [i, v] of [...S.dec]) if (v.src === 'prefilled') S.dec.delete(i);
+  const same = [...S.dec].filter(([, v]) => v.d === 'same').map(([i]) => i);
+  if (!same.length) return;
+  const chosen = new Set(same.map((i) => r.candidates[i].group).filter((g) => g != null));
+  r.candidates.forEach((c, i) => {
+    if (S.dec.has(i) || settled(c)) return;
+    // Another entry for a place being chosen, or a suggestion with no location to compare: left as
+    // "Can't tell" (nothing is written for it), never set aside on the page's say-so.
+    const kin = c.group != null && chosen.has(c.group);
+    S.dec.set(i, { d: kin || (c.location === null && !c.location_withheld) ? 'unsure' : 'not', src: 'prefilled' });
+  });
+}
+
+function resetDecisions(r) {
+  S.dec.clear();
+  S.focus = null;
+  const first = r && r.candidates[0];
+  if (r && r.tier === 'confident' && r.state === 'unreviewed' && first && !settled(first)) {
+    S.dec.set(0, { d: 'same', src: 'default' });
+    recompute(r);
+  }
+}
+
+function setRow(i, d) {
+  const r = current();
+  const c = r && r.candidates[i];
+  if (!c || settled(c)) return;
+  const had = S.dec.get(i);
+  if (had && had.d === d && had.src !== 'prefilled') S.dec.delete(i);   // the same press again takes it back
+  else {
+    S.dec.set(i, { d, src: 'explicit' });
+    if (d === 'same') for (const [j, v] of [...S.dec]) if (v.src === 'default') S.dec.delete(j);
+  }
+  recompute(r);
+  S.focus = i;
+  renderRecord({ keepSearch: true, refit: false });
+  focusRow(i);
+}
+
+function setGroup(g, d) {
+  const r = current();
+  if (!r) return;
+  r.candidates.forEach((c, i) => { if (c.group === g && !settled(c)) S.dec.set(i, { d, src: 'explicit' }); });
+  if (d === 'same') for (const [j, v] of [...S.dec]) if (v.src === 'default') S.dec.delete(j);
+  recompute(r);
+  renderRecord({ keepSearch: true, refit: false });
+}
+
+function tally(r) {
+  const t = { same: [], not: [], unsure: [], open: [] };
+  r.candidates.forEach((c, i) => {
+    if (settled(c)) return;
+    const v = S.dec.get(i);
+    (v ? t[v.d] : t.open).push(i);
+  });
+  return t;
+}
+
+function nums(list) { return list.map((i) => i + 1).join(', '); }
+
+function summaryHTML(r, t) {
+  if (!r.candidates.length) return '';
+  const part = (label, list, cls) => (list.length ? `<span class="mf-sum mf-sum--${cls}"><b>${label}:</b> ${nums(list)}</span>` : '');
+  const parts = [part('Same place', t.same, 'same'), part('Not the same', t.not, 'not'),
+    part("Can't tell", t.unsure, 'unsure'), part('Not marked', t.open, 'open')].filter(Boolean);
+  const filled = [...S.dec.values()].some((v) => v.src === 'prefilled' && v.d === 'not');
+  const dflt = [...S.dec.values()].some((v) => v.src === 'default');
+  const hint = dflt ? 'The first suggestion is set as the same place: change it if it is not.'
+    : filled ? 'Dashed rows were filled in for you. Change any that are wrong before you save.' : '';
+  return `${parts.join(' ') || '<span class="text-secondary">Nothing marked yet.</span>'}${hint ? `<div class="small text-secondary">${hint}</div>` : ''}`;
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────────────────────────
+function rowHTML(c, i, r) {
+  const card = c.card || {};
+  const v = S.dec.get(i);
+  const done = settled(c);
+  const title = card.title || c.title;
+  const kind = kindOf(card);
+  const rawTypes = (card.types || []).join(', ');
+  const other = (card.names || []).map((n) => n.label).filter((l) => l && l !== title).slice(0, 4);
+  const where = [card.ccodes && card.ccodes.length ? esc(card.ccodes.join(', ')) : '',
+    c.km != null ? `<b class="mf-dist">${esc(distText(c.km))}</b>` : '',
+    years(card.temporal_range) ? esc(years(card.temporal_range)) : '',
+    c.location_withheld ? 'location not available to you' : (c.location === null ? 'no location' : '')].filter(Boolean).join(' · ');
+  const warn = warnText(c);
+  const why = whyText(c);
+  const state = done ? (c.status === 'accepted' ? 'linked' : 'set aside') : (v ? `${v.d}${v.src === 'prefilled' ? ' (filled in)' : ''}` : 'not marked');
+  const seg = done
+    ? `<span class="badge ${c.status === 'accepted' ? 'bg-success' : 'bg-secondary'}">${c.status === 'accepted' ? 'linked' : 'not this one'}</span>`
+    : `<div class="mf-seg" role="group" aria-label="Decision for ${i + 1}, ${esc(title)}" data-tour="row-state">
+        ${[['same', 'Same place'], ['not', 'Not the same'], ['unsure', "Can't tell"]].map(([d, label]) =>
+    `<button type="button" class="mf-seg-btn mf-seg-btn--${d}${v && v.d === d ? ` is-on${v.src === 'prefilled' ? ' is-prefilled' : ''}` : ''}"
+        data-act="set" data-i="${i}" data-d="${d}" aria-pressed="${v && v.d === d ? 'true' : 'false'}" tabindex="${S.shortcuts ? -1 : 0}"
+        aria-label="${esc(label)}: ${esc(title)}">${esc(label)}</button>`).join('')}
+      </div>`;
+  const cls = ['mf-cand', 'mf-row', v ? `mf-row--${v.d}` : '', v && v.src === 'prefilled' ? 'mf-row--prefilled' : '',
+    done ? `mf-cand--${c.status}` : '', S.focus === i ? 'is-focus' : ''].filter(Boolean).join(' ');
+  return `<li class="${cls}" data-i="${i}" data-candidate="${esc(c.candidate_id)}" data-group="${c.group == null ? '' : c.group}"
+      tabindex="${S.focus === i || (S.focus == null && i === 0) ? 0 : -1}" role="group"
+      aria-label="Suggestion ${i + 1}: ${esc(title)}, ${esc(nsLabel(card.namespace || c.namespace))}${c.km != null ? `, ${esc(distText(c.km))}` : ''}. ${esc(state)}.">
+      <div class="mf-row-main">
+        <span class="mf-key">${i + 1}</span>
+        <div class="mf-row-text">
+          <div class="mf-row-title"><span class="fw-semibold" dir="auto">${esc(title)}</span>
+            <span class="badge text-bg-light border ms-1">${esc(nsLabel(card.namespace || c.namespace))}</span>
+            ${kind ? `<span class="mf-kind"${rawTypes ? ` title="${esc(rawTypes)}"` : ''}>${esc(kind)}</span>` : ''}</div>
+          <div class="mf-row-facts small text-secondary">${where}</div>
+          ${warn ? `<div class="small mf-warn"><i class="fas fa-triangle-exclamation me-1" aria-hidden="true"></i>${esc(warn)}</div>` : ''}
+          <details class="small mf-more"><summary>Details</summary>
+            ${other.length ? `<div class="text-secondary" dir="auto">also: ${other.map(esc).join(', ')}</div>` : ''}
+            <div class="mf-why">${esc(why)}</div>
+            <div class="text-secondary">${esc(c.candidate_id)}${rawTypes ? ` · ${esc(rawTypes)}` : ''}</div>
+          </details>
+        </div>
+        ${seg}
+      </div>
+    </li>`;
+}
+
+// Rows in display order: a place described by more than one source sits together under one heading.
+function rowsHTML(r) {
+  const cs = r.candidates;
+  const seen = new Set();
+  const out = [];
+  cs.forEach((c, i) => {
+    if (c.group == null) { out.push(rowHTML(c, i, r)); return; }
+    if (seen.has(c.group)) return;
+    seen.add(c.group);
+    const members = cs.map((m, j) => [m, j]).filter(([m]) => m.group === c.group);
+    const open = members.filter(([m]) => !settled(m));
+    out.push(`<li class="mf-group" data-group="${c.group}" role="group" aria-label="The same place in ${members.length} sources">
+      <div class="mf-group-head small"><i class="fas fa-link me-1" aria-hidden="true"></i>
+        Probably one place, described by ${members.length} sources
+        ${open.length ? `<button type="button" class="btn btn-sm btn-outline-success ms-2 py-0" data-act="group" data-g="${c.group}" data-d="same">All same place</button>` : ''}</div>
+      <ol class="list-unstyled mb-0">${members.map(([m, j]) => rowHTML(m, j, r)).join('')}</ol></li>`);
+  });
+  return out.join('');
+}
+
+function displayOrder() {
+  const order = S.records.map((_, i) => i);
+  return order.filter((i) => !isDecided(S.records[i])).concat(order.filter((i) => isDecided(S.records[i])));
+}
 
 function renderQueue() {
   const q = document.getElementById('mf_queue');
-  q.innerHTML = S.records.map((r, i) => `<li class="list-group-item list-group-item-action${i === S.idx ? ' active' : ''}"
-      data-qi="${i}" aria-current="${i === S.idx ? 'true' : 'false'}">${esc(r.title)}
-      ${r.state !== 'unreviewed' && r.state !== 'later' ? `<span class="badge bg-light text-dark ms-1">${esc(r.state === 'linked' ? 'linked' : 'done')}</span>` : ''}</li>`).join('')
-    || '<li class="list-group-item text-secondary">Nothing in this tab.</li>';
+  q.innerHTML = displayOrder().map((i) => {
+    const r = S.records[i];
+    const done = isDecided(r);
+    return `<li><button type="button" class="list-group-item list-group-item-action${i === S.idx ? ' active' : ''}${done ? ' mf-queue--done' : ''}"
+      data-qi="${i}" aria-current="${i === S.idx ? 'true' : 'false'}" dir="auto">${esc(r.title)}
+      ${done ? `<span class="badge bg-light text-dark ms-1">${esc(r.state === 'linked' ? 'linked' : 'done')}</span>` : ''}</button></li>`;
+  }).join('') || '<li class="list-group-item text-secondary">Nothing in this tab.</li>';
   document.getElementById('mf_more').hidden = S.next == null;
 }
 
-function renderRecord() {
-  const box = document.getElementById('mf_record');
-  const r = current();
-  S.searchResults = null;
-  S.handSel = null;
-  if (!r) { box.innerHTML = '<p class="text-secondary" id="mf_empty">Nothing to review in this tab.</p>'; renderMap(); return; }
-  const cands = r.candidates || [];
-  const tierBadge = r.tier === 'unqueried'
-    ? `<span class="badge bg-warning text-dark ms-1">not yet checked${r.last_failure ? ` (${esc(r.last_failure)})` : ''}</span>` : '';
-  box.innerHTML = `
-    <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
-      <h2 class="h5 mb-1" id="mf_record_title">${esc(r.title)}${tierBadge}</h2>
-      <div class="small text-secondary">${esc(r.src_id)}${years(r.minmax) ? ` · ${esc(years(r.minmax))}` : ''}${r.has_geometry ? '' : ' · no location'}</div>
-    </div>
-    <ol class="list-unstyled mt-2 mb-2" id="mf_cands">${cands.map((c, i) => candHTML(c, i, {})).join('')
-      || '<li class="text-secondary">No suggestions for this record.</li>'}</ol>
-    <details class="small mb-2" id="mf_advanced"><summary>Advanced</summary>
-      <div class="form-check form-check-inline mt-1">
-        <input class="form-check-input" type="radio" name="mf_relation" id="mf_rel_close" value="closeMatch" checked>
-        <label class="form-check-label" for="mf_rel_close">Same place</label></div>
-      <div class="form-check form-check-inline">
-        <input class="form-check-input" type="radio" name="mf_relation" id="mf_rel_exact" value="exactMatch">
-        <label class="form-check-label" for="mf_rel_exact">Same place, exactly</label></div>
-    </details>
-    ${mustChoose(r) ? '<p class="small mb-1 mf-ambiguous-hint" id="mf_choose_hint">Which one, if any? Choose a suggestion first (1–9), or say None of these fits.</p>' : ''}
-    <div class="d-flex flex-wrap gap-2 align-items-center">
-      <button type="button" class="btn btn-sm btn-primary" data-act="link" ${cands.length && !mustChoose(r) ? '' : 'disabled'}>Same place <kbd>Enter</kbd></button>
-      <button type="button" class="btn btn-sm btn-outline-warning" data-act="none">None of these fits <kbd>n</kbd></button>
-      <button type="button" class="btn btn-sm btn-outline-secondary" data-act="later">Not sure yet <kbd>l</kbd></button>
-      <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo" ${S.undo.length ? '' : 'disabled'}>Undo <kbd>u</kbd></button>
-      <span class="ms-auto"></span>
-      <button type="button" class="btn btn-sm btn-outline-secondary" data-act="prev" aria-label="Previous record">&larr;</button>
-      <button type="button" class="btn btn-sm btn-outline-secondary" data-act="next" aria-label="Next record">&rarr;</button>
-    </div>
-    <input type="text" class="form-control form-control-sm mt-2" id="mf_note" maxlength="2000"
-           placeholder="Note (optional): why you decided" aria-label="Note">
-    <div class="mt-3" id="mf_search">
+function recordCardHTML(r) {
+  const meta = [r.names && r.names.length ? `also: <span dir="auto">${r.names.map(esc).join(', ')}</span>` : '',
+    r.types && r.types.length ? esc(r.types.join(', ')) : '', r.ccodes && r.ccodes.length ? esc(r.ccodes.join(', ')) : '',
+    years(r.minmax) ? esc(years(r.minmax)) : '', r.has_geometry ? '' : 'no location'].filter(Boolean).join(' · ');
+  const tierBadge = r.tier === 'unqueried' ? '<span class="badge bg-warning text-dark ms-1">waiting for the search service</span>' : '';
+  const why = r.tier === 'unqueried'
+    ? `<p class="small mb-0 mt-2" id="mf_waiting">Nothing was found yet because ${esc(FAILURES[r.last_failure] || 'the search service has not answered')}. It will be tried again; this is not "nothing found".</p>` : '';
+  const later = r.state === 'later'
+    ? `<p class="small mb-0 mt-2 mf-later">You marked this "Not sure yet"${r.decided_at ? ` on ${esc(new Date(r.decided_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))}` : ''}.${r.note ? ` Your note: <em dir="auto">${esc(r.note)}</em>` : ''}</p>` : '';
+  return `<div class="mf-record-card" data-tour="record">
+      <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+        <h2 class="h5 mb-0" id="mf_record_title" dir="auto">${esc(r.title)}${tierBadge}</h2>
+        <span class="small text-secondary">${esc(r.src_id)}</span>
+      </div>
+      ${meta ? `<div class="small text-secondary mt-1">${meta}</div>` : ''}${why}${later}
+    </div>`;
+}
+
+function barHTML(r, t) {
+  const has = r.candidates.length > 0;
+  const waiting = r.tier === 'unqueried';
+  const canSave = t.same.length + t.not.length > 0;
+  return `<div class="mf-bar" id="mf_bar" data-tour="bar">
+      ${has ? `<div class="mf-summary" id="mf_summary" data-tour="summary">${summaryHTML(r, t)}</div>` : ''}
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        ${has ? `<button type="button" class="btn btn-sm btn-primary" data-act="save" data-tour="save" ${canSave ? '' : 'disabled'}>Save decision <kbd>Enter</kbd></button>
+        <button type="button" class="btn btn-sm btn-outline-warning" data-act="none">None of these fits <kbd>n</kbd></button>` : ''}
+        ${waiting ? '' : '<button type="button" class="btn btn-sm btn-outline-secondary" data-act="later" data-tour="later">Not sure yet <kbd>l</kbd></button>'}
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo" ${S.undo.length ? '' : 'disabled'}>Undo <kbd>u</kbd></button>
+        <span class="ms-auto"></span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="prev" aria-label="Previous record">&larr;</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="next" aria-label="Next record">&rarr;</button>
+      </div>
+      ${has ? `<div class="form-check small mt-2 mb-0">
+        <input class="form-check-input" type="checkbox" id="mf_publish" ${S.publish ? 'checked' : ''}>
+        <label class="form-check-label" for="mf_publish">Also share the "Not the same" decisions I marked myself as statements others can see (never the filled-in ones)</label></div>` : ''}
+      <input type="text" class="form-control form-control-sm mt-2" id="mf_note" maxlength="2000" dir="auto"
+             value="${esc(S.note)}" placeholder="Note (optional): why you decided" aria-label="Note">
+      ${has ? `<details class="small mt-2" id="mf_advanced"><summary>More options</summary>
+        <div class="mt-1">How closely do the record and the place match?</div>
+        <div class="form-check"><input class="form-check-input" type="radio" name="mf_relation" id="mf_rel_close" value="closeMatch" ${S.relation === 'exactMatch' ? '' : 'checked'}>
+          <label class="form-check-label" for="mf_rel_close">Same place (the usual choice: they are about the same place)</label></div>
+        <div class="form-check"><input class="form-check-input" type="radio" name="mf_relation" id="mf_rel_exact" value="exactMatch" ${S.relation === 'exactMatch' ? 'checked' : ''}>
+          <label class="form-check-label" for="mf_rel_exact">Exactly the same place (same place, same extent: use sparingly)</label></div>
+      </details>` : ''}
+    </div>`;
+}
+
+function searchHTML(r) {
+  return `<div class="mt-3" id="mf_search" data-tour="search">
+      <label class="small text-secondary" for="mf_search_q">Search for another name <kbd>/</kbd></label>
       <div class="input-group input-group-sm">
-        <input type="text" class="form-control" id="mf_search_q" value="${esc(r.title)}" aria-label="Search for another name">
-        <button type="button" class="btn btn-outline-secondary" data-act="search">Search <kbd>s</kbd></button>
+        <input type="text" class="form-control" id="mf_search_q" value="${esc(r.title)}" dir="auto">
+        <button type="button" class="btn btn-outline-secondary" data-act="search">Search</button>
       </div>
       <div id="mf_search_cx"></div>
       <ol class="list-unstyled mt-2" id="mf_search_results"></ol>
     </div>`;
-  renderMap();
+}
+
+function renderRecord(opts = {}) {
+  const box = document.getElementById('mf_record');
+  const r = current();
+  const keepSearch = opts.keepSearch;
+  if (!keepSearch) { S.searchResults = null; S.handSel = null; }
+  window.__whgMatchFeed.regions = { record: false, rows: false, map: false, bar: false };
+  if (!r) {
+    box.innerHTML = '<p class="text-secondary" id="mf_empty" data-tour="record">Nothing to review in this tab.</p>';
+    renderMap(true);
+    window.__whgMatchFeed.regions.record = true;
+    return;
+  }
+  const searchBefore = keepSearch ? document.getElementById('mf_search') : null;
+  const t = tally(r);
+  const has = r.candidates.length > 0;
+  const rows = has ? `<ol class="list-unstyled mt-2 mb-2 mf-rows" id="mf_cands" data-tour="candidates" aria-label="Suggestions for ${esc(r.title)}">${rowsHTML(r)}</ol>`
+    : (r.tier === 'unqueried' ? '' : '<p class="text-secondary mt-2" id="mf_nosugg" data-tour="candidates">No suggestions for this record.</p>');
+  // With nothing suggested, the search comes first: it is the way forward.
+  const search = searchHTML(r);
+  box.innerHTML = `${recordCardHTML(r)}${has ? '' : search}${rows}${barHTML(r, t)}${has ? search : ''}`;
+  if (searchBefore) {
+    const nowBox = document.getElementById('mf_search');
+    if (nowBox) nowBox.replaceWith(searchBefore);
+  }
+  window.__whgMatchFeed.regions.record = true;
+  window.__whgMatchFeed.regions.rows = true;
+  window.__whgMatchFeed.regions.bar = true;
+  renderMap(opts.refit !== false);
+}
+
+function focusRow(i) {
+  const li = document.querySelector(`#mf_cands .mf-row[data-i="${i}"]`);
+  if (!li) return;
+  S.focus = i;
+  document.querySelectorAll('#mf_cands .mf-row').forEach((x) => {
+    const on = Number(x.dataset.i) === i;
+    x.classList.toggle('is-focus', on);
+    x.tabIndex = on ? 0 : -1;
+  });
+  li.focus({ preventScroll: false });
+  highlight(i);
 }
 
 // ── The map panel ─────────────────────────────────────────────────────────────────────────────
-// What is placed: the record's point, every suggestion that has one (the chosen one(s) stand out:
-// the selection, else the first, which is what Enter would link outside "Which one, if any?").
-// Nothing is dropped silently: suggestions without a point are counted in the caption.
+// What is placed: the record's point and every suggestion that has one, all equal until a row has
+// the focus or a decision. Nothing is dropped silently: suggestions with no point are named in the
+// caption, and those off the visible map are named on its edge.
 let feedMap = null;
 let mapLoading = null;
 let mapFailed = false;
 
 function mapView(r) {
   const cands = r.candidates || [];
-  // A hand-search result the person has picked takes the focus; the suggestions go grey.
   const handFocus = S.handSel !== null && S.handSel !== undefined;
-  const focus = handFocus ? new Set() : (S.selected.size ? S.selected : new Set(cands.length ? [0] : []));
   const points = [];
   const missing = [];
   const withheld = [];
   cands.forEach((c, i) => {
-    if (Array.isArray(c.location)) points.push({ i, title: (c.card && c.card.title) || c.title, location: c.location, focus: focus.has(i), status: c.status });
-    else if (c.location_withheld) withheld.push(i + 1);
+    if (Array.isArray(c.location)) {
+      const v = S.dec.get(i);
+      points.push({
+        i, title: (c.card && c.card.title) || c.title, location: c.location, km: c.km,
+        focus: !handFocus && S.focus === i, status: c.status, state: v ? v.d : null,
+        provisional: !!(v && v.src === 'prefilled'), group: c.group == null ? null : c.group,
+      });
+    } else if (c.location_withheld) withheld.push(i + 1);
     else missing.push(i + 1);
   });
-  // Hand-search results (shown below the suggestions, labelled s1, s2...): muted pins too.
   const hand = [];
   const handMissing = [];
   (S.searchResults || []).forEach((c, i) => {
@@ -208,7 +473,7 @@ function mapCaption(r, v) {
   const parts = [];
   if (!v.record) parts.push('<strong>Your record has no location</strong>; only its suggestions are shown.');
   else parts.push('★ your record');
-  if (v.points.length) parts.push('numbers: suggestions, as in the list; the one you chose (else the first) is larger, the others grey');
+  if (v.points.length) parts.push('numbers: suggestions, as in the list (green: same place, struck through: not the same)');
   if (v.missing.length) parts.push(`not on the map (no location): ${v.missing.join(', ')}`);
   if (v.withheld.length) parts.push(`not on the map (location not available to you): ${v.withheld.join(', ')}`);
   if (v.hand.length) parts.push('s1, s2…: your own search results (click one to see it here)');
@@ -221,15 +486,17 @@ function mapDone(state, v) {
   const m = window.__whgMatchFeed.map;
   m.state = state;
   m.record = v && v.record ? v.record.location : null;
-  m.points = v ? v.points.map((p) => ({ i: p.i, focus: p.focus, location: p.location })) : [];
+  m.points = v ? v.points.map((p) => ({ i: p.i, focus: p.focus, state: p.state, location: p.location })) : [];
   m.hand = v ? v.hand.map((p) => ({ i: p.i, focus: p.focus, location: p.location })) : [];
   m.renders += 1;
+  window.__whgMatchFeed.regions.map = state === 'ok' || state === 'no-location' || state === 'unavailable';
 }
 
 function showMapFailed() {
   mapFailed = true;
   const el = (id) => document.getElementById(id);
   el('mf_map').hidden = true;
+  el('mf_map_tools').hidden = true;
   el('mf_map_none').hidden = true;
   el('mf_map_failed').hidden = false;
   el('mf_map_caption').textContent = '';
@@ -241,14 +508,12 @@ function ensureMap() {
   if (!mapLoading) {
     mapLoading = import(/* webpackChunkName: "match-feed-map" */ './matchFeedMap.js').then((mod) => {
       feedMap = mod.createFeedMap(document.getElementById('mf_map'), {
-        onPick: (i) => {
-          if (S.selected.has(i)) S.selected.delete(i); else S.selected.add(i);
-          renderRecord();
-        },
+        // A marker only moves the focus to its row: it never records a decision.
+        onPick: (i) => { S.focus = i; focusRow(i); const li = document.querySelector(`#mf_cands .mf-row[data-i="${i}"]`); if (li) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); },
         onPickHand: (i) => pickHand(i),
         onBasemap: (state) => {
           window.__whgMatchFeed.map.basemap = state;
-          if (state === 'blank') renderMap();
+          if (state === 'blank') renderMap(false);
         },
       });
       window.__whgMatchFeed.map.instance = feedMap.map;
@@ -258,7 +523,7 @@ function ensureMap() {
   return mapLoading;
 }
 
-function renderMap() {
+function renderMap(refit) {
   const panel = document.getElementById('mf_map_panel');
   if (!panel) return;
   const r = current();
@@ -268,11 +533,13 @@ function renderMap() {
   const v = mapView(r);
   const box = document.getElementById('mf_map');
   const none = document.getElementById('mf_map_none');
+  const tools = document.getElementById('mf_map_tools');
   const caption = document.getElementById('mf_map_caption');
   document.getElementById('mf_map_failed').hidden = true;
   if (!v.record && !v.points.length && !v.hand.length) {
     // A clear "no location" state, never an empty box.
     box.hidden = true;
+    tools.hidden = true;
     none.hidden = false;
     document.getElementById('mf_map_none_text').textContent = (r.candidates || []).length
       ? 'No location to show: this record has no location, and none of its suggestions has one either.'
@@ -283,13 +550,14 @@ function renderMap() {
   }
   none.hidden = true;
   box.hidden = false;
+  tools.hidden = false;
   caption.innerHTML = mapCaption(r, v);
   const place = r.place;
   ensureMap().then((fm) => {
     const now = current();
     if (!now || now.place !== place) return;   // the person has moved on; that render will draw
     const latest = mapView(now);
-    fm.update(latest);
+    fm.update(latest, { refit });
     mapDone('ok', latest);
   }).catch((err) => {
     console.warn('The feed map could not be shown:', err);
@@ -297,10 +565,14 @@ function renderMap() {
   });
 }
 
-function render() { renderQueue(); renderRecord(); window.__whgMatchFeed.record = current() ? current().place : null; }
+function highlight(i) {
+  if (feedMap) feedMap.highlight(i);
+}
+
+function render() { renderQueue(); resetDecisions(current()); renderRecord(); window.__whgMatchFeed.record = current() ? current().place : null; }
 
 async function load(tab, append) {
-  if (!append) { S.offset = 0; S.records = []; S.idx = 0; S.distinctAsk = null; }
+  if (!append) { S.offset = 0; S.records = []; S.idx = 0; S.note = ''; S.relation = 'closeMatch'; }
   S.tab = tab;
   window.__whgMatchFeed.tab = tab;
   document.querySelectorAll('.mf-tabs .nav-link').forEach((b) => {
@@ -321,7 +593,6 @@ async function load(tab, append) {
     if (i >= 0) S.idx = i;
     root.dataset.record = '';
   }
-  S.selected.clear();
   render();
 }
 
@@ -332,13 +603,20 @@ function relation() {
 
 function noteText() { const n = document.getElementById('mf_note'); return n ? n.value : ''; }
 
-function remaining() {
-  return S.records.filter((r) => r.state === 'unreviewed' || (S.tab === 'later' && r.state === 'later')).length;
+function remaining() { return S.records.filter((r) => !isDecided(r)).length; }
+
+// The record to show after a decision: the next one still to decide after the one in view (then
+// from the top). Chosen before the decided record moves to the end of the queue.
+function nextTarget(order, pos) {
+  const rest = order.slice(pos + 1).concat(order.slice(0, pos));
+  return rest.find((i) => !isDecided(S.records[i]));
 }
 
-async function review(body, after) {
+async function review(body, after, { stay } = {}) {
   const r = current();
   if (!r) return;
+  const order0 = displayOrder();
+  const pos0 = order0.indexOf(S.idx);
   const res = await postJSON(root.dataset.reviewUrl, { place: r.place, note: noteText(), ...body });
   if (!res.ok) {
     announce(`Not saved: ${res.data.error || res.status}`);
@@ -348,60 +626,46 @@ async function review(body, after) {
   }
   window.__whgMatchFeed.saves += 1;
   updateCounts(res.data.counts);
+  updateProgress(res.data.progress);
   S.undo.push(r.place);
   r.state = res.data.state;
   if (after) after(r);
   announce(body.action === 'later' ? `Moved to Later. ${Math.max(0, remaining())} to go in this tab.`
     : `Saved. ${Math.max(0, remaining())} to go in this tab.`);
-  if (body.action !== 'reject') move(1); else render();
+  S.note = '';
+  if (stay && !isDecided(r)) { S.dec.clear(); renderQueue(); renderRecord(); return; }
+  const to = nextTarget(order0, pos0);
+  go(to === undefined ? S.idx : to);
 }
 
-// "Which one, if any?": the record's own tier decides (it may be shown in the Later tab).
-function mustChoose(r) { return !!r && r.tier === 'ambiguous' && S.selected.size === 0; }
-
-function selectedCandidates(r) {
-  const idx = S.selected.size ? [...S.selected] : (r.candidates.length && r.tier !== 'ambiguous' ? [0] : []);
-  return idx.map((i) => r.candidates[i]).filter(Boolean);
-}
-
-function linkSelected() {
-  const r = current();
-  if (!r) return;
-  if (mustChoose(r)) { announce('Which one, if any? Choose a suggestion first (1–9), or say None of these fits.'); return; }
-  const cs = selectedCandidates(r);
-  if (!cs.length) return;
-  review({ action: 'link', candidates: cs.map((c) => c.id), relation: relation() },
-    () => cs.forEach((c) => { c.status = 'accepted'; }));
-}
-
-// "Not the same place" sets the suggestion aside (never a statement others see). In the
-// "Which one, if any?" tier the plan offers a second step: also record it as a Link.
-function rejectOne(i) {
-  const r = current();
-  const c = r && r.candidates[i];
-  if (!c) return;
-  review({ action: 'reject', candidates: [c.id] }, () => {
-    c.status = 'rejected';
-    S.distinctAsk = r.tier === 'ambiguous' ? i : null;
-  });
-}
-
-function recordDistinct(i) {
-  const r = current();
-  const c = r && r.candidates[i];
-  S.distinctAsk = null;
-  if (!c) { render(); return; }
-  review({ action: 'reject', candidates: [c.id], distinct: true }, () => { c.status = 'rejected'; });
-}
-
-function move(d) {
-  if (!S.records.length) return;
-  S.idx = Math.max(0, Math.min(S.records.length - 1, S.idx + d));
-  S.selected.clear();
-  S.distinctAsk = null;
+function go(i) {
+  S.idx = Math.max(0, Math.min(S.records.length - 1, i));
+  S.note = '';
+  S.relation = 'closeMatch';
   render();
   const t = document.getElementById('mf_record_title');
   if (t) { t.tabIndex = -1; t.focus(); }
+}
+
+function saveDecision() {
+  const r = current();
+  if (!r || !r.candidates.length) return;
+  const t = tally(r);
+  if (!t.same.length && !t.not.length) {
+    announce(r.tier === 'ambiguous'
+      ? 'Which one, if any? Mark the place that is the same, or say None of these fits.'
+      : 'Nothing is marked yet. Mark a suggestion as the same place, or say None of these fits.');
+    return;
+  }
+  const decisions = [...S.dec].filter(([i]) => !settled(r.candidates[i]))
+    .map(([i, v]) => ({ candidate: r.candidates[i].id, decision: v.d, source: v.src }));
+  const explicitNot = [...S.dec].some(([, v]) => v.d === 'not' && v.src === 'explicit');
+  const keep = new Map(S.dec);
+  review({ action: 'decide', decisions, relation: relation(), distinct: S.publish && explicitNot },
+    () => keep.forEach((v, i) => {
+      if (v.d === 'same') r.candidates[i].status = 'accepted';
+      else if (v.d === 'not') r.candidates[i].status = 'rejected';
+    }), { stay: true });
 }
 
 async function undo() {
@@ -410,15 +674,36 @@ async function undo() {
   const res = await postJSON(root.dataset.reviewUrl, { place, action: 'reopen' });
   if (!res.ok) { announce('Undo failed.'); return; }
   updateCounts(res.data.counts);
+  updateProgress(res.data.progress);
   const i = S.records.findIndex((r) => r.place === place);
   if (i >= 0) {
     S.records[i].state = 'unreviewed';
     (S.records[i].candidates || []).forEach((c) => { c.status = 'suggested'; });
     S.idx = i;
   }
-  S.distinctAsk = null;
   announce('Undone.');
   render();
+}
+
+// ── Hand search (unchanged in behaviour) ──────────────────────────────────────────────────────────
+function handHTML(c, i) {
+  const card = c.card || {};
+  const kind = kindOf(card);
+  const where = [card.ccodes && card.ccodes.length ? esc(card.ccodes.join(', ')) : '',
+    c.km != null ? `<b class="mf-dist">${esc(distText(c.km))}</b>` : '',
+    c.location === null ? 'no location' : ''].filter(Boolean).join(' · ');
+  return `<li class="mf-cand mf-hand${S.handSel === i ? ' mf-cand--selected' : ''}" data-i="${i}" data-candidate="${esc(c.candidate_id)}">
+      <div class="mf-row-main"><span class="mf-key">s${i + 1}</span>
+        <div class="mf-row-text">
+          <div class="mf-row-title"><span class="fw-semibold" dir="auto">${esc(card.title || c.title)}</span>
+            <span class="badge text-bg-light border ms-1">${esc(nsLabel(card.namespace || c.namespace))}</span>
+            ${kind ? `<span class="mf-kind">${esc(kind)}</span>` : ''}</div>
+          <div class="mf-row-facts small text-secondary">${where}</div>
+          <div class="mf-why small">${esc(whyText(c))}</div>
+        </div>
+        <button type="button" class="btn btn-sm btn-success" data-act="link-hand" data-i="${i}"
+                aria-label="Same place: ${esc(card.title || c.title)}">Same place</button>
+      </div></li>`;
 }
 
 async function search() {
@@ -440,41 +725,38 @@ async function search() {
   }
   S.searchResults = res.data.results || [];
   S.handSel = null;
-  out.innerHTML = S.searchResults.map((c, i) => candHTML({ ...c, id: null, status: 'suggested' }, i, { hand: true }).replace(/data-act="link-one"/g, 'data-act="link-hand"'))
-    .join('') || '<li class="text-secondary small">Nothing found for that name.</li>';
-  // The results join the map as muted pins; the feed works if this does not.
-  try { renderMap(); } catch (err) { console.warn('The feed map could not show the search results:', err); }
+  out.innerHTML = S.searchResults.map((c, i) => handHTML(c, i)).join('')
+    || '<li class="text-secondary small">Nothing found for that name.</li>';
+  try { renderMap(false); } catch (err) { console.warn('The feed map could not show the search results:', err); }
 }
 
-// Pick a hand-search result to look at (and, with its own button, to link): it takes the map focus.
 function pickHand(i) {
   if (!S.searchResults || !S.searchResults[i]) return;
   S.handSel = S.handSel === i ? null : i;
-  document.querySelectorAll('#mf_search_results .mf-cand').forEach((li) => {
+  document.querySelectorAll('#mf_search_results .mf-hand').forEach((li) => {
     li.classList.toggle('mf-cand--selected', Number(li.dataset.i) === S.handSel);
   });
-  try { renderMap(); } catch (err) { console.warn('The feed map could not be updated:', err); }
+  try { renderMap(true); } catch (err) { console.warn('The feed map could not be updated:', err); }
 }
 
+// ── Events ───────────────────────────────────────────────────────────────────────────────────────
 root.addEventListener('click', (e) => {
   const tabBtn = e.target.closest('.mf-tabs [data-tab]');
   if (tabBtn) { load(tabBtn.dataset.tab); return; }
   const qi = e.target.closest('[data-qi]');
-  if (qi) { S.idx = Number(qi.dataset.qi); S.selected.clear(); S.distinctAsk = null; render(); return; }
+  if (qi) { go(Number(qi.dataset.qi)); return; }
   const b = e.target.closest('[data-act]');
   if (!b) {
-    const hl = e.target.closest('#mf_search_results .mf-cand');
+    const hl = e.target.closest('#mf_search_results .mf-hand');
     if (hl) { pickHand(Number(hl.dataset.i)); return; }
-    const li = e.target.closest('#mf_cands .mf-cand');
-    if (li) { const i = Number(li.dataset.i); if (S.selected.has(i)) S.selected.delete(i); else S.selected.add(i); renderRecord(); }
+    const row = e.target.closest('#mf_cands .mf-row');
+    if (row && !e.target.closest('details')) { S.focus = Number(row.dataset.i); focusRow(S.focus); }
     return;
   }
   const act = b.dataset.act;
-  if (act === 'link') linkSelected();
-  else if (act === 'link-one') { S.selected = new Set([Number(b.dataset.i)]); linkSelected(); }
-  else if (act === 'reject-one') rejectOne(Number(b.dataset.i));
-  else if (act === 'distinct-yes') recordDistinct(Number(b.dataset.i));
-  else if (act === 'distinct-no') { S.distinctAsk = null; renderRecord(); }
+  if (act === 'set') setRow(Number(b.dataset.i), b.dataset.d);
+  else if (act === 'group') setGroup(Number(b.dataset.g), b.dataset.d);
+  else if (act === 'save') saveDecision();
   else if (act === 'link-hand') {
     const c = S.searchResults && S.searchResults[Number(b.dataset.i)];
     if (c) { S.handSel = Number(b.dataset.i); review({ action: 'link', target: c.candidate_id, relation: relation() }); }
@@ -484,6 +766,8 @@ root.addEventListener('click', (e) => {
   else if (act === 'prev') move(-1);
   else if (act === 'next') move(1);
   else if (act === 'search') search();
+  else if (act === 'fit-all') { if (feedMap) feedMap.fitAll(); }
+  else if (act === 'fit-near') { if (feedMap) feedMap.fitNear(); }
   else if (act === 'regenerate') {
     postJSON(root.dataset.regenerateUrl, {}).then((res) => {
       const box = document.getElementById('mf_no_generation');
@@ -492,31 +776,76 @@ root.addEventListener('click', (e) => {
   }
 });
 
+root.addEventListener('input', (e) => { if (e.target && e.target.id === 'mf_note') S.note = e.target.value; });
+
+root.addEventListener('change', (e) => {
+  if (e.target && e.target.name === 'mf_relation') S.relation = e.target.value;
+  if (e.target && e.target.id === 'mf_publish') { S.publish = e.target.checked; store('session', 'mf.publish', S.publish ? '1' : '0'); }
+  if (e.target && e.target.id === 'mf_shortcuts') {
+    S.shortcuts = e.target.checked;
+    store('local', 'mf.shortcuts', S.shortcuts ? 'on' : 'off');
+    renderRecord({ keepSearch: true, refit: false });
+  }
+});
+
+// A row under the pointer or with the focus is highlighted on the map.
+root.addEventListener('mouseover', (e) => { const row = e.target.closest('#mf_cands .mf-row'); if (row) highlight(Number(row.dataset.i)); });
+root.addEventListener('mouseout', (e) => { if (e.target.closest('#mf_cands .mf-row')) highlight(S.focus); });
+root.addEventListener('focusin', (e) => { const row = e.target.closest('#mf_cands .mf-row'); if (row) { S.focus = Number(row.dataset.i); highlight(S.focus); } });
+
+function move(d) {
+  const order = displayOrder();
+  if (!order.length) return;
+  const pos = order.indexOf(S.idx);
+  go(order[Math.max(0, Math.min(order.length - 1, pos + d))]);
+}
+
 document.getElementById('mf_more').addEventListener('click', () => load(S.tab, true));
 
 bindConstraintChips(root, () => S.searchChips, S.relaxed, () => search());
 
+// The shortcut switch lives in the key legend; its state is remembered on this device.
+(function legend() {
+  const box = document.getElementById('mf_shortcuts');
+  if (box) box.checked = S.shortcuts;
+}());
+
 document.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
-  if (/INPUT|TEXTAREA|SELECT/.test(tag) || e.metaKey || e.ctrlKey || e.altKey) {
+  const inField = /INPUT|TEXTAREA|SELECT/.test(tag);
+  if (inField || e.metaKey || e.ctrlKey || e.altKey) {
     if (e.key === 'Enter' && e.target.id === 'mf_search_q') { e.preventDefault(); search(); }
     return;
   }
+  // The map is its own keyboard region: its arrow keys pan it, never change the record.
+  if (e.target && e.target.closest && e.target.closest('#mf_map')) return;
   // Enter or Space on a focused button is that button's own click; never also a shortcut.
   if ((e.key === 'Enter' || e.key === ' ') && /^(BUTTON|A|SUMMARY)$/.test(tag)) return;
   const r = current();
+  const onRow = !!(e.target && e.target.closest && e.target.closest('#mf_cands .mf-row'));
+  // Keys that belong to the focused row work whenever it has the focus (they act on that row only);
+  // the global one-key shortcuts below can be switched off.
+  if (onRow && r) {
+    const i = Number(e.target.closest('.mf-row').dataset.i);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = Math.max(0, Math.min(r.candidates.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)));
+      focusRow(next);
+      return;
+    }
+    if (e.key === 's') { e.preventDefault(); setRow(i, 'same'); return; }
+    if (e.key === 'x') { e.preventDefault(); setRow(i, 'not'); return; }
+    if (e.key === '?' || e.key === 'c') { e.preventDefault(); setRow(i, 'unsure'); return; }
+  }
+  if (!S.shortcuts) return;
   if (/^[1-9]$/.test(e.key) && r) {
     const i = Number(e.key) - 1;
-    if (i < r.candidates.length) {
-      if (S.selected.has(i)) S.selected.delete(i); else S.selected.add(i);
-      renderRecord();
-    }
-  } else if (e.key === 'Enter') { e.preventDefault(); linkSelected(); }
-  else if (e.key === 'x' && S.selected.size === 1) rejectOne([...S.selected][0]);
-  else if (e.key === 'n') review({ action: 'none' });
-  else if (e.key === 'l') review({ action: 'later' });
+    if (i < r.candidates.length) focusRow(i);
+  } else if (e.key === 'Enter') { e.preventDefault(); saveDecision(); }
+  else if (e.key === 'n') { if (r && r.candidates.length) review({ action: 'none' }); }
+  else if (e.key === 'l') { if (r && r.tier !== 'unqueried') review({ action: 'later' }); }
   else if (e.key === 'u') undo();
-  else if (e.key === 's') { e.preventDefault(); const q = document.getElementById('mf_search_q'); if (q) q.focus(); }
+  else if (e.key === '/') { e.preventDefault(); const q = document.getElementById('mf_search_q'); if (q) q.focus(); }
   else if (e.key === 'ArrowRight') move(1);
   else if (e.key === 'ArrowLeft') move(-1);
   else return;

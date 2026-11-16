@@ -93,8 +93,10 @@ def labels_for(places):
     return out
 
 
-def calibrate(dataset_ids=None):
-    """The report as a dict (no refusal here; the command refuses)."""
+def calibrate(dataset_ids=None, explicit_only=False):
+    """The report as a dict (no refusal here; the command refuses). ``explicit_only`` leaves out
+    feed negatives the page filled in for the person (``decision_source == "prefilled"``): they
+    saw them and left them, which is weaker evidence than a negative they marked themselves."""
     from datasets.models_matching import MatchCandidate
     qs = MatchCandidate.objects.exclude(status="stale").select_related("place", "place__dataset")
     if dataset_ids:
@@ -102,6 +104,7 @@ def calibrate(dataset_ids=None):
     per_record = {t: Counter() for t in TIERS}
     per_candidate = {t: Counter() for t in TIERS}
     sanity, sources = Counter(), Counter()
+    neg_by_source = Counter()
     conflicting = 0
     last = 0
     while True:
@@ -113,7 +116,10 @@ def calibrate(dataset_ids=None):
         lab = labels_for(list(places.values()))
         for c in batch:
             found = dict(lab.get((c.place_id, c.candidate_id), {}))
-            if c.status in ("accepted", "rejected"):
+            if c.status == "rejected":
+                neg_by_source[c.decision_source or "unrecorded"] += 1
+            if c.status in ("accepted", "rejected") and not (
+                    explicit_only and c.status == "rejected" and c.decision_source == "prefilled"):
                 found["feed"] = c.status == "accepted"
             values = set(found.values())
             if "both" in values or (True in values and False in values):
@@ -146,7 +152,8 @@ def calibrate(dataset_ids=None):
                                     "unlabelled": sanity["unlabelled"]},
             "negatives": negatives,
             "positives": sum(per_candidate[t]["pos"] for t in TIERS),
-            "conflicting": conflicting, "label_sources": dict(sources)}
+            "conflicting": conflicting, "label_sources": dict(sources),
+            "feed_negatives_by_decision_source": dict(neg_by_source), "explicit_only": explicit_only}
 
 
 class Command(BaseCommand):
@@ -157,9 +164,11 @@ class Command(BaseCommand):
                             help="limit to this dataset id (repeatable)")
         parser.add_argument("--min-negatives", type=int, default=100)
         parser.add_argument("--json", action="store_true", help="print the report as JSON")
+        parser.add_argument("--explicit-only", action="store_true",
+                            help="leave out feed negatives the page filled in (decision_source=prefilled)")
 
     def handle(self, *args, **opts):
-        report = calibrate(opts.get("datasets"))
+        report = calibrate(opts.get("datasets"), explicit_only=opts.get("explicit_only", False))
         need = opts["min_negatives"]
         if report["negatives"] < need:
             raise CommandError(
@@ -180,6 +189,8 @@ class Command(BaseCommand):
                 p = "n/a" if r["precision"] is None else f"{100 * r['precision']:.1f}%"
                 w(f"  {t:<10} precision {p:>7}  = {r['positives']} / {r['labelled']} labelled"
                   f"  ({r['unlabelled']} unlabelled)")
+        w(f"Feed negatives by how they arose: {report['feed_negatives_by_decision_source']}"
+          f"{' (prefilled ones left out of the precision above)' if report['explicit_only'] else ''}")
         s = report["type_sanity_demoted"]
         w(f"Demoted by type sanity: {s['negatives']} labelled negative, {s['positives']} labelled positive, "
           f"{s['unlabelled']} unlabelled")

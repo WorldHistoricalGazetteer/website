@@ -116,6 +116,14 @@ class MatchCandidate(models.Model):
     decided_at = models.DateTimeField(null=True, blank=True)
     decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    on_delete=models.SET_NULL, related_name="+")
+    # How the decision arose. A negative the person marked themselves ("explicit") is a different
+    # kind of evidence from one the page filled in when they chose another suggestion
+    # ("prefilled", shown to them and left unchanged), from "None of these fits" ("none_fits"), and
+    # from a first suggestion confirmed without changes ("default"). Calibration can weight or
+    # exclude the weaker kinds; empty for decisions made before this field existed.
+    DECISION_SOURCES = [("explicit", "explicit"), ("prefilled", "prefilled"),
+                        ("none_fits", "none_fits"), ("default", "default")]
+    decision_source = models.CharField(max_length=12, blank=True, default="", choices=DECISION_SOURCES)
 
     class Meta:
         db_table = "match_candidate"
