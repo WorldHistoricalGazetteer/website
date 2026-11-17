@@ -510,27 +510,33 @@ class FeedDecideTests(FeedTestBase):
     def d(self, place, cid, decision, source="explicit"):
         return {"candidate": self.cand(place, cid).pk, "decision": decision, "source": source}
 
-    def test_one_same_and_the_rest_not_records_how_each_arose(self):
-        r = self.decide(self.brox, [self.d(self.brox, "gn:6", "same"),
-                                    self.d(self.brox, "wd:Q7", "not", "prefilled")])
+    def test_one_same_leaves_the_other_suggestions_untouched(self):
+        # choosing one place is not a judgement of the rest: only what is sent is written
+        r = self.decide(self.brox, [self.d(self.brox, "gn:6", "same")])
         self.assertEqual(r.status_code, 200, r.content)
         gn, wd = self.cand(self.brox, "gn:6"), self.cand(self.brox, "wd:Q7")
         self.assertEqual((gn.status, gn.decision_source), ("accepted", "explicit"))
-        self.assertEqual((wd.status, wd.decision_source), ("rejected", "prefilled"))
+        self.assertEqual((wd.status, wd.decision_source), ("suggested", ""))
         self.assertEqual(RecordReviewState.objects.get(place=self.brox).state, "linked")
         self.assertEqual(ContributorAttestation.objects.count(), 1)       # a rejection is not a statement
         row = ContributorAttestation.objects.get()
         self.assertEqual((row.relation_type, row.candidate_id, row.evidence["decision_source"]),
                          ("closeMatch", gn.pk, "explicit"))
 
+    def test_a_decision_the_page_filled_in_is_refused(self):
+        r = self.decide(self.brox, [self.d(self.brox, "gn:6", "same"), self.d(self.brox, "wd:Q7", "not", "prefilled")])
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(ContributorAttestation.objects.count(), 0)
+        self.assertEqual(self.cand(self.brox, "wd:Q7").status, "suggested")
+
     def test_a_public_not_the_same_statement_is_made_only_for_a_negative_the_person_marked(self):
         self.brox_states = self.decide(
             self.brox, [self.d(self.brox, "gn:6", "not", "explicit"),
-                        self.d(self.brox, "wd:Q7", "not", "prefilled")], distinct=True)
+                        self.d(self.brox, "wd:Q7", "not", "explicit")], distinct=True)
         self.assertEqual(self.brox_states.status_code, 200, self.brox_states.content)
         rows = list(ContributorAttestation.objects.all())
-        self.assertEqual([(r.relation_type, r.candidate_id) for r in rows],
-                         [("distinct", self.cand(self.brox, "gn:6").pk)])
+        self.assertEqual(sorted((r.relation_type, r.candidate_id) for r in rows),
+                         sorted([("distinct", self.cand(self.brox, "gn:6").pk), ("distinct", self.cand(self.brox, "wd:Q7").pk)]))
         # Both were set aside, so nothing is left to choose: the record is "none fits".
         self.assertEqual(RecordReviewState.objects.get(place=self.brox).state, "no_good_match")
         # The same request without the box ticked makes no statement at all.

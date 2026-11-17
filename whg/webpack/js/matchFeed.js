@@ -3,10 +3,10 @@
 // One record at a time. Each suggestion is one compact row with three states: "Same place",
 // "Not the same" and "Can't tell". Nothing starts decided, except in "Likely the same place",
 // where the first suggestion starts as the same place (shown as provisional: Enter confirms it).
-// Marking a row "Same place" fills in the OTHER rows as "Not the same" (dashed: provisional, shown,
-// and changeable), because choosing one place is evidence about the rest; each decision is sent
-// with how it arose (explicit | prefilled | default), so a negative the person marked themselves
-// is told apart from one the page filled in. One summary line says exactly what Save will write.
+// Marking a row "Same place" decides NOTHING about the other rows: choosing one place is not a
+// judgement of the rest, so they stay "Not marked" and are left as they were. Only what the person
+// marks is ever written (each decision is sent with how it arose: explicit | default). One summary
+// line says exactly what Save will write.
 // Suggestions that are one place in two sources (the server's ``group``) sit together and each
 // keeps its own decision and its own Link: nothing is merged.
 //
@@ -175,19 +175,10 @@ function settled(c) { return c.status === 'accepted' || c.status === 'rejected';
 function isDecided(r) { return S.tab === 'later' ? r.state !== 'later' : r.state !== 'unreviewed'; }
 
 // ── Decisions: the three states, and what choosing one place does to the others ───────────────────
-function recompute(r) {
-  for (const [i, v] of [...S.dec]) if (v.src === 'prefilled') S.dec.delete(i);
-  const same = [...S.dec].filter(([, v]) => v.d === 'same').map(([i]) => i);
-  if (!same.length) return;
-  const chosen = new Set(same.map((i) => r.candidates[i].group).filter((g) => g != null));
-  r.candidates.forEach((c, i) => {
-    if (S.dec.has(i) || settled(c)) return;
-    // Another entry for a place being chosen, or a suggestion with no location to compare: left as
-    // "Can't tell" (nothing is written for it), never set aside on the page's say-so.
-    const kin = c.group != null && chosen.has(c.group);
-    S.dec.set(i, { d: kin || (c.location === null && !c.location_withheld) ? 'unsure' : 'not', src: 'prefilled' });
-  });
-}
+// Nothing is ever filled in for the person: a row is decided only by their own mark (or the
+// provisional default on a "Likely the same place" record, which Enter confirms). Kept as a hook so
+// every place that changes a decision still goes through one function.
+function recompute() { /* deliberately empty */ }
 
 function resetDecisions(r) {
   S.dec.clear();
@@ -241,10 +232,9 @@ function summaryHTML(r, t) {
   const part = (label, list, cls) => (list.length ? `<span class="mf-sum mf-sum--${cls}"><b>${label}:</b> ${nums(list)}</span>` : '');
   const parts = [part('Same place', t.same, 'same'), part('Not the same', t.not, 'not'),
     part("Can't tell", t.unsure, 'unsure'), part('Not marked', t.open, 'open')].filter(Boolean);
-  const filled = [...S.dec.values()].some((v) => v.src === 'prefilled' && v.d === 'not');
   const dflt = [...S.dec.values()].some((v) => v.src === 'default');
   const hint = dflt ? 'The first suggestion is set as the same place: change it if it is not.'
-    : filled ? 'Dashed rows were filled in for you. Change any that are wrong before you save.' : '';
+    : (t.same.length && t.open.length) ? 'Suggestions you did not mark are left as they are.' : '';
   return `${parts.join(' ') || '<span class="text-secondary">Nothing marked yet.</span>'}${hint ? `<div class="small text-secondary">${hint}</div>` : ''}`;
 }
 
@@ -331,6 +321,13 @@ function renderQueue() {
       ${done ? `<span class="badge bg-light text-dark ms-1">${esc(r.state === 'linked' ? 'matched' : 'done')}</span>` : ''}</button></li>`;
   }).join('') || '<li class="list-group-item text-secondary">Nothing in this tab.</li>';
   document.getElementById('mf_more').hidden = S.next == null;
+  // keep the current record in view inside the list's own scroll box (never scrolls the page)
+  const act = q.querySelector('.active');
+  if (act) {
+    const top = act.offsetTop - q.offsetTop;
+    if (top < q.scrollTop) q.scrollTop = top;
+    else if (top + act.offsetHeight > q.scrollTop + q.clientHeight) q.scrollTop = top + act.offsetHeight - q.clientHeight;
+  }
 }
 
 function recordCardHTML(r) {
@@ -595,6 +592,7 @@ async function load(tab, append) {
     if (i >= 0) S.idx = i;
     root.dataset.record = '';
   }
+  if (append) { renderQueue(); return; }   // more records for the list: never redraw (and so reset) the record being decided
   render();
 }
 
@@ -801,6 +799,8 @@ function move(d) {
   const order = displayOrder();
   if (!order.length) return;
   const pos = order.indexOf(S.idx);
+  // at the end of what is loaded, fetch the next page rather than stopping
+  if (d > 0 && pos === order.length - 1 && S.next != null) { load(S.tab, true).then(() => move(1)); return; }
   go(order[Math.max(0, Math.min(order.length - 1, pos + d))]);
 }
 

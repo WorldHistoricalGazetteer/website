@@ -393,11 +393,11 @@ class FeedMapBrowserTests(MapBrowserBase):
                                                           ["other", 0, list(self.wark_c[0])]])
                                    and not page.evaluate(f"""() => ({MARKERS_JS})().some((m) => m.role === 'record'
                                         && Math.abs(m.ll[1] - {self.brox_xy[1]}) < 1e-6)"""))
-        # Warwick's two suggestions are one place in two sources, so choosing one fills the other in
-        # as "Can't tell" (dashed): never set aside on the page's say-so, and nothing is written for it.
+        # Warwick's two suggestions are one place in two sources; choosing one decides nothing about
+        # the other: it stays unmarked (and nothing is written for it).
         page.click("#mf_cands [data-act=set][data-i='0'][data-d=same]")
-        r["group_mate_left_as_cant_tell"] = self.wait_for(
-            page, "!!document.querySelector('#mf_cands .mf-row--prefilled[data-i=\"1\"] .mf-seg-btn--unsure.is-on')", 5000)
+        r["group_mate_left_unmarked"] = self.wait_for(
+            page, "!document.querySelector('#mf_cands [data-i=\"1\"] .is-on')", 5000)
         page.click("[data-act=save]")
         r["saved"] = self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000)
         from api.models import ContributorAttestation
@@ -535,7 +535,7 @@ class FeedMapBrowserTests(MapBrowserBase):
 @unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
 class FeedRedesignBrowserTests(MapBrowserBase):
     """The redesigned rows and decision bar (2026-11): the same place in two sources is grouped and
-    one click marks both; choosing one place fills in the others as "Not the same" (dashed) and the
+    one click marks both; choosing one place leaves the others unmarked and the
     summary says what Save will write; suggestions off the map are named on its edge and markers
     that would overlap are merged; the keys that belong to a focused row (↑/↓, s, x, c) and the
     switch for the one-key shortcuts; a map marker moves the focus and decides nothing; and a record
@@ -598,20 +598,20 @@ class FeedRedesignBrowserTests(MapBrowserBase):
         # The two entries for one place overlap on screen: one badge "1·2".
         r["merged_badge"] = self.wait_for(page, """() => { const b = document.querySelector('#mf_map [data-role=badge]');
             return !!b && b.dataset.members === '1,2'; }""", 20000)
-        # One click on the group heading marks both; the far one is filled in as not the same.
+        # One click on the group heading marks both; the far one is left unmarked (never filled in).
         page.click("[data-act=group][data-d=same]")
         r["both_same"] = self.wait_for(page, """() => ['0', '1'].every((i) =>
             document.querySelector(`.mf-seg-btn--same[data-i="${i}"]`).getAttribute('aria-pressed') === 'true')""", 5000)
-        r["far_filled_in"] = self.wait_for(page, "!!document.querySelector('.mf-row--prefilled[data-i=\"2\"] .mf-seg-btn--not.is-on')", 5000)
+        r["far_left_unmarked"] = self.wait_for(page, "!document.querySelector('#mf_cands [data-i=\"2\"] .is-on') && !document.querySelector('.mf-row--prefilled')", 5000)
         summary = page.evaluate("document.getElementById('mf_summary').textContent")
-        r["summary_says_what_save_writes"] = "Same place: 1, 2" in summary and "Not the same: 3" in summary
+        r["summary_says_what_save_writes"] = "Same place: 1, 2" in summary and "Not the same" not in summary and "Not marked: 3" in summary
         page.click("[data-act=save]")
         r["saved"] = self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000)
         from api.models import ContributorAttestation
         from datasets.models_matching import MatchCandidate
         got = {c.candidate_id: (c.status, c.decision_source) for c in MatchCandidate.objects.filter(dataset=self.ds)}
         r["written"] = (got == {"gn:1": ("accepted", "explicit"), "wd:2": ("accepted", "explicit"),
-                                "gn:3": ("rejected", "prefilled")}
+                                "gn:3": ("suggested", "")}
                         and ContributorAttestation.objects.filter(user=self.user).count() == 2
                         and RecordReviewState.objects.get().state == "linked")
         failed = {k: v for k, v in r.items() if not v}
@@ -688,6 +688,53 @@ class FeedRedesignBrowserTests(MapBrowserBase):
         page.keyboard.press("ArrowRight")          # the tour's own key: it must not move to another record
         page.keyboard.press("Escape")
         self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
+
+    def test_a_long_queue_and_many_suggestions_scroll_and_nothing_is_hidden(self):
+        """120 records in the list and 40 suggestions on the first one: the list scrolls inside its own
+        box and keeps the current record in view, the page scrolls to a focused row without the
+        sticky bar covering it, and nothing makes the page wider than the window."""
+        for n in range(120):
+            self.rec(f"Place {n:03d}", f"q{n}", (10 + n * 0.01, 50.0), [
+                (f"gn:{n}00{k}", f"Place {n:03d}", (10 + n * 0.01 + k * 0.005, 50.0 + k * 0.004), 0.5 * k)
+                for k in range(40 if n == 0 else 2)])
+        page = self.open()
+        r = {}
+        r["forty_rows"] = self.wait_for(page, "document.querySelectorAll('#mf_cands .mf-row').length === 40")
+        q = page.evaluate("""() => { const e = document.getElementById('mf_queue');
+            return {sh: e.scrollHeight, ch: e.clientHeight, vh: window.innerHeight, ov: getComputedStyle(e).overflowY,
+                    items: e.children.length}; }""")
+        r["queue_scrolls_inside_a_bounded_box"] = q["sh"] > q["ch"] and q["ch"] <= q["vh"] * 0.72 and q["ov"] in ("auto", "scroll")
+        # walk down the list with the keyboard far enough that the current record must scroll into view
+        page.evaluate("localStorage.setItem('mf.shortcuts', 'on')")
+        page.reload()
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.ready === true"))
+        for _ in range(45):
+            page.keyboard.press("ArrowRight")
+            page.wait_for_timeout(60)
+        r["current_record_visible_in_queue"] = page.evaluate("""() => { const e = document.getElementById('mf_queue');
+            const a = e.querySelector('.active, [aria-current=true]'); if (!a) return false;
+            const q = e.getBoundingClientRect(), b = a.getBoundingClientRect();
+            return b.top >= q.top - 1 && b.bottom <= q.bottom + 1; }""")
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.ready === true"))
+        self.assertTrue(self.wait_for(page, "document.querySelectorAll('#mf_cands .mf-row').length === 40"))
+        page.focus("#mf_cands .mf-row[data-i='0']")
+        for _ in range(39):
+            page.keyboard.press("ArrowDown")
+        self.wait_for(page, """() => { const b = document.querySelector('#mf_cands .mf-row[data-i="39"]').getBoundingClientRect();
+            return b.top >= 0 && b.bottom <= window.innerHeight; }""", 6000)     # a smooth scroll may still be running
+        box = page.evaluate("""() => { const row = document.querySelector('#mf_cands .mf-row[data-i="39"]').getBoundingClientRect();
+            const bar = document.getElementById('mf_bar').getBoundingClientRect();
+            return {top: row.top, bottom: row.bottom, bar: bar.top, vh: window.innerHeight,
+                    wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                    y: window.scrollY, active: (document.activeElement.dataset || {}).i, tag: document.activeElement.tagName,
+                    sc: window.__whgMatchFeed.map.state}; }""")
+        r["last_row_visible_above_the_bar"] = box["top"] >= 0 and box["bottom"] <= box["bar"] + 1
+        r["map_still_in_view"] = page.evaluate("""() => { const m = document.getElementById('mf_map').getBoundingClientRect();
+            return m.bottom > 0 && m.top < window.innerHeight; }""")
+        r["page_not_wider_than_window"] = not box["wide"]
+        failed = {k: v for k, v in r.items() if not v}
+        self.assertEqual(failed, {}, (r, q, box))
 
     def test_tabs_are_a_tablist_with_a_panel_and_arrow_keys(self):
         self.springfield()

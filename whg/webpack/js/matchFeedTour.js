@@ -34,8 +34,7 @@ function steps() {
         'for example a different type of place or a long distance.' } },
     { element: '[data-tour="row-state"]', popover: { side: 'top', title: 'Say what you think',
       description: '<strong>Same place</strong>, <strong>Not the same</strong> or <strong>Can\'t tell</strong>. ' +
-        'Nothing is chosen for you at the start. If you choose one place, we fill in the others as "Not the same" ' +
-        'and mark them as filled in. You can change any of them.' } },
+        'Nothing is chosen for you. Only the rows you mark are saved; the others are left as they are.' } },
     { element: '[data-tour="map"]', popover: { side: 'left', title: 'The map',
       description: 'Your record and its suggestions. A row you point at is lit on the map. ' +
         'Clicking a marker only takes you to its row. <strong>It decides nothing.</strong> ' +

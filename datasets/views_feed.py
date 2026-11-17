@@ -322,7 +322,9 @@ def _refused(exc):
     return JsonResponse({"error": exc.message}, status=exc.status)
 
 
-SOURCES = ("explicit", "prefilled", "default")
+# "prefilled" was retired 2026-11-17: the page never fills in a decision for the person, so a
+# decision claiming that source is refused (rows written earlier keep their stored value).
+SOURCES = ("explicit", "default")
 DECISIONS = ("same", "not", "unsure")
 
 
