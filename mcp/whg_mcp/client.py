@@ -32,9 +32,29 @@ class WHGError(Exception):
     """A failure to report to the model in plain words (never a stack trace or a URL with a token)."""
 
 
+class DailyBudget:
+    """This server's own daily allowance of upstream calls (decision 2026-11-17: separate MCP budget),
+    so agent traffic can never use up the web/reconciliation API quota. Resets at 00:00 UTC; in-memory
+    (a restart gives a fresh allowance, which the per-IP nginx limits bound)."""
+
+    def __init__(self, limit: int, clock=None):
+        import time
+        self.limit, self._clock, self._day, self.used = limit, clock or time.time, None, 0
+
+    def take(self) -> bool:
+        day = int(self._clock() // 86400)
+        if day != self._day:
+            self._day, self.used = day, 0
+        if self.used >= self.limit:
+            return False
+        self.used += 1
+        return True
+
+
 class WHGClient:
     def __init__(self, base_url: str, timeout: float = 30.0,
-                 transport: Optional[httpx.AsyncBaseTransport] = None):
+                 transport: Optional[httpx.AsyncBaseTransport] = None, budget: Optional[DailyBudget] = None):
+        self.budget = budget
         self.base_url = base_url.rstrip("/")
         self._http = httpx.AsyncClient(
             base_url=self.base_url, timeout=timeout, follow_redirects=False, transport=transport,
@@ -46,6 +66,8 @@ class WHGClient:
     async def get(self, path: str, params: Optional[dict] = None) -> Any:
         if not any(p.fullmatch(path) for p in ALLOWED_PATHS):
             raise WHGError(f"Path not permitted: {path}")
+        if self.budget is not None and not self.budget.take():
+            raise WHGError("This service's daily request allowance is used up; try again after 00:00 UTC.")
         clean = {k: v for k, v in (params or {}).items() if v not in (None, "")}
         try:
             async with self._http.stream("GET", path, params=clean) as r:

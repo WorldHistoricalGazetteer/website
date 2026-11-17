@@ -141,3 +141,17 @@ def test_transport_rejects_foreign_host():
         good = c.post("/", json=body, headers={**hdr, "Host": server.PUBLIC_HOST})
     assert bad.status_code in (403, 421)
     assert good.status_code == 200      # control: the check can pass
+
+
+async def test_daily_budget_exhausts_and_resets():
+    from whg_mcp.client import DailyBudget
+    now = [86400 * 100.0]
+    b = DailyBudget(2, clock=lambda: now[0])
+    c = WHGClient("https://whg.test", transport=httpx.MockTransport(handler), budget=b)
+    await c.get("/api/sources/"); await c.get("/api/sources/")
+    with pytest.raises(WHGError, match="allowance"):
+        await c.get("/api/sources/")
+    assert len(SEEN) == 2                       # the refused call was never sent
+    now[0] += 86400
+    await c.get("/api/sources/")                # new UTC day, allowance restored
+    assert len(SEEN) == 3

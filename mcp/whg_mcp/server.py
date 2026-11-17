@@ -10,7 +10,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field
 
 from . import __version__
-from .client import WHGClient, WHGError
+from .client import DailyBudget, WHGClient, WHGError
 
 BASE_URL = os.environ.get("WHG_BASE_URL", "https://whgazetteer.org")
 MAX_LIMIT = 50
@@ -42,7 +42,7 @@ _client: Optional[WHGClient] = None
 def client() -> WHGClient:
     global _client
     if _client is None:
-        _client = WHGClient(BASE_URL)
+        _client = WHGClient(BASE_URL, budget=DailyBudget(int(os.environ.get("WHG_MCP_DAILY_BUDGET", "2000"))))
     return _client
 
 
