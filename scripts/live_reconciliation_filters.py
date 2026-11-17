@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+(Moved from tests/: it is a live script that parses the command line on import, so Django test
+discovery could not import it.)
+
 Live integration tests for the WHG Reconciliation API filter parameters
 and the Extend endpoint.
 
@@ -9,7 +12,7 @@ across Reconcile, Suggest, and Extend endpoints.
 Run against dev before promoting to production.
 
 Usage:
-    python3 tests/test_reconciliation_filters.py [--base-url URL] [--token TOKEN]
+    python3 scripts/live_reconciliation_filters.py [--base-url URL] [--token TOKEN]
 
 Defaults to dev.whgazetteer.org.
 """

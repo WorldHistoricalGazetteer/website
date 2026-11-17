@@ -216,11 +216,16 @@ APPROVED_2026_10_10 = frozenset({
     1365, 1390, 1395, 1404, 1415, 1435, 1446, 1451, 1452, 1473, 1475, 1476, 1479, 1482,
     1484, 1487, 1488, 1501,
 })
+# Then, on 2026-11-17, two further class-3 rows SG ruled on: `13` (the Newberry's
+# statement is a dedication to unrestricted reuse, recorded as CC0-1.0) and `1438`
+# (ESTA v2, CC-BY-SA-4.0), both as upstream_terms (commit baa1e011e).
+APPROVED_2026_11_17 = frozenset({13, 1438})
+ALL_APPROVED = APPROVED_2026_10_10 | APPROVED_2026_11_17
 # Class 3 (ask) and class 4 (restrict / de-accession) datasets from the same
 # proposal: a row for any of these would be a defect.
 NEVER_IN_FILE = frozenset({
-    13, 18, 20, 819, 827, 829, 838, 1118, 1155, 1196,
-    1319, 1381, 1392, 1393, 1394, 1397, 1413, 1429, 1438, 1439, 1456,
+    18, 20, 819, 827, 829, 838, 1118, 1155, 1196,
+    1319, 1381, 1392, 1393, 1394, 1397, 1413, 1429, 1439, 1456,
     1461, 1467, 1478, 1481, 1485, 1486,
 })
 # Where the approval departed from the proposal, what it departed to.
@@ -238,6 +243,8 @@ RULED_OVERRIDES = {
     39: ("CC-BY-4.0", "legacy_notice", 2),
     657: ("CC-BY-4.0", "legacy_notice", 2),
     1395: ("CC-BY-NC-ND-4.0", "upstream_terms", 1),
+    13: ("CC0-1.0", "upstream_terms", 3),
+    1438: ("CC-BY-SA-4.0", "upstream_terms", 3),
 }
 
 
@@ -252,13 +259,14 @@ class ShippedProposalsFileTests(TestCase):
 
     def test_exactly_the_ruled_set_is_approved(self):
         approved = {r["dataset_id"] for r in self.rows if r.get("approved") is True}
-        self.assertEqual(approved, set(APPROVED_2026_10_10))
-        self.assertEqual({r["dataset_id"] for r in self.rows}, set(APPROVED_2026_10_10),
+        self.assertEqual(approved, set(ALL_APPROVED))
+        self.assertEqual({r["dataset_id"] for r in self.rows}, set(ALL_APPROVED),
                          "an unapproved row is in the file")
         for r in self.rows:
             with self.subTest(dataset=r["dataset_id"]):
-                self.assertEqual((r["approved_by"], r["approved_on"]), ("SG", "2026-10-10"))
-        self.assertEqual(set(APPROVED_2026_10_10) & NEVER_IN_FILE, set())
+                day = "2026-11-17" if r["dataset_id"] in APPROVED_2026_11_17 else "2026-10-10"
+                self.assertEqual((r["approved_by"], r["approved_on"]), ("SG", day))
+        self.assertEqual(set(ALL_APPROVED) & NEVER_IN_FILE, set())
 
     def test_rulings_are_recorded_as_ruled(self):
         by_id = {r["dataset_id"]: r for r in self.rows}
@@ -266,7 +274,8 @@ class ShippedProposalsFileTests(TestCase):
             with self.subTest(dataset=ds_id):
                 r = by_id[ds_id]
                 self.assertEqual((r["spdx_id"], r["license_source"], r["class"]), (spdx, source, klass))
-                self.assertIn("2026-10-10", r.get("ruling", ""))
+                day = "2026-11-17" if ds_id in APPROVED_2026_11_17 else "2026-10-10"
+                self.assertIn(day, r.get("ruling", ""))
 
     def test_every_row_is_well_formed(self):
         valid_sources = {k for k, _ in LICENSE_SOURCE_CHOICES}
@@ -279,7 +288,7 @@ class ShippedProposalsFileTests(TestCase):
                     self.assertIn(key, r)
                 self.assertIn(r["license_source"], valid_sources)
                 self.assertIn(r["spdx_id"], vocab, f"{r['spdx_id']} not in the licence vocabulary")
-                self.assertIn(r["class"], (1, 2, "ui"))
+                self.assertIn(r["class"], (1, 2, 3, "ui"))
                 if r["class"] == "ui":
                     self.assertEqual(r["license_source"], "contributor_selected")
                 else:
