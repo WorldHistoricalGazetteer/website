@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 # Debian 12 (bookworm). Bullseye was abandoned in place#254: its security
 # pool no longer holds the packages its index advertises, so `apt-get install`
-# 404s and the image cannot be rebuilt at all. bookworm keeps Python 3.10, so
-# this is an OS bump, not a Python bump.
-FROM python:3.10-slim-bookworm
+# 404s and the image cannot be rebuilt at all. The base is the official python image,
+# so the Python version (3.12 since the Django 5.2 upgrade) is independent of Debian.
+FROM python:3.12-slim-bookworm
 
 LABEL maintainer="WHC @ Pitt"
 
@@ -72,7 +72,7 @@ RUN set -eux; \
     # Create a new sudoers file for the user
     echo "$USER_NAME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/"$USER_NAME" && \
     # Set ownership
-    chown -R 1000:0 /py/lib/python3.10/site-packages/guardian/migrations/ && \
+    chown -R 1000:0 "$(/py/bin/python -c 'import guardian, os; print(os.path.join(os.path.dirname(guardian.__file__), "migrations"))')"/ && \
     # Remove the temporary requirements file (matches previous `rm -rf /tmp`)
     rm -rf /tmp/*
 
