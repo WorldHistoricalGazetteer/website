@@ -1,4 +1,4 @@
-<!-- datasets/match_feed.html: "Link your records", the contributor feed (place#338) -->
+<!-- datasets/match_feed.html: "Match your places", the contributor feed (place#338) -->
 {% extends "main/base_webpack.html" %}
 {% load static %}
 
@@ -6,10 +6,10 @@
 <link href="{% static 'webpack/match_feed.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
 {% endblock %}
 
-{% block title %}<title>Link your records: {{ ds.title }}</title>{% endblock %}
+{% block title %}<title>Match your places: {{ ds.title }}</title>{% endblock %}
 
 {% block content %}
-<div class="container-fluid mf-page" id="match_feed"
+<div class="container mf-page" id="match_feed"
      data-dataset="{{ ds.id }}" data-tab="{{ tab }}" data-record="{{ record }}"
      data-candidates-url="{% url 'datasets:ds_matches_candidates' ds.id %}"
      data-review-url="{% url 'datasets:ds_matches_review' ds.id %}"
@@ -17,11 +17,22 @@
      data-progress-url="{% url 'datasets:ds_matches_progress' ds.id %}"
      data-regenerate-url="{% url 'datasets:ds_matches_regenerate' ds.id %}">
   <div class="d-flex flex-wrap justify-content-between align-items-baseline mt-3 mb-2 gap-2">
-    <h1 class="h4 mb-0"><a href="{% url 'datasets:ds_status' ds.id %}">{{ ds.title }}</a> · Link your records
-      <span class="badge bg-warning text-dark align-middle ms-1">beta</span></h1>
-    <div class="small text-secondary" id="mf_progress">
-      {{ progress.reviewed }} / {{ progress.records }} reviewed · {{ progress.links }} link{{ progress.links|pluralize }}
-    </div>
+    <h1 class="h4 mb-0">Match your places <span class="badge bg-warning text-dark align-middle mx-1">beta</span>
+      · <a href="{% url 'datasets:ds_status' ds.id %}">{{ ds.title }}</a></h1>
+    <div class="small text-secondary">
+    <button type="button" class="btn btn-sm btn-outline-secondary py-0 me-2" id="mf_tour_button" data-act="tour">Tour</button>
+    <span id="mf_progress">
+      {{ progress.reviewed }} / {{ progress.records }} reviewed · {{ progress.links }} match{{ progress.links|pluralize:"es" }}
+    </span></div>
+  </div>
+
+  <div class="alert alert-light border small mf-intro" id="mf_intro" role="note" hidden data-tour="intro">
+    <button type="button" class="btn-close float-end" id="mf_intro_close" aria-label="Hide this note"></button>
+    Some of your places may already be in WHG, from source gazetteers such as GeoNames or Wikidata.
+    For each suggestion, say if it is the same place. &ldquo;Same place&rdquo; adds a signed note that connects the two records.
+    Nothing is merged or changed: your record stays yours. WHG can then show the two records together.
+    This is optional, and you can undo any answer.
+    <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-act="tour">Take the tour</button>
   </div>
 
   {% if not progress.generation %}
@@ -36,10 +47,11 @@
   </div>
   {% endif %}
 
-  <ul class="nav nav-tabs mf-tabs" role="tablist">
+  <ul class="nav nav-tabs mf-tabs" role="tablist" data-tour="tabs">
     {% for key, label, n in tabs %}
     <li class="nav-item" role="presentation">
       <button type="button" class="nav-link{% if key == tab %} active{% endif %}" data-tab="{{ key }}" role="tab"
+              id="mf_tab_{{ key }}" aria-controls="mf_panel" tabindex="{% if key == tab %}0{% else %}-1{% endif %}"
               aria-selected="{% if key == tab %}true{% else %}false{% endif %}">
         {{ label }} <span class="badge bg-secondary mf-tab-count" data-count-for="{{ key }}">{{ n }}</span>
       </button>
@@ -48,20 +60,24 @@
   </ul>
   <p class="small text-secondary mt-2 mb-2" id="mf_tab_note"></p>
 
-  <div class="row g-3">
-    <div class="col-lg-3">
-      <ol class="list-group mf-queue" id="mf_queue" aria-label="Records in this tab"></ol>
+  <div class="row g-3" id="mf_panel" role="tabpanel" aria-labelledby="mf_tab_{{ tab }}">
+    <div class="col-lg-2">
+      <ol class="list-group mf-queue" id="mf_queue" aria-label="Records in this tab" data-tour="queue"></ol>
       <button type="button" class="btn btn-sm btn-link" id="mf_more" hidden>More records</button>
     </div>
-    <div class="col-lg-9">
+    <div class="col-lg-10">
       <div class="row g-3">
         <div class="col-xl-7">
           <div id="mf_record" class="mf-record" aria-live="off"></div>
           <div class="visually-hidden" id="mf_live" aria-live="polite"></div>
         </div>
         <div class="col-xl-5 order-first order-xl-last">
-          <section class="mf-map-panel" id="mf_map_panel" aria-label="Map of this record and its suggestions" hidden>
+          <section class="mf-map-panel" id="mf_map_panel" aria-label="Map of this record and its suggestions" data-tour="map" hidden>
             <div class="mf-map" id="mf_map"></div>
+            <div class="mf-map-tools small" id="mf_map_tools" hidden>
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-act="fit-near" title="Zoom the map to this record and the suggestions close to it" aria-label="Fit nearby: zoom the map to this record and the suggestions close to it">Fit nearby</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-act="fit-all" title="Zoom the map out to show every suggestion, however far away" aria-label="Fit all: zoom the map out to show every suggestion, however far away">Fit all</button>
+            </div>
             <div class="mf-map-empty" id="mf_map_none" hidden>
               <i class="fas fa-map-marker-alt me-1" aria-hidden="true"></i>
               <span id="mf_map_none_text">No location to show.</span>
@@ -75,11 +91,18 @@
       </div>
     </div>
   </div>
-  <p class="small text-secondary mt-3">
-    Keys: <kbd>1</kbd>–<kbd>9</kbd> choose · <kbd>Enter</kbd> Same place · <kbd>x</kbd> Not the same place ·
-    <kbd>n</kbd> None of these fits · <kbd>l</kbd> Not sure yet (moves it to Later) · <kbd>u</kbd> undo · <kbd>s</kbd> search ·
-    <kbd>←</kbd>/<kbd>→</kbd> move
-  </p>
+  <div class="small text-secondary mt-3" id="mf_keys">
+    <div class="form-check form-switch d-inline-block mb-0">
+      <input class="form-check-input" type="checkbox" role="switch" id="mf_shortcuts">
+      <label class="form-check-label" for="mf_shortcuts">Keyboard shortcuts</label>
+    </div>
+    <div class="mt-1" id="mf_keylist" hidden>
+      <kbd>1</kbd>–<kbd>9</kbd> go to a suggestion · <kbd>↑</kbd>/<kbd>↓</kbd> move between suggestions ·
+      on a suggestion: <kbd>s</kbd> Same place, <kbd>x</kbd> Not the same, <kbd>c</kbd> or <kbd>?</kbd> Can't tell ·
+      <kbd>Enter</kbd> save · <kbd>n</kbd> None of these fits · <kbd>l</kbd> Not sure yet (moves it to Later) · <kbd>u</kbd> undo ·
+      <kbd>/</kbd> search · <kbd>←</kbd>/<kbd>→</kbd> other record
+    </div>
+  </div>
 </div>
 {% endblock %}
 

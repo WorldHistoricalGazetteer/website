@@ -1,4 +1,4 @@
-"""The contributor feed: "Link your records" (place#334 sections 4c, 4d, 4i, 4j; Phase 2: place#338).
+"""The contributor feed: "Match your places" (place#334 sections 4c, 4d, 4i, 4j; Phase 2: place#338).
 
 One page (``/datasets/<id>/matches/``) and its JSON:
 
@@ -8,7 +8,9 @@ One page (``/datasets/<id>/matches/``) and its JSON:
   A contributed suggestion whose dataset the viewer may not see now is left out entirely;
 * ``POST matches/review/`` one decision about one record: ``link`` (Same place), ``reject``
   (Not the same place; optionally also recorded as a ``distinct`` Link), ``none`` (None of
-  these fits), ``later`` (Not sure yet), ``reopen`` (undo);
+  these fits), ``later`` (Not sure yet), ``reopen`` (undo), and ``decide``: every row of a record
+  decided in one request (``same`` / ``not`` / ``unsure`` per suggestion, each with how the
+  decision arose: ``explicit``, ``prefilled`` or ``default``);
 * ``GET  matches/search/?place=&q=&relax=`` a hand search under the run's constraints, each a
   relaxable chip as in Map your Data's review (place#208);
 * ``GET  matches/progress/`` and ``POST matches/regenerate/``.
@@ -21,6 +23,9 @@ that does not exist. Link counts are shown only here and on the owner's dataset 
 """
 import json
 import logging
+import math
+import re
+import unicodedata
 
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -40,8 +45,8 @@ logger = logging.getLogger("reconciliation")
 PAGE_SIZE = 25
 TABS = ["confident", "ambiguous", "weak", "none", "later", "unqueried"]
 TAB_LABELS = {"confident": "Likely the same place", "ambiguous": "Which one, if any?",
-              "weak": "Weak suggestions", "none": "Nothing found", "later": "Later",
-              "unqueried": "Not yet checked"}
+              "weak": "Weak suggestions", "none": "Nothing found", "later": "Not sure yet",
+              "unqueried": "Waiting for search"}
 RELATIONS = ("closeMatch", "exactMatch")   # Q1: closeMatch by default, exactMatch under "advanced"
 
 
@@ -114,7 +119,11 @@ def visible_contributed_pks(user, cands):
         parsed = parse_contributed_id(c.candidate_id) if str(c.candidate_id).startswith("whg:") else None
         if parsed:
             pks.add(parsed[0])
-    return visible_dataset_pks(user, pks) if pks else set()
+    if not pks:
+        return set()
+    # ``visible_dataset_pks`` hands the ids back unchecked to a user who is not constrained (staff),
+    # so a dataset that no longer exists would count as visible to them: intersect with what exists.
+    return set(Dataset.objects.filter(pk__in=visible_dataset_pks(user, pks)).values_list("pk", flat=True))
 
 
 def candidate_visible(c, visible_pks):
@@ -151,6 +160,91 @@ def record_location(place):
         return None
 
 
+GROUP_KM = 2.0   # suggestions from different sources this close, with the same name, are one place
+
+
+def _norm_name(v):
+    """A name for comparing, not showing: no accents, no case, letters and digits only."""
+    v = unicodedata.normalize("NFKD", str(v or "")).casefold()
+    return re.sub(r"[\W_]+", "", "".join(ch for ch in v if not unicodedata.combining(ch)))
+
+
+def _km(a, b):
+    r = 6371.0088
+    p1, p2 = math.radians(a[1]), math.radians(b[1])
+    h = (math.sin((p2 - p1) / 2) ** 2
+         + math.cos(p1) * math.cos(p2) * math.sin(math.radians(b[0] - a[0]) / 2) ** 2)
+    return 2 * r * math.asin(math.sqrt(h))
+
+
+def group_candidates(cands):
+    """Mark suggestions that are probably ONE place described by more than one source (the same
+    town in GeoNames and in Wikidata). ``cands`` are the serialised suggestions of one record;
+    each gets ``group``: None, or the 1-based rank of the best-ranked member of its group. Two
+    suggestions are joined when they come from different sources, both have a location no more
+    than ``GROUP_KM`` apart, and one's title is a name of the other. This is presentation only:
+    nothing is merged, and every member keeps its own decision and its own Link."""
+    n = len(cands)
+    parent = list(range(n))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def names(c):
+        card = c.get("card") or {}
+        out = {_norm_name(card.get("title") or c.get("title"))}
+        out.update(_norm_name(x.get("label")) for x in (card.get("names") or []) if isinstance(x, dict))
+        out.discard("")
+        return out
+
+    nm = [names(c) for c in cands]
+    spaces = [{c.get("namespace") or ""} for c in cands]   # per root: the sources already in the group
+    for i in range(n):
+        for j in range(i + 1, n):
+            a, b = cands[i], cands[j]
+            if (a.get("namespace") or "") == (b.get("namespace") or ""):
+                continue
+            if not (isinstance(a.get("location"), list) and isinstance(b.get("location"), list)):
+                continue
+            if _km(a["location"], b["location"]) > GROUP_KM or not (nm[i] & nm[j]):
+                continue
+            ri, rj = find(i), find(j)
+            # One source never has two members in a group: two GeoNames entries are two places
+            # however close they lie, so a Wikidata entry cannot make them one.
+            if ri == rj or spaces[ri] & spaces[rj]:
+                continue
+            parent[rj] = ri
+            spaces[ri] |= spaces[rj]
+    members = {}
+    for i in range(n):
+        members.setdefault(find(i), []).append(i)
+    for idx in members.values():
+        first = min(cands[i]["rank"] for i in idx)
+        for i in idx:
+            cands[i]["group"] = first if len(idx) > 1 else None
+    return cands
+
+
+def _record_details(p):
+    """What the person needs to compare against: the record's other names, its types and country
+    codes, from rows already loaded (``feed_candidates`` prefetches them)."""
+    names, seen = [], {p.title}
+    for n in p.names.all():
+        if n.toponym and n.toponym not in seen:
+            seen.add(n.toponym)
+            names.append(n.toponym)
+    types = []
+    for t in p.types.all():
+        j = t.jsonb or {}
+        label = j.get("sourceLabel") or j.get("label")
+        if label and label not in types:
+            types.append(label)
+    return {"names": names[:8], "types": types[:4], "ccodes": list(p.ccodes or [])[:4]}
+
+
 def _candidate_json(c, visible_pks=frozenset()):
     sig = c.signals or {}
     location, withheld = candidate_location(c, visible_pks)
@@ -171,9 +265,11 @@ def _record_json(st, cands, visible_pks=frozenset()):
             "tier": st.tier, "state": st.state, "has_geometry": st.has_geometry,
             "location": record_location(p),
             "minmax": p.minmax, "note": st.note, "last_failure": st.last_failure,
+            "decided_at": st.decided_at.isoformat() if st.decided_at else None,
+            **_record_details(p),
             # Ranks are renumbered over what is shown, so a hidden suggestion leaves no gap.
-            "candidates": [{**_candidate_json(c, visible_pks), "rank": n}
-                           for n, c in enumerate(cands, start=1)]}
+            "candidates": group_candidates([{**_candidate_json(c, visible_pks), "rank": n}
+                                            for n, c in enumerate(cands, start=1)])}
 
 
 @login_required
@@ -203,7 +299,8 @@ def feed_candidates(request, id):
     order = {"confident": ("has_geometry", "-shared_count", "place_id"),
              "ambiguous": ("-shared_count", "place_id")}.get(tab, ("place_id",))
     qs = (RecordReviewState.objects.filter(dataset=ds).filter(_tab_q(tab))
-          .select_related("place").prefetch_related("place__geoms").order_by(*order))
+          .select_related("place").prefetch_related("place__geoms", "place__names", "place__types")
+          .order_by(*order))
     total = qs.count()
     page = list(qs[offset:offset + PAGE_SIZE])
     cands = {}
@@ -225,6 +322,52 @@ def _refused(exc):
     return JsonResponse({"error": exc.message}, status=exc.status)
 
 
+# "prefilled" was retired 2026-11-17: the page never fills in a decision for the person, so a
+# decision claiming that source is refused (rows written earlier keep their stored value).
+SOURCES = ("explicit", "default")
+DECISIONS = ("same", "not", "unsure")
+
+
+def _link_one(request, ds, st, c, target, relation, certainty, note, source=""):
+    """One Link from a suggestion (``c``) or a hand-search target, through the attestation rules.
+    A hand-search Link has no candidate, so it is marked in its frozen evidence with the feed
+    context that made it; Undo matches on this. Returns the attestation id."""
+    from api import attestations
+    subject = f"whg:{st.place_id}"
+    evidence = {"feed_dataset": ds.pk, "feed_place": st.place_id, "hand_search": True} if c is None else {
+        "generation": c.generation_id, "tier": c.tier, "rank": c.rank,
+        "confidence": c.gateway_confidence, "signals": c.signals,
+        "explanation": (c.explanation or {}).get("sentence", ""),
+        "feed_dataset": ds.pk, "feed_place": st.place_id, "decision_source": source or "explicit"}
+    row, _created = attestations.create(
+        request.user, {"place_a": subject, "place_b": target, "relation_type": relation,
+                       "certainty": certainty, "justification": note or None},
+        candidate=c, evidence=evidence)
+    if c is not None:
+        c.status, c.decided_at, c.decided_by = "accepted", timezone.now(), request.user
+        c.decision_source = source or "explicit"
+        c.save(update_fields=["status", "decided_at", "decided_by", "decision_source"])
+    return row.id
+
+
+def _reject_one(request, st, c, note, distinct=False, source="explicit"):
+    """Set one suggestion aside ("not this one"), and with ``distinct`` also say so as a
+    statement others can see. Returns the attestation id or None."""
+    from api import attestations
+    made = None
+    if distinct:
+        row, _ = attestations.create(
+            request.user, {"place_a": f"whg:{st.place_id}", "place_b": c.candidate_id,
+                           "relation_type": "distinct", "justification": note or None},
+            candidate=c, evidence={"generation": c.generation_id, "tier": c.tier,
+                                   "decision_source": source})
+        made = row.id
+    c.status, c.decided_at, c.decided_by = "rejected", timezone.now(), request.user
+    c.decision_source = source
+    c.save(update_fields=["status", "decided_at", "decided_by", "decision_source"])
+    return made
+
+
 @login_required
 @require_POST
 def feed_review(request, id):
@@ -242,12 +385,15 @@ def feed_review(request, id):
         return JsonResponse({"error": "not found"}, status=404)
     note = str(body.get("note") or "").strip()[:2000]
     now = timezone.now()
-    subject = f"whg:{st.place_id}"
     cand_ids = [int(x) for x in (body.get("candidates") or []) if str(x).isdigit()]
     cands = list(MatchCandidate.objects.filter(place=st.place, pk__in=cand_ids).exclude(status="stale"))
     if len(cands) != len(set(cand_ids)):
         return JsonResponse({"error": "not found"}, status=404)
     made = []
+
+    def reply():
+        return JsonResponse({"place": st.place_id, "state": st.state, "attestations": made,
+                             "counts": tab_counts(ds), "progress": progress(ds)})
 
     if action == "link":
         relation = body.get("relation") or "closeMatch"
@@ -259,25 +405,15 @@ def feed_review(request, id):
             targets.append((None, str(body["target"])))
         if not targets:
             return JsonResponse({"error": "nothing to link"}, status=400)
+        if any(c.status == "rejected" for c in cands):
+            # Setting a suggestion aside and then linking it would leave the record saying both.
+            return JsonResponse({"error": "A suggestion you set aside cannot be marked Same place until you undo that."},
+                                status=409)
         try:
             with transaction.atomic():
                 for c, target in targets:
-                    # A hand-search Link has no candidate, so it is marked in its frozen
-                    # evidence with the feed context that made it; Undo matches on this.
-                    evidence = {"feed_dataset": ds.pk, "feed_place": st.place_id,
-                                "hand_search": True} if c is None else {
-                        "generation": c.generation_id, "tier": c.tier, "rank": c.rank,
-                        "confidence": c.gateway_confidence, "signals": c.signals,
-                        "explanation": (c.explanation or {}).get("sentence", ""),
-                        "feed_dataset": ds.pk, "feed_place": st.place_id}
-                    row, _created = attestations.create(
-                        request.user, {"place_a": subject, "place_b": target, "relation_type": relation,
-                                       "certainty": certainty, "justification": note or None},
-                        candidate=c, evidence=evidence)
-                    made.append(row.id)
-                    if c is not None:
-                        c.status, c.decided_at, c.decided_by = "accepted", now, request.user
-                        c.save(update_fields=["status", "decided_at", "decided_by"])
+                    made.append(_link_one(request, ds, st, c, target, relation, certainty, note,
+                                          source=body.get("source") or "explicit"))
         except attestations.AttestationRefused as exc:
             return _refused(exc)
         st.state = "linked"
@@ -286,23 +422,73 @@ def feed_review(request, id):
             return JsonResponse({"error": "nothing to reject"}, status=400)
         try:
             with transaction.atomic():
-                if body.get("distinct"):   # also say so, as a statement others can see
-                    for c in cands:
-                        row, _ = attestations.create(
-                            request.user, {"place_a": subject, "place_b": c.candidate_id,
-                                           "relation_type": "distinct", "justification": note or None},
-                            candidate=c, evidence={"generation": c.generation_id, "tier": c.tier})
-                        made.append(row.id)
                 for c in cands:
-                    c.status, c.decided_at, c.decided_by = "rejected", now, request.user
-                    c.save(update_fields=["status", "decided_at", "decided_by"])
+                    made_id = _reject_one(request, st, c, note, distinct=bool(body.get("distinct")))
+                    if made_id:
+                        made.append(made_id)
         except attestations.AttestationRefused as exc:
             return _refused(exc)
-        return JsonResponse({"place": st.place_id, "state": st.state, "attestations": made,
-                             "counts": tab_counts(ds)})
+        return reply()
+    elif action == "decide":
+        # Every row of the record decided at once. "unsure" leaves a suggestion as it is.
+        relation = body.get("relation") or "closeMatch"
+        if relation not in RELATIONS:
+            return JsonResponse({"error": f"relation must be one of {list(RELATIONS)}"}, status=400)
+        certainty = body.get("certainty") or ""
+        publish = bool(body.get("distinct"))
+        raw = body.get("decisions")
+        if not isinstance(raw, list) or not raw:
+            return JsonResponse({"error": "decisions must be a non-empty list"}, status=400)
+        pool = {c.pk: c for c in MatchCandidate.objects.filter(place=st.place, generation_id=st.generation_id)
+                .exclude(status="stale")}
+        picked, seen = [], set()
+        for d in raw:
+            try:
+                cid = int(d.get("candidate"))
+            except (TypeError, ValueError, AttributeError):
+                return JsonResponse({"error": "each decision needs a candidate id"}, status=400)
+            dec, src = d.get("decision"), d.get("source") or "explicit"
+            if dec not in DECISIONS or src not in SOURCES:
+                return JsonResponse({"error": "decision must be one of "
+                                              f"{list(DECISIONS)} and source one of {list(SOURCES)}"}, status=400)
+            if cid not in pool or cid in seen:
+                return JsonResponse({"error": "not found"}, status=404)
+            seen.add(cid)
+            picked.append((pool[cid], dec, src))
+        same = [(c, src) for c, dec, src in picked if dec == "same"]
+        nots = [(c, src) for c, dec, src in picked if dec == "not"]
+        if not same and not nots:
+            return JsonResponse({"error": "nothing decided"}, status=400)
+        if any(c.status == "rejected" for c, _ in same):
+            return JsonResponse({"error": "A suggestion you set aside cannot be marked Same place until you undo that."},
+                                status=409)
+        if any(c.status == "accepted" for c, _ in nots):
+            return JsonResponse({"error": "A suggestion you marked Same place cannot be set aside until you undo that."},
+                                status=409)
+        try:
+            with transaction.atomic():
+                for c, src in same:
+                    made.append(_link_one(request, ds, st, c, c.candidate_id, relation, certainty, note,
+                                          source=src))
+                for c, src in nots:
+                    # A statement others can see is made only for a negative the person marked
+                    # themselves, never for one the page filled in.
+                    made_id = _reject_one(request, st, c, note, distinct=publish and src == "explicit",
+                                          source=src)
+                    if made_id:
+                        made.append(made_id)
+        except attestations.AttestationRefused as exc:
+            return _refused(exc)
+        if same:
+            st.state = "linked"
+        else:
+            visible_pks = visible_contributed_pks(request.user, pool.values())
+            shown = [c for c in pool.values() if candidate_visible(c, visible_pks)]
+            if shown and all(c.status == "rejected" for c in shown):
+                st.state = "no_good_match"
     elif action == "none":
         (MatchCandidate.objects.filter(place=st.place, generation_id=st.generation_id, status="suggested")
-         .update(status="rejected", decided_at=now, decided_by=request.user))
+         .update(status="rejected", decided_at=now, decided_by=request.user, decision_source="none_fits"))
         st.state = "no_good_match"
     elif action == "later":
         st.state = "later"
@@ -319,17 +505,18 @@ def feed_review(request, id):
                 user=request.user, status__in=("active", "pending")):
             attestations.withdraw(row, by=request.user)
         (MatchCandidate.objects.filter(place=st.place, generation_id=st.generation_id)
-         .exclude(status="stale").update(status="suggested", decided_at=None, decided_by=None))
+         .exclude(status="stale").update(status="suggested", decided_at=None, decided_by=None,
+                                         decision_source=""))
         st.state = "unreviewed"
     else:
-        return JsonResponse({"error": "action must be link, reject, none, later or reopen"}, status=400)
+        return JsonResponse(
+            {"error": "action must be link, reject, decide, none, later or reopen"}, status=400)
 
     st.decided_at, st.decided_by = now, request.user
     if note:
         st.note = note
     st.save()
-    return JsonResponse({"place": st.place_id, "state": st.state, "attestations": made,
-                         "counts": tab_counts(ds)})
+    return reply()
 
 
 def constraint_chips(generation, place):

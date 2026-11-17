@@ -1,11 +1,14 @@
 // wb-labels.js — client mirror of the server terminology map (main/labels.py).
 //
-// v3.3 display-layer relabel (plan-collaborativeCollections §2 & §11): "Dataset" → "Gazetteer",
-// "Dataset Collection" → "Gazetteer Group"; "Place Collection" kept. Route every user-facing
+// Naming rule (2026-09-02; site-wide 2026-11-17): a contributor brings a "dataset"; once reconciled
+// and published it is a "gazetteer" ("Gazetteer Group" for a group of published ones); the
+// authorities matched against are "source gazetteers". "Place Collection" kept. Route every user-facing
 // Workbench string that names one of these concepts through LABELS so the wording lives in one
 // place. KEEP IN LOCK-STEP with main/labels.py — the two are one source of truth.
 
 export const LABELS = {
+  dataset: 'Dataset',
+  dataset_plural: 'Datasets',
   gazetteer: 'Gazetteer',
   gazetteer_plural: 'Gazetteers',
   gazetteer_group: 'Gazetteer Group',

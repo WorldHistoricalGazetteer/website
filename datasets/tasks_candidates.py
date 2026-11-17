@@ -429,7 +429,7 @@ def notify_owner(generation):
         return bool(WHGmail(context={
             "template": "suggestions_ready",
             "to_email": owner.email,
-            "subject": "Suggested links for your WHG dataset are ready",
+            "subject": "Suggested matches for your WHG dataset are ready",
             "greeting_name": owner.name,
             "reply_to": settings.DEFAULT_FROM_EDITORIAL,
             "dataset_title": ds.title,

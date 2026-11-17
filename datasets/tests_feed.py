@@ -287,7 +287,7 @@ class LinksProgressSectionTests(FeedTestBase):
         self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk]})
         html = self.render_for(self.owner)
         self.assertIn('data-testid="links-progress"', html)
-        self.assertIn("1 link", html)
+        self.assertIn("1 match", html)
         self.assertIn("50% reviewed", html)
         from unittest.mock import patch
         self.ds.public = True
@@ -460,6 +460,19 @@ class FeedMapDataTests(FeedTestBase):
         self.assertIn(good.candidate_id, [c["candidate_id"] for c in cands])
         self.assertHidden(gone, body, cands)
 
+    def test_a_suggestion_from_a_deleted_dataset_is_left_out_for_staff_too(self):
+        """Staff see every EXISTING dataset, so their visibility filter is unconstrained and used
+        to hand the ids back unchecked: a dataset that no longer exists counted as visible."""
+        get_user_model().objects.filter(pk=self.owner.pk).update(is_staff=True)
+        good = self.contributed(self.other, "o1", 5)
+        gone = MatchCandidate.objects.create(
+            dataset=self.ds, place=self.ware, subject_id=f"whg:{self.ds.pk}:f1", candidate_id="whg:999999:z",
+            candidate_title="Ware Zqx Gone Abbey", tier="confident", rank=6, generation=self.gen,
+            card={"title": "Ware Zqx Gone Abbey", "repr_point": list(self.SECRET)})
+        body, cands = self.ware_cands()
+        self.assertIn(good.candidate_id, [c["candidate_id"] for c in cands])
+        self.assertHidden(gone, body, cands)
+
     def test_a_record_whose_only_suggestions_are_hidden_shows_none(self):
         from datasets.models import Dataset
         other_user = get_user_model().objects.create_user(username="feed_mn", email="mn@example.org",
@@ -486,3 +499,141 @@ class FeedMapDataTests(FeedTestBase):
         r = self.c.get(self.base)
         for el in ('id="mf_map_panel"', 'id="mf_map"', 'id="mf_map_none"', 'id="mf_map_failed"'):
             self.assertContains(r, el)
+
+
+class FeedDecideTests(FeedTestBase):
+    """``decide``: every row of a record decided in one request, with how each decision arose."""
+
+    def decide(self, place, decisions, **extra):
+        return self.post({"place": place.pk, "action": "decide", "decisions": decisions, **extra})
+
+    def d(self, place, cid, decision, source="explicit"):
+        return {"candidate": self.cand(place, cid).pk, "decision": decision, "source": source}
+
+    def test_one_same_leaves_the_other_suggestions_untouched(self):
+        # choosing one place is not a judgement of the rest: only what is sent is written
+        r = self.decide(self.brox, [self.d(self.brox, "gn:6", "same")])
+        self.assertEqual(r.status_code, 200, r.content)
+        gn, wd = self.cand(self.brox, "gn:6"), self.cand(self.brox, "wd:Q7")
+        self.assertEqual((gn.status, gn.decision_source), ("accepted", "explicit"))
+        self.assertEqual((wd.status, wd.decision_source), ("suggested", ""))
+        self.assertEqual(RecordReviewState.objects.get(place=self.brox).state, "linked")
+        self.assertEqual(ContributorAttestation.objects.count(), 1)       # a rejection is not a statement
+        row = ContributorAttestation.objects.get()
+        self.assertEqual((row.relation_type, row.candidate_id, row.evidence["decision_source"]),
+                         ("closeMatch", gn.pk, "explicit"))
+
+    def test_a_decision_the_page_filled_in_is_refused(self):
+        r = self.decide(self.brox, [self.d(self.brox, "gn:6", "same"), self.d(self.brox, "wd:Q7", "not", "prefilled")])
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(ContributorAttestation.objects.count(), 0)
+        self.assertEqual(self.cand(self.brox, "wd:Q7").status, "suggested")
+
+    def test_a_public_not_the_same_statement_is_made_only_for_a_negative_the_person_marked(self):
+        self.brox_states = self.decide(
+            self.brox, [self.d(self.brox, "gn:6", "not", "explicit"),
+                        self.d(self.brox, "wd:Q7", "not", "explicit")], distinct=True)
+        self.assertEqual(self.brox_states.status_code, 200, self.brox_states.content)
+        rows = list(ContributorAttestation.objects.all())
+        self.assertEqual(sorted((r.relation_type, r.candidate_id) for r in rows),
+                         sorted([("distinct", self.cand(self.brox, "gn:6").pk), ("distinct", self.cand(self.brox, "wd:Q7").pk)]))
+        # Both were set aside, so nothing is left to choose: the record is "none fits".
+        self.assertEqual(RecordReviewState.objects.get(place=self.brox).state, "no_good_match")
+        # The same request without the box ticked makes no statement at all.
+        MatchCandidate.objects.filter(place=self.brox).update(status="suggested", decision_source="")
+        ContributorAttestation.objects.all().delete()
+        self.decide(self.brox, [self.d(self.brox, "gn:6", "not")])
+        self.assertFalse(ContributorAttestation.objects.exists())
+
+    def test_unsure_leaves_the_suggestion_as_it_is_and_the_record_open(self):
+        r = self.decide(self.brox, [self.d(self.brox, "gn:6", "not"), self.d(self.brox, "wd:Q7", "unsure")])
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(self.cand(self.brox, "wd:Q7").status, "suggested")
+        self.assertEqual(self.cand(self.brox, "gn:6").status, "rejected")
+        self.assertEqual(r.json()["state"], "unreviewed")                 # still to decide
+        self.assertEqual(r.json()["counts"]["confident"], 1)
+
+    def test_bad_input_is_refused(self):
+        ok = self.d(self.brox, "gn:6", "same")
+        for body in ([], None, "x"):
+            self.assertEqual(self.post({"place": self.brox.pk, "action": "decide", "decisions": body}).status_code, 400)
+        self.assertEqual(self.decide(self.brox, [{**ok, "decision": "maybe"}]).status_code, 400)
+        self.assertEqual(self.decide(self.brox, [{**ok, "source": "guess"}]).status_code, 400)
+        self.assertEqual(self.decide(self.brox, [{"decision": "same"}]).status_code, 400)
+        self.assertEqual(self.decide(self.brox, [self.d(self.brox, "gn:6", "unsure")]).status_code, 400)
+        self.assertEqual(self.decide(self.brox, [ok], relation="distinct").status_code, 400)
+        # another record's suggestion, an unknown id, and the same row twice
+        self.assertEqual(self.decide(self.brox, [self.d(self.ware, "gn:4", "same")]).status_code, 404)
+        self.assertEqual(self.decide(self.brox, [{**ok, "candidate": 99999999}]).status_code, 404)
+        self.assertEqual(self.decide(self.brox, [ok, ok]).status_code, 404)
+        self.assertFalse(ContributorAttestation.objects.exists())
+        self.assertEqual(set(MatchCandidate.objects.filter(place=self.brox).values_list("status", flat=True)),
+                         {"suggested"})
+        self.assertEqual(self.decide(self.brox, [ok]).status_code, 200)    # the same request, fixed
+
+    def test_a_suggestion_set_aside_cannot_then_be_linked_without_undoing(self):
+        gn = self.cand(self.brox, "gn:6")
+        self.post({"place": self.brox.pk, "action": "reject", "candidates": [gn.pk]})
+        r = self.post({"place": self.brox.pk, "action": "link", "candidates": [gn.pk]})
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(self.decide(self.brox, [self.d(self.brox, "gn:6", "same")]).status_code, 409)
+        self.assertFalse(ContributorAttestation.objects.exists())
+        self.post({"place": self.brox.pk, "action": "reopen"})
+        self.assertEqual(self.post({"place": self.brox.pk, "action": "link", "candidates": [gn.pk]}).status_code, 200)
+        # and the other way round: a linked suggestion cannot be set aside
+        self.assertEqual(self.decide(self.brox, [self.d(self.brox, "gn:6", "not")]).status_code, 409)
+
+    def test_none_records_its_source_and_undo_clears_it(self):
+        self.post({"place": self.brox.pk, "action": "none"})
+        self.assertEqual(set(MatchCandidate.objects.filter(place=self.brox).values_list("decision_source", flat=True)),
+                         {"none_fits"})
+        self.post({"place": self.brox.pk, "action": "reopen"})
+        self.assertEqual(set(MatchCandidate.objects.filter(place=self.brox).values_list("decision_source", flat=True)),
+                         {""})
+
+    def test_every_review_reply_carries_the_progress_the_header_shows(self):
+        r = self.post({"place": self.ware.pk, "action": "later"})
+        p = r.json()["progress"]
+        self.assertEqual((p["records"], p["reviewed"], p["links"]), (2, 1, 0))
+        r = self.decide(self.brox, [self.d(self.brox, "gn:6", "same")])
+        p = r.json()["progress"]
+        self.assertEqual((p["reviewed"], p["links"]), (2, 1))
+
+
+class FeedRecordDetailsAndGroupsTests(FeedTestBase):
+    def test_the_record_is_described_by_its_other_names_types_and_countries(self):
+        from places.models import PlaceName, PlaceType
+        PlaceName.objects.create(place=self.ware, src_id="f1", toponym="Wara", jsonb={"toponym": "Wara"})
+        PlaceName.objects.create(place=self.ware, src_id="f1", toponym="Ware", jsonb={"toponym": "Ware"})  # the title
+        PlaceType.objects.create(place=self.ware, src_id="f1", fclass="P", jsonb={"sourceLabel": "market town"})
+        type(self.ware).objects.filter(pk=self.ware.pk).update(ccodes=["GB"])
+        rec = {x["title"]: x for x in self.c.get(self.base + "candidates/?tier=confident").json()["records"]}["Ware"]
+        self.assertEqual((rec["names"], rec["types"], rec["ccodes"]), (["Wara"], ["market town"], ["GB"]))
+        self.assertIn("decided_at", rec)
+
+    def cand_json(self, rank, ns, title, point, names=()):
+        return {"rank": rank, "namespace": ns, "title": title, "location": point,
+                "card": {"title": title, "names": [{"label": n} for n in names]}}
+
+    def test_the_same_place_in_two_sources_is_grouped_and_nothing_else(self):
+        from datasets.views_feed import group_candidates
+        cs = group_candidates([
+            self.cand_json(1, "gn", "Cairo", [31.2497, 30.0626], ["القاهرة"]),
+            self.cand_json(2, "wd", "القاهرة", [31.2357, 30.0444]),                 # 2.4 km: too far apart
+            self.cand_json(3, "wd", "Cairo", [31.2500, 30.0630]),                   # 50 m, same name: one place
+            self.cand_json(4, "gn", "Cairo", [31.2497, 30.0626]),                   # same source as #1: never grouped
+            self.cand_json(5, "wd", "Cairo", [-89.17, 37.00]),                      # same name, other continent
+            self.cand_json(6, "osm", "Caïro", [31.2501, 30.0627]),                  # accents and case ignored
+            self.cand_json(7, "tgn", "Cairo", None)])                               # no location: never grouped
+        self.assertEqual([c["group"] for c in cs], [1, None, 1, None, None, 1, None])
+
+    def test_the_endpoint_serves_the_group(self):
+        hert = self.place("Hertford", "f9", (-0.08, 51.80))
+        self.fake.by_query["Hertford"] = response(
+            hit("gn:41", "Hertford", (-0.08, 51.80), types=[GN_TOWN]),
+            hit("wd:Q41", "Hertford", (-0.0801, 51.8001), types=[GN_TOWN]))
+        candidates.record_candidates(hert, self.gen, self.owner)
+        tier = RecordReviewState.objects.get(place=hert).tier
+        recs = {x["title"]: x for x in self.c.get(self.base + f"candidates/?tier={tier}").json()["records"]}
+        self.assertEqual({c["candidate_id"]: c["group"] for c in recs["Hertford"]["candidates"]},
+                         {"gn:41": 1, "wd:Q41": 1})

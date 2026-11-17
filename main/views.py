@@ -31,6 +31,7 @@ from datasets.models import Dataset
 from datasets.tasks import testAdd
 from .models import Announcement, Link, DownloadFile, Comment
 from places.models import Place
+from places.v4_landing import linking_open_to
 from resources.models import Resource
 from whgmail.messaging import WHGmail, zulip_notification
 
@@ -1786,7 +1787,8 @@ def dashboard_user_view(request):
         'is_admin': is_admin,
         'is_leader': is_leader,
         'box_titles': ['Datasets', 'Place Collections', 'Dataset Collections', 'Study Areas', 'Groups'],
-
+        # "Link your records" (place#338) is offered beside each of the user's own datasets
+        'linking_open': linking_open_to(user),
     }
     return render(request, 'main/dashboard_user.html', context)
 

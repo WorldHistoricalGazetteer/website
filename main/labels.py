@@ -1,9 +1,13 @@
 """
 Centralised user-facing terminology map (plan-collaborativeCollections §2 & §11).
 
-v3.3 introduces a display-layer relabel ONLY: "Dataset" → "Gazetteer", "Dataset Collection" →
-"Gazetteer Group", while "Place Collection" is kept. **No DB values, model names, URLs, or API
-fields change** — those are a later, separate migration (§14). Every *user-facing* string that names
+NAMING RULE (decided 2026-09-02, adopted site-wide 2026-11-17; supersedes the unconditional
+"Dataset → Gazetteer" relabel of 2026-07-09): a contributor brings a **dataset**; once it is
+reconciled and published it is a **gazetteer**. So "gazetteer" and "Gazetteer Group" below are only
+for PUBLISHED material; anything still being uploaded, matched or reviewed is a "dataset". The
+authorities WHG matches against (GeoNames, Wikidata ...) are "source gazetteers" in user copy.
+"Place Collection" is kept. **No DB values, model names, URLs, or API fields change**; there is
+no planned deep rename. Every *user-facing* string that names
 one of these concepts should route through this map (server: ``{% label 'gazetteer' %}``; client:
 the mirrored ``LABELS`` constant in whg/webpack/js/wb-labels.js) so the eventual deep rename — and
 any future wording tweak — is a one-line change here.
@@ -13,7 +17,9 @@ Keep this file and wb-labels.js in lock-step: they are two views of one source o
 
 # key → user-facing label (singular). Add plural/verb variants only when a template needs them.
 LABELS = {
-    # legacy datasets.Dataset — the code/DB name stays "Dataset"; users see "Gazetteer".
+    # datasets.Dataset once PUBLISHED — the code/DB name stays "Dataset"; unpublished it is "dataset".
+    'dataset': 'Dataset',
+    'dataset_plural': 'Datasets',
     'gazetteer': 'Gazetteer',
     'gazetteer_plural': 'Gazetteers',
     # Collection(collection_class='dataset') — was "Dataset collection".

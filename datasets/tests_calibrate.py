@@ -112,6 +112,24 @@ class CalibrateTests(TestCase):
             self.run_cmd()
         self.assertIn("90 labelled negatives", str(cm.exception))
 
+    def test_feed_negatives_are_counted_by_how_they_arose_and_prefilled_ones_can_be_left_out(self):
+        from datasets.management.commands.calibrate_match_tiers import calibrate
+        for src in ("explicit", "explicit", "prefilled", "prefilled", "prefilled", "none_fits", ""):
+            self.cand("ambiguous", f"gn:{self.n + 1}", status="rejected").match_candidates.update(decision_source=src)
+        self.cand("ambiguous", "gn:900", status="accepted")
+        everything = calibrate()
+        self.assertEqual(everything["feed_negatives_by_decision_source"],
+                         {"explicit": 2, "prefilled": 3, "none_fits": 1, "unrecorded": 1})
+        self.assertEqual((everything["negatives"], everything["positives"]), (7, 1))
+        strict = calibrate(explicit_only=True)
+        self.assertEqual((strict["negatives"], strict["positives"]), (4, 1))      # the 3 prefilled left out
+        self.assertTrue(strict["explicit_only"])
+        # the breakdown still says what was left out, and the command takes the option
+        self.assertEqual(strict["feed_negatives_by_decision_source"]["prefilled"], 3)
+        with self.assertRaises(CommandError) as cm:
+            self.run_cmd("--explicit-only")
+        self.assertIn("4 labelled negatives", str(cm.exception))
+
     def test_norm_id(self):
         self.assertEqual(norm_id("http://www.wikidata.org/entity/Q90"), "wd:Q90")
         self.assertEqual(norm_id("Q90", "wd"), "wd:Q90")

@@ -125,6 +125,10 @@
 	              <i class="fas fa-eye linky"></i></a>
 	            <a href="{% url 'datasets:ds_status' item.id %}" title="edit">
 		            <i class="fas fa-edit linky"></i></a>
+              {% if linking_open %}
+              <a href="{% url 'datasets:ds_matches' item.id %}" title="Match your places to source gazetteers (beta)" data-testid="dash-link-records">
+                <i class="fas fa-link linky"></i></a>
+              {% endif %}
             </div>
           </div>
           {% endif %}
