@@ -175,19 +175,14 @@ function settled(c) { return c.status === 'accepted' || c.status === 'rejected';
 function isDecided(r) { return S.tab === 'later' ? r.state !== 'later' : r.state !== 'unreviewed'; }
 
 // ── Decisions: the three states, and what choosing one place does to the others ───────────────────
-// Nothing is ever filled in for the person: a row is decided only by their own mark (or the
-// provisional default on a "Likely the same place" record, which Enter confirms). Kept as a hook so
-// every place that changes a decision still goes through one function.
+// Nothing is ever filled in for the person: a row is decided only by their own mark (there is no
+// default, even on a "Likely the same place" record). Kept as a hook so every place that
+// changes a decision still goes through one function.
 function recompute() { /* deliberately empty */ }
 
-function resetDecisions(r) {
+function resetDecisions() {
   S.dec.clear();
   S.focus = null;
-  const first = r && r.candidates[0];
-  if (r && r.tier === 'confident' && r.state === 'unreviewed' && first && !settled(first)) {
-    S.dec.set(0, { d: 'same', src: 'default' });
-    recompute(r);
-  }
 }
 
 function setRow(i, d) {
@@ -198,7 +193,6 @@ function setRow(i, d) {
   if (had && had.d === d && had.src !== 'prefilled') S.dec.delete(i);   // the same press again takes it back
   else {
     S.dec.set(i, { d, src: 'explicit' });
-    if (d === 'same') for (const [j, v] of [...S.dec]) if (v.src === 'default') S.dec.delete(j);
   }
   recompute(r);
   S.focus = i;
@@ -210,7 +204,6 @@ function setGroup(g, d) {
   const r = current();
   if (!r) return;
   r.candidates.forEach((c, i) => { if (c.group === g && !settled(c)) S.dec.set(i, { d, src: 'explicit' }); });
-  if (d === 'same') for (const [j, v] of [...S.dec]) if (v.src === 'default') S.dec.delete(j);
   recompute(r);
   renderRecord({ keepSearch: true, refit: false });
 }
@@ -232,9 +225,7 @@ function summaryHTML(r, t) {
   const part = (label, list, cls) => (list.length ? `<span class="mf-sum mf-sum--${cls}"><b>${label}:</b> ${nums(list)}</span>` : '');
   const parts = [part('Same place', t.same, 'same'), part('Not the same', t.not, 'not'),
     part("Can't tell", t.unsure, 'unsure'), part('Not marked', t.open, 'open')].filter(Boolean);
-  const dflt = [...S.dec.values()].some((v) => v.src === 'default');
-  const hint = dflt ? 'The first suggestion is set as the same place: change it if it is not.'
-    : (t.same.length && t.open.length) ? 'Suggestions you did not mark are left as they are.' : '';
+  const hint = (t.same.length && t.open.length) ? 'Suggestions you did not mark are left as they are.' : '';
   return `${parts.join(' ') || '<span class="text-secondary">Nothing marked yet.</span>'}${hint ? `<div class="small text-secondary">${hint}</div>` : ''}`;
 }
 
