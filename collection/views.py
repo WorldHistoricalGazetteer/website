@@ -951,6 +951,26 @@ CollectionLinkFormset = inlineformset_factory(
 
 
 # TODO: refactor to fewer views
+# The place-collection builders offer every non-superuser one extra WHG-owned sample dataset in the
+# "add places from a dataset" dropdown. The two builders have always looked up different labels
+# (create: 'owt10', update: 'owt10_foo'); kept as they were. A missing sample dataset must not take
+# the whole builder page down with a Dataset.DoesNotExist, so it is simply left out.
+SAMPLE_DATASET_LABEL_CREATE = 'owt10'
+SAMPLE_DATASET_LABEL_UPDATE = 'owt10_foo'
+
+
+def add_sample_dataset(ds_select, user, label):
+    """Insert the sample dataset (just before the last entry, as before) for non-superusers."""
+    if user.is_superuser:
+        return ds_select
+    sample = Dataset.objects.filter(label=label).first()
+    if sample is None:
+        logger.warning("Sample dataset %r not found; the collection builder dropdown goes without it", label)
+    else:
+        ds_select.insert(len(ds_select) - 1, sample)
+    return ds_select
+
+
 class PlaceCollectionCreateView(LoginRequiredMixin, CreateView):
     form_class = CollectionModelForm
     template_name = 'collection/place_collection_build.html'
@@ -978,8 +998,7 @@ class PlaceCollectionCreateView(LoginRequiredMixin, CreateView):
 
         # owners can include place from their datasets
         ds_select = [obj for obj in Dataset.objects.all().order_by('title') if user in obj.owners or user.is_superuser]
-        if not user.is_superuser:
-            ds_select.insert(len(ds_select) - 1, Dataset.objects.get(label='owt10'))
+        add_sample_dataset(ds_select, user, SAMPLE_DATASET_LABEL_CREATE)
 
         context['action'] = 'create'
         context['ds_select'] = ds_select
@@ -1091,8 +1110,7 @@ class PlaceCollectionUpdateView(LoginRequiredMixin, UpdateView):
         form_anno = TraceAnnotationModelForm(self.request.GET or None, auto_id="anno_%s")
         # populates dropdown
         ds_select = [obj for obj in Dataset.objects.all().order_by('title') if user in obj.owners or user.is_superuser]
-        if not user.is_superuser:
-            ds_select.insert(len(ds_select) - 1, Dataset.objects.get(label='owt10_foo'))
+        add_sample_dataset(ds_select, user, SAMPLE_DATASET_LABEL_UPDATE)
 
         context['action'] = 'update'
         context['ds_select'] = ds_select

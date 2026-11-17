@@ -13,7 +13,7 @@ from rest_framework import serializers
 from api.serializers_api import OptimizedPlaceSerializer, OptimizedPeriodSerializer, PeriodFeatureSerializer
 from areas.models import Area
 from main.choices import FEATURE_CLASSES
-from whg import settings
+from django.conf import settings
 
 logger = logging.getLogger('reconciliation')
 

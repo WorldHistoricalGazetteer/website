@@ -1,5 +1,5 @@
 from unittest.mock import patch, MagicMock
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from places.models import Place, CloseMatch
 from datasets.models import Dataset
 from datasets.tasks import maxID
@@ -89,14 +89,13 @@ class IndexMatchTestCase(TestCase):
                 return es_response_hit
             return es_response_no_hits
 
-        # indexMatch() lives in datasets.services, which does `from whg import settings` (the settings
-        # MODULE, not django.conf.settings), so that is the object to patch.
+        # indexMatch() reads django.conf.settings (it used to import the settings module directly,
+        # which override_settings could not reach)
         es = MagicMock()
         es.search.side_effect = mock_search
         es.index.return_value = {'result': 'created'}
         es.update.return_value = {'result': 'updated'}
-        with patch('datasets.services.settings.ES_CONN', es), \
-             patch('datasets.services.settings.ES_WHG', 'test_index'), \
+        with override_settings(ES_CONN=es, ES_WHG='test_index'), \
              patch('datasets.tasks.maxID', side_effect=mock_maxID):
 
             # Test case: No match found, create new parent

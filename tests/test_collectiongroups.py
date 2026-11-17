@@ -48,7 +48,7 @@ class CollectionGroupScenarioTestCase(TestCase):
         self.collection.group = self.collection_group
         self.collection.save()
 
-        # create the dataset the builder page hard-codes (label 'owt10_foo'; page load requires it)
+        # the sample dataset the builder adds to non-superusers' dropdowns (optional now; see collection/tests_sample_dataset.py)
         self.dataset = Dataset.objects.create(
             owner=self.user,
             title='Test Dataset',

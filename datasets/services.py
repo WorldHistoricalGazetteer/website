@@ -15,7 +15,7 @@ from django_celery_results.models import TaskResult
 from datasets.models import Hit, Dataset
 from elastic.es_utils import makeDoc
 from places.models import Place, PlaceGeom, PlaceName, PlaceLink, CloseMatch
-from whg import settings
+from django.conf import settings
 from .geometry_utils import _simplify_geometry
 from .helpers import link_uri, hit_is_geonames
 from .static.hashes.parents import ccodes as cchash
