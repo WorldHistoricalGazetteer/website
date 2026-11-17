@@ -193,7 +193,8 @@ function buildModal() {
           </div>
           <div class="lp-refine" hidden></div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer flex-wrap">
+          <p class="w-100 small text-muted mb-1">By contributing, you let WHG host, index, reformat and redistribute this data to operate the service (see the <a href="/terms_of_use/" target="_blank" rel="noopener">Terms of Use</a>); the licence you choose governs everyone else&rsquo;s use.</p>
           <a class="lp-fulllink me-auto small" href="/licenses/" target="_blank" rel="noopener">Full licence reference &amp; translations <i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
         </div>

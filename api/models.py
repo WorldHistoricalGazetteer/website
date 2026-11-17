@@ -39,6 +39,17 @@ class UserAPIProfile(models.Model):
     total_count = models.IntegerField(default=0)
     daily_limit = models.IntegerField(default=5000)
 
+    # Declared purpose, asked once when the first token is issued (place#349 C7). A
+    # statement by the user, recorded as information: it is not verified and gates nothing yet.
+    USE_CHOICES = [
+        ('research', 'Research or teaching'),
+        ('personal', 'Personal or community project (non-commercial)'),
+        ('commercial', 'Commercial or for-profit'),
+        ('other', 'Something else'),
+    ]
+    declared_use = models.CharField(max_length=12, blank=True, default='', choices=USE_CHOICES)
+    declared_use_at = models.DateTimeField(null=True, blank=True)
+
     def increment_usage(self, n=1):
         """Charge `n` units against today's allowance. `n` because a caller may spend the quota in
         units larger than one request — Map-your-Data's per-row extraction charges a row at a time

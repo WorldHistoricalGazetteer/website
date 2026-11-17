@@ -355,6 +355,19 @@
           </button>
         </div>
         <div id="no-token">
+          {% if not user.api_profile.declared_use %}
+          <div class="mb-2" id="declared-use-wrap">
+            <label for="declared-use" class="form-label small mb-1">What will you use the token for?</label>
+            <select id="declared-use" class="form-select form-select-sm" style="max-width:26rem">
+              <option value="">Choose one&hellip;</option>
+              <option value="research">Research or teaching</option>
+              <option value="personal">Personal or community project (non-commercial)</option>
+              <option value="commercial">Commercial or for-profit</option>
+              <option value="other">Something else</option>
+            </select>
+            <div class="form-text">Asked once. It helps us understand how WHG data is used; some sources&rsquo; terms differ by use.</div>
+          </div>
+          {% endif %}
           <button class="generate-token btn btn-primary btn-sm">
             <i class="fas fa-plus me-1"></i> Generate API Token
           </button>

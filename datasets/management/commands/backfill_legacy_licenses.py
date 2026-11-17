@@ -8,9 +8,13 @@ service have a confirmed basis for a retrospective licence; see place#158.
   cohort A  create_date >= 2024-07-15   contributor ticked the acceptance box
   cohort B  create_date <  2024-07-15   licence displayed but never recorded
 
-This command handles cohort A only. Cohort B is deliberately refused: the basis
-for it has not been confirmed, and a backfill is far harder to unpick than to
-postpone.
+Cohort A: contributors ticked the acceptance box (``legacy_acceptance``).
+Cohort B: the upload page displayed "License: CC BY 4.0" as a static row. Pitt
+(Tara, 2026-09) saw no issue treating that as CC BY 4.0, and SG ruled on
+2026-11-17 (place#349 C1) that the NON-PUBLIC cohort-B datasets are backfilled as
+``legacy_notice``. Public cohort-B datasets were handled row by row (place#158
+rulings, ``licensing/data/contributed_licence_proposals.json``) and are never
+touched here; neither are collections (still held).
 
 Dry by default — pass ``--commit`` to write.
 """
@@ -33,7 +37,7 @@ LEGACY_SPDX = "CC-BY-4.0"
 
 
 class Command(BaseCommand):
-    help = "Backfill CC-BY-4.0 onto cohort-A contributed datasets (place#158)."
+    help = "Backfill CC-BY-4.0 onto cohort-A, or non-public cohort-B, contributed datasets (place#158/#349)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -42,17 +46,10 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--cohort", default="a", choices=["a", "b"],
-            help="Cohort to process. Only 'a' is permitted; 'b' is blocked pending a ruling.",
+            help="Cohort to process. 'b' covers NON-PUBLIC datasets only (place#349 C1).",
         )
 
     def handle(self, *args, **opts):
-        if opts["cohort"] == "b":
-            raise CommandError(
-                "Cohort B is blocked. Those datasets predate the acceptance control: the "
-                "licence was displayed at upload but never recorded, and whether that "
-                "constitutes a grant has not been confirmed. See place#158 part 3."
-            )
-
         try:
             licence = License.objects.get(spdx_id=LEGACY_SPDX)
         except License.DoesNotExist:
@@ -61,7 +58,12 @@ class Command(BaseCommand):
                 f"catalogue before running this."
             )
 
-        cohort = Dataset.objects.filter(create_date__gte=ACCEPTANCE_LIVE_FROM)
+        if opts["cohort"] == "b":
+            cohort = Dataset.objects.filter(create_date__lt=ACCEPTANCE_LIVE_FROM, public=False)
+            source, label = "legacy_notice", f"Cohort B, non-public (create_date < {ACCEPTANCE_LIVE_FROM})"
+        else:
+            cohort = Dataset.objects.filter(create_date__gte=ACCEPTANCE_LIVE_FROM)
+            source, label = "legacy_acceptance", f"Cohort A (create_date >= {ACCEPTANCE_LIVE_FROM})"
 
         # A dataset created through the upload form always has the file it
         # validated. One without is the product of an admin, bulk-import or
@@ -76,7 +78,7 @@ class Command(BaseCommand):
 
         targets = cohort.exclude(id__in=no_file | already).order_by("id")
 
-        self.stdout.write(f"Cohort A (create_date >= {ACCEPTANCE_LIVE_FROM}): {cohort.count()}")
+        self.stdout.write(f"{label}: {cohort.count()}")
         self.stdout.write(f"  excluded, no upload file:   {len(no_file)}")
         self.stdout.write(f"  excluded, licence present:  {len(already)}")
         self.stdout.write(f"  to receive {LEGACY_SPDX}:      {targets.count()}")
@@ -87,5 +89,5 @@ class Command(BaseCommand):
             return
 
         with transaction.atomic():
-            updated = targets.update(license=licence, license_source="legacy_acceptance")
+            updated = targets.update(license=licence, license_source=source)
         self.stdout.write(self.style.SUCCESS(f"\nUpdated {updated} datasets."))

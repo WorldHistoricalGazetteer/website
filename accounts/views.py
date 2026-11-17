@@ -12,6 +12,7 @@ from django.utils.html import format_html
 from django.views import View
 from django.views.decorators.http import require_POST
 
+from django.utils import timezone
 from api.models import UserAPIProfile, APIToken
 from whgmail.messaging import WHGmail
 
@@ -717,7 +718,18 @@ class ProfileAPITokenView(LoginRequiredMixin, View):
 
     def _generate_or_regenerate(self, request):
         # Ensure the user has a profile
-        UserAPIProfile.objects.get_or_create(user=request.user)
+        profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
+
+        # One question, asked once: what will the token be used for (place#349 C7).
+        # Regenerating (a token already exists) does not ask.
+        if not profile.declared_use and not hasattr(request.user, 'api_token'):
+            use = request.POST.get('declared_use', '')
+            if use not in dict(UserAPIProfile.USE_CHOICES):
+                return JsonResponse({"error": "Please say what you will use the token for.",
+                                     "needs_use": True}, status=400)
+            profile.declared_use = use
+            profile.declared_use_at = timezone.now()
+            profile.save(update_fields=['declared_use', 'declared_use_at'])
 
         token, created = APIToken.objects.get_or_create(
             user=request.user,

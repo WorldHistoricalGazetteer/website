@@ -15,11 +15,11 @@ function setState(hasToken, tokenValue = null) {
     }
 }
 
-function requestToken(action) {
+function requestToken(action, extra = {}) {
     return fetch(apiTokenUrl, {
         method: 'POST',
         headers: {'X-CSRFToken': csrfToken, 'X-Requested-With': 'XMLHttpRequest'},
-        body: new URLSearchParams({action})
+        body: new URLSearchParams({action, ...extra})
     }).then(r => r.json());
 }
 
@@ -101,8 +101,24 @@ if (tokenSection) {
 
 document.body.addEventListener('click', function (e) {
     if (e.target.closest('.generate-token')) {
-        requestToken('generate').then(data => {
-            if (data.token) setState(true, data.token);
+        // First token: the one question (place#349 C7). Absent once answered.
+        const useSel = e.target.closest('#no-token') ? document.getElementById('declared-use') : null;
+        const extra = {};
+        if (useSel) {
+            if (!useSel.value) {
+                useSel.focus();
+                useSel.classList.add('is-invalid');
+                return;
+            }
+            useSel.classList.remove('is-invalid');
+            extra.declared_use = useSel.value;
+        }
+        requestToken('generate', extra).then(data => {
+            if (data.token) {
+                setState(true, data.token);
+                const wrap = document.getElementById('declared-use-wrap');
+                if (wrap) wrap.remove();
+            }
             else if (data.error) alert(data.error);
         }).catch(() => alert('Failed to generate token.'));
     }
