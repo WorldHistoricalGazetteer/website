@@ -315,3 +315,54 @@ class SpatialSchemaTests(TestCase):
         geom = next(p for p in op["parameters"] if p["name"] == "geometry")
         self.assertEqual(sorted(geom["schema"]["enum"]), ["full", "none", "point"])
         self.assertEqual(geom["schema"]["default"], "point")
+
+
+class SpatialDeprecationTests(TestCase):
+    """SG 2026-11-17: /api/spatial/ is deprecated (retired at the v4 switch)."""
+
+    def test_headers_and_body_on_success_and_on_error(self):
+        ok = self.client.get(URL, {"type": "bbox", "sw": "-2,50", "ne": "0,52"})
+        bad = self.client.get(URL, {"type": "circle"})
+        bad_param = self.client.get(URL, {"type": "bbox", "sw": "-2,50", "ne": "0,52", "geometry": "x"})
+        bad_value = self.client.get(URL, {"type": "nearby", "lon": "x", "lat": "0", "km": "5"})
+        self.assertEqual((ok.status_code, bad.status_code, bad_param.status_code, bad_value.status_code),
+                         (200, 400, 400, 400))
+        for r in (ok, bad, bad_param, bad_value):
+            self.assertEqual(r["Deprecation"], "@1794873600")
+            self.assertIn('<https://whgazetteer.org/reconcile>; rel="successor-version"', r["Link"])
+            self.assertNotIn("Sunset", r)  # no date is known; none is invented
+            body = r.json()
+            self.assertEqual(next(iter(body)), "deprecation")  # first key at the root
+            dep = body["deprecation"]
+            self.assertIs(dep["deprecated"], True)
+            self.assertIs(dep["token_required"], True)
+            self.assertIsNone(dep["sunset"])
+            self.assertIn("/reconcile", dep["replacement"])
+            self.assertIn("API token", dep["message"])
+            self.assertIn("#api-tokens", dep["message"])
+        self.assertIn("error", bad.json())
+        self.assertIn("features", ok.json())
+
+    def test_each_call_is_logged(self):
+        with self.assertLogs("api.views", level="INFO") as logs:
+            self.client.get(URL, {"type": "nearby", "lon": "0", "lat": "0", "km": "5"},
+                            HTTP_USER_AGENT="probe-agent/1.0")
+        line = next(m for m in logs.output if "api/spatial call" in m)
+        self.assertIn("type=nearby", line)
+        self.assertIn("probe-agent/1.0", line)
+
+    def test_swagger_marks_it_deprecated(self):
+        op = self.client.get("/api/schema/", {"format": "json"}).json()["paths"]["/api/spatial/"]["get"]
+        self.assertIs(op.get("deprecated"), True)
+        self.assertIn("/reconcile", op["description"])
+
+    def test_notice_on_the_404_path(self):
+        # The view's only 404 is its Place.DoesNotExist handler, which no real query
+        # reaches; force it so the notice is proven on that path too.
+        from places.models import Place
+        with patch("api.views.spatial_api.geometry_summaries", side_effect=Place.DoesNotExist):
+            r = self.client.get(URL, {"type": "bbox", "sw": "-2,50", "ne": "0,52"})
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(next(iter(r.json())), "deprecation")
+        self.assertIs(r.json()["deprecation"]["token_required"], True)
+        self.assertEqual(r["Deprecation"], "@1794873600")
