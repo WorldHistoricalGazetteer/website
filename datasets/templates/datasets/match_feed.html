@@ -28,7 +28,7 @@
 
   <div class="alert alert-light border small mf-intro" id="mf_intro" role="note" hidden data-tour="intro">
     <button type="button" class="btn-close float-end" id="mf_intro_close" aria-label="Hide this note"></button>
-    Some of your places may already be in WHG, from GeoNames, Wikidata or other gazetteers.
+    Some of your places may already be in WHG, from source gazetteers such as GeoNames or Wikidata.
     For each suggestion, say if it is the same place. &ldquo;Same place&rdquo; adds a signed note that connects the two records.
     Nothing is merged or changed: your record stays yours. WHG can then show the two records together.
     This is optional, and you can undo any answer.
@@ -37,7 +37,7 @@
 
   {% if not progress.generation %}
   <div class="alert alert-info" id="mf_no_generation">
-    No suggestions have been prepared for this gazetteer yet.
+    No suggestions have been prepared for this dataset yet.
     <button type="button" class="btn btn-sm btn-primary ms-2" data-act="regenerate">Prepare suggestions</button>
   </div>
   {% elif progress.generation.status != "finished" %}

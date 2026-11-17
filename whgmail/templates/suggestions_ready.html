@@ -2,9 +2,9 @@
 
 {% block content %}
     {% if refresh %}
-    <p>New gazetteers have been added to WHG since we last looked for matches to your gazetteer, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>]. We have looked again.</p>
+    <p>New source gazetteers have been added to WHG since we last looked for matches to your dataset, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>]. We have looked again.</p>
     {% else %}
-    <p>We have looked for places in WHG that may be the same as places in your gazetteer, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>].</p>
+    <p>We have looked for places in WHG that may be the same as places in your dataset, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>].</p>
     {% endif %}
     <p>We checked {{ records_checked }} record{{ records_checked|pluralize }}. {{ with_suggestions }} of them ha{{ with_suggestions|pluralize:"s,ve" }} at least one suggestion.{% if limited %} Not every record was checked this time. We will check the rest later.{% endif %}</p>
     <p>These are only suggestions. Nothing happens until you decide. When you mark a suggestion as the same place, WHG records your statement that the two records describe one place. Nothing is merged, and your records are not changed. You can undo any answer. You can review the suggestions here:</p>

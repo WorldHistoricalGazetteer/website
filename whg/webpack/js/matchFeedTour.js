@@ -20,8 +20,8 @@ function steps() {
   const all = [
     { popover: {
       title: 'Match your places',
-      description: 'Some places in your gazetteer may already be in WHG, from GeoNames, Wikidata or other gazetteers. ' +
-        'This page suggests them. <strong>You decide.</strong> Nothing is merged and nothing in your gazetteer changes.' } },
+      description: 'Some places in your dataset may already be in WHG, from source gazetteers such as GeoNames or Wikidata. ' +
+        'This page suggests them. <strong>You decide.</strong> Nothing is merged and nothing in your dataset changes.' } },
     { element: '[data-tour="tabs"]', popover: { side: 'bottom', title: 'Your records, sorted',
       description: 'We sort your records by how sure we are. Start with <strong>Likely the same place</strong>. ' +
         '<strong>Nothing found</strong> is normal for many records; you can leave them.' } },

@@ -15,7 +15,7 @@
   </p>
   <a class="btn btn-sm btn-primary" href="{% url 'datasets:ds_matches' ds.id %}">Continue matching</a>
   {% else %}
-  <p class="mb-1">Find out which of your places are already in WHG. You decide on each suggestion; nothing in your gazetteer is changed.</p>
+  <p class="mb-1">Find out which of your places are already in WHG. You decide on each suggestion; nothing in your dataset is changed.</p>
   <a class="btn btn-sm btn-outline-primary" href="{% url 'datasets:ds_matches' ds.id %}">Find matches</a>
   {% endif %}
 </div>
