@@ -722,7 +722,8 @@ class FeedRedesignBrowserTests(MapBrowserBase):
         for _ in range(39):
             page.keyboard.press("ArrowDown")
         self.wait_for(page, """() => { const b = document.querySelector('#mf_cands .mf-row[data-i="39"]').getBoundingClientRect();
-            return b.top >= 0 && b.bottom <= window.innerHeight; }""", 6000)     # a smooth scroll may still be running
+            const bar = document.getElementById('mf_bar').getBoundingClientRect();
+            return b.top >= 0 && b.bottom <= bar.top; }""", 6000)     # a smooth scroll may still be running
         box = page.evaluate("""() => { const row = document.querySelector('#mf_cands .mf-row[data-i="39"]').getBoundingClientRect();
             const bar = document.getElementById('mf_bar').getBoundingClientRect();
             return {top: row.top, bottom: row.bottom, bar: bar.top, vh: window.innerHeight,
