@@ -1,10 +1,11 @@
 # WHG MCP server: compose project on the production droplet at ~/stacks/mcp (copy of this file).
-# No secrets: the server is anonymous and never sends a WHG token. See README.md in this directory.
+# No secrets in this file: the server's WHG service token comes from mcp.env on the host (never committed;
+# see mcp.env.example and README.md in this directory).
 name: mcp
 
 services:
   mcp:
-    image: worldhistoricalgazetteer/whg-mcp:0.1.0
+    image: worldhistoricalgazetteer/whg-mcp:0.2.0
     container_name: whg-mcp
     restart: unless-stopped
     user: "1000:999"                       # the image's non-root `mcp` user
@@ -17,6 +18,8 @@ services:
     memswap_limit: 256m
     pids_limit: 64
     cpus: 1.0
+    env_file:
+      - ./mcp.env                          # WHG_API_TOKEN=... (host only, mode 600)
     environment:
       # Calls go to the host's own nginx (TLS, real certificate, Host whgazetteer.org) rather than hairpinning
       # through the reserved IP, so nginx logs this container's address and the WHG-MCP/<version> User-Agent.

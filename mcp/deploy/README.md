@@ -1,7 +1,8 @@
 # Deploying whg-mcp (production droplet)
 
 Public URL: `https://mcp.whgazetteer.org/` (MCP streamable HTTP, stateless JSON, at the root path).
-Anonymous and read-only. It calls the public WHG API and never sends a token.
+Read-only. Callers are anonymous. The server authenticates to WHG with its own service token
+(`WHG_API_TOKEN`, a dedicated non-staff account; see `../README.md`), read from an env file on the host.
 
 ```
 client --TLS--> host nginx (sites-available/mcp.whgazetteer.org: per-IP limits, access log)
@@ -26,6 +27,19 @@ copies its own list without deleting anything. Neither touches this vhost. Its `
 `limit_conn_zone` and `log_format` are defined in this file rather than in `conf.d/00-whg-edge.conf`,
 because `nginx-sync` overwrites that file. The vhost depends on `$whg_rl_key` from `00-whg-edge.conf`.
 
+## Service token
+
+The compose file reads `WHG_API_TOKEN` from `~/stacks/mcp/mcp.env` on the droplet (mode 600, owner
+whgadmin). That file is never committed. `mcp.env.example` here shows the shape, with no value. Without
+the token the container exits at start with "WHG_API_TOKEN is not set".
+
+```bash
+ssh $K whgadmin@157.230.49.27 'umask 077 && printf "WHG_API_TOKEN=%s\n" "<token>" > ~/stacks/mcp/mcp.env'
+```
+
+To rotate the token: write the new value, then `docker compose up -d --force-recreate` (a plain
+`restart` does not reread env files).
+
 ## Limits and budget
 
 - nginx, per client IP (IPv6 per /64): `limit_req` 30 r/min with burst 20 (nodelay), `limit_conn` 10, and
@@ -34,7 +48,8 @@ because `nginx-sync` overwrites that file. The vhost depends on `$whg_rl_key` fr
   all clients. When it is spent, tools return an error until midnight UTC. The counter resets whenever the
   container restarts.
 - In the server code: bbox at most 10 x 10 degrees, radius at most 100 km, at most 50 results, responses
-  capped at 1.5 MB, GET only, allow-listed paths.
+  capped at 1.5 MB, exact (method, path) allowlist: `GET /api/sources/`, `GET /api/attribution/`,
+  `GET /entity/place:<id>/api`, `POST /reconcile`.
 - Container: uid 1000 (non-root), `read_only`, `cap_drop: ALL`, `no-new-privileges`, 256 MB memory,
   64 pids, 1 CPU, published only on 127.0.0.1:8020.
 
@@ -48,6 +63,7 @@ cd mcp && docker build -t worldhistoricalgazetteer/whg-mcp:<ver> .
 docker save worldhistoricalgazetteer/whg-mcp:<ver> | gzip | ssh $K whgadmin@157.230.49.27 'gunzip | docker load'
 # bump `image:` in deploy/docker-compose.yml, commit, then copy it to the droplet:
 scp $K deploy/docker-compose.yml whgadmin@157.230.49.27:stacks/mcp/docker-compose.yml
+# first time only: create ~/stacks/mcp/mcp.env with the token (see "Service token")
 ssh $K whgadmin@157.230.49.27 'cd ~/stacks/mcp && docker compose up -d && docker ps --filter name=whg-mcp'
 ```
 
