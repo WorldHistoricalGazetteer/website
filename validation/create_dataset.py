@@ -42,16 +42,27 @@ class PrimaryKeyManager:
     def __init__(self):
         self.redis_client = get_redis_client()
 
+    @staticmethod
+    def _key(model_name):
+        """One Redis key per model, however the caller spells it ('Geom' or 'PlaceGeom').
+
+        Before 2026-11-17 `initialize_pks()` was given 'Geom' (key `Geom_max_pk`) while `get_next_pk()`
+        was given 'PlaceGeom' (key `PlaceGeom_max_pk`), so the key that was read was never the key that
+        was initialised from the database. After any Redis restart the counters began at 1, and
+        `obj.save()` with an explicit pk updates a row that already has that pk."""
+        name = model_name if model_name.startswith('Place') else f'Place{model_name}'
+        return f"{name}_max_pk"
+
     def get_next_pk(self, model_name):
         """Get the next primary key for the given model."""
-        key = f"{model_name}_max_pk"
+        key = self._key(model_name)
         # Increment the key and return the previous value
         return self.redis_client.incr(key)
 
     def initialize_pks(self, model_names):
         """Initialize the primary keys for a list of models."""
         for model_name in model_names:
-            key = f"{model_name}_max_pk"
+            key = self._key(model_name)
 
             # Check if the key already exists in Redis
             redis_value = self.redis_client.get(key)
@@ -73,7 +84,7 @@ class PrimaryKeyManager:
 
     def get_max_pk_from_db(self, model_name):
         """Fetch the maximum primary key from the database for a given model."""
-        model_class = globals().get(f'Place{model_name}')
+        model_class = globals().get(model_name if model_name.startswith('Place') else f'Place{model_name}')
         if model_class:
             try:
                 # Fetch the maximum value from the database
