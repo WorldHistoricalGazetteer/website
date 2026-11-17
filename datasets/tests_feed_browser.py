@@ -34,6 +34,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 
 from datasets import candidates
 from datasets.models_matching import CandidateGeneration, RecordReviewState
@@ -105,8 +106,10 @@ class FeedBrowserTests(LiveServerTestCase):
             cls._pw.stop()
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from datasets.models import Dataset
         from places.models import Place, PlaceGeom
         self.fake = GatewayFake()
@@ -259,6 +262,7 @@ class MapBrowserBase(LiveServerTestCase):
             cls._pw.stop()
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     user = None
 
@@ -309,6 +313,7 @@ class FeedMapBrowserTests(MapBrowserBase):
     fetched: the map must fall back to a plain background and still place its markers. Nothing
     leaves the machine."""
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from datasets.models import Dataset
         from datasets.tests_candidates import GN_TOWN, hit, response
         from places.models import Place, PlaceGeom
@@ -544,6 +549,7 @@ class FeedRedesignBrowserTests(MapBrowserBase):
     serialized_rollback = True
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from datasets.models import Dataset
         self.user = get_user_model().objects.create_user(username="mfr_beta", email="mfr@example.org", password="pw",
                                                          given_name="R", surname="D", role="beta_tester")

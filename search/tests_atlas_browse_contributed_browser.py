@@ -41,6 +41,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase, override_settings
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 
 from search.tests_atlas_actions_browser import _bundle_router
 from search.tests_atlas_browse_contributed import CLIO_ROWS, ScopedGateway
@@ -98,8 +99,10 @@ class AtlasBrowseContributedTests(LiveServerTestCase):
                 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = cls._prev_async_unsafe
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from api.models import GazetteerRegistryEntry
         from datasets.models import Dataset
         from places.models import Place

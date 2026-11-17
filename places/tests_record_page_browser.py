@@ -28,6 +28,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase, override_settings
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 
 # place#325 Stage 5: WHG_RECORD_BUNDLE_DIR serves the page bundle from a scratch build.
 from places.tests_record_layout_browser import BUNDLE_DIR, bundle_route
@@ -82,8 +83,10 @@ class RecordPageBrowserTests(LiveServerTestCase):
             cls._pw.stop()
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from api.models import GazetteerRegistryEntry
         from datasets.models import Dataset
         from places.models import Place, PlaceGeom, PlaceLink

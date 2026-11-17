@@ -39,6 +39,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase, override_settings
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 
 from places import locus_recipe as lr
 from search.tests_locus import (GATEWAY, PARAMS, POST, SEARCH_OK, STOPLIST, TOKEN_CEILING, FakeGateway, _Resp)
@@ -115,8 +116,10 @@ class LocusBrowserTests(LiveServerTestCase):
                 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = cls._prev_async_unsafe
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         User = get_user_model()
         self.beta = User.objects.create_user(
             username="locus_browser_beta", email="lbb@example.org", password="pw",

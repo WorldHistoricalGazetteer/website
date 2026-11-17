@@ -23,6 +23,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase, override_settings
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 
 RUN = os.environ.get("WHG_BROWSER_TESTS") == "1"
 BUNDLE_DIR = os.environ.get("WHG_RECORD_BUNDLE_DIR") or ""
@@ -58,8 +59,10 @@ class Base(LiveServerTestCase):
             cls._pw.stop()
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from datasets.models import Dataset
         from django.core.cache import cache
         from places.models import Place, PlaceGeom, PlaceName
