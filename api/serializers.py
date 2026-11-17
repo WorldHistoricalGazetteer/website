@@ -588,3 +588,38 @@ class LPFSerializer(serializers.Serializer):
         fields = ('uri', 'type', 'properties', 'geometry', 'names', 'types', 'links'
                   , 'related', 'whens', 'descriptions', 'depictions', 'minmax'
                   )
+
+
+class LPFSummarySerializer(LPFSerializer):
+    """LPFSerializer with the geometry reduced, for /api/spatial/ ``geometry=point|none``.
+
+    Never touches ``place.geoms``: the summaries are computed in one grouped query
+    (``api.spatial.geometry_summaries``) and passed in as
+    ``context['geometry_summaries']``; ``context['geometry_mode']`` is ``point`` or
+    ``none``. Under ``point`` the Feature's ``geometry`` is one Point lying on the
+    place's geometry and the Feature carries an RFC 7946 ``bbox`` member. Either way
+    ``properties`` say the geometry was reduced and where the full one is.
+    """
+
+    def _summary(self, place):
+        return (self.context.get("geometry_summaries") or {}).get(place.id)
+
+    def get_geometry(self, place) -> dict:
+        s = self._summary(place)
+        if self.context.get("geometry_mode") != "point" or not s or not s["point"]:
+            return None
+        return {"type": "Point", "coordinates": s["point"]}
+
+    def to_representation(self, place):
+        rep = super().to_representation(place)
+        s = self._summary(place)
+        props = rep["properties"]
+        props["geometry_mode"] = self.context.get("geometry_mode")
+        props["geometry_url"] = "https://whgazetteer.org/api/place/" + str(place.id) + "/"
+        if s:
+            props["geometry_types"] = s["types"]
+            props["geometry_count"] = s["count"]
+            props["vertex_count"] = s["vertices"]
+            if rep.get("geometry"):
+                rep["bbox"] = s["bbox"]
+        return rep

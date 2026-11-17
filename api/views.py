@@ -40,8 +40,10 @@ from api.dataset_access import es_apply_visibility, visible_datasets_q, visible_
 from api.serializers import (
     UserSerializer, DatasetSerializer, PlaceSerializer,
     PlaceTableSerializer, PlaceGeomSerializer, AreaSerializer,
-    FeatureSerializer, LPFSerializer, PlaceCompareSerializer, ErrorResponseSerializer,
+    FeatureSerializer, LPFSerializer, LPFSummarySerializer, PlaceCompareSerializer, ErrorResponseSerializer,
     GallerySerializer)
+from api import spatial as spatial_api
+from api.schemas import spatial_schema
 from areas.models import Area
 from collection.models import Collection
 from datasets.models import Dataset
@@ -196,7 +198,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 20000
 
 
-@extend_schema(exclude=True)
+@spatial_schema
 class SpatialAPIView(generics.ListAPIView):
     """
     This endpoint will return a Feature Collection (in Linked Places Format) containing places either within a given bounding
@@ -204,6 +206,15 @@ class SpatialAPIView(generics.ListAPIView):
 
     A search `type` of either `bbox` or `nearby` is required. A `bbox` requires south-west (`sw`) and north-east (`ne`) coordinates, while
     a `nearby` search requires `lon` and `lat` of the search centre together with a `km` radius (in kilometres).
+
+    It searches the places held in WHG's own database (contributed and published
+    datasets), not the gazetteer index behind the Atlas and the Reconciliation API.
+
+    `geometry` = `point` (default; one representative point per place plus a GeoJSON
+    `bbox`), `none`, or `full` (every stored geometry, as before 2026-11; at most 20
+    places a page). `match` = `within` (default: the place's geometry lies entirely
+    inside the circle or box) or `intersects` (it comes within `km` of the centre /
+    touches the box: the behaviour of `type=nearby` before 2026-11).
     """
     renderer_classes = [JSONRenderer]
     serializer_class = LPFSerializer
@@ -212,6 +223,9 @@ class SpatialAPIView(generics.ListAPIView):
     # filter_backends = [filters.SearchFilter]
     # search_fields = ['@title']
 
+    # Compact JSON: indent=2 roughly doubled the bytes of a big polygon.
+    JSON_PARAMS = {'ensure_ascii': False}
+
     def get(self, *args, **kwargs):
         params = self.request.query_params
 
@@ -219,18 +233,42 @@ class SpatialAPIView(generics.ListAPIView):
         lon, lat, dist = params.get('lon'), params.get('lat'), params.get('km')
         sw, ne = params.get('sw'), params.get('ne')
         fc, ds, coll = params.get('fc'), params.get('dataset'), params.get('collection')
-        pagesize = int(params.get('pagesize', 20)) if params.get('pagesize', '20').isdigit() else 20
+        geometry_mode = params.get('geometry', 'point')
+        match = params.get('match', 'within')
 
         result = {"type": "FeatureCollection", "features": [], "parameters": params, "errors": None}
 
         try:
+            if geometry_mode not in spatial_api.GEOMETRY_MODES:
+                raise BadRequestException(
+                    f"'geometry' must be one of {', '.join(spatial_api.GEOMETRY_MODES)}.")
+            if match not in spatial_api.MATCH_MODES:
+                raise BadRequestException(f"'match' must be one of {', '.join(spatial_api.MATCH_MODES)}.")
+            pagesize_max = (spatial_api.MAX_PAGESIZE_FULL if geometry_mode == 'full'
+                            else spatial_api.MAX_PAGESIZE)
+            raw = params.get('pagesize', str(spatial_api.DEFAULT_PAGESIZE))
+            pagesize = int(raw) if raw.isdigit() else spatial_api.DEFAULT_PAGESIZE
+            pagesize = max(1, min(pagesize, pagesize_max))
+
             # Handle nearby and bbox query types
             if qtype == 'nearby':
                 if not all([lon, lat, dist]):
                     raise BadRequestException("A 'nearby' spatial query requires 'lon', 'lat', and 'km' parameters.")
-                pnt = Point(float(lon), float(lat), srid=4326)
-                placeids = PlaceGeom.objects.filter(geom__distance_lte=(pnt, D(km=float(dist)))).values_list('place_id',
-                                                                                                             flat=True)
+                lon_f, lat_f, km = float(lon), float(lat), float(dist)
+                if not (-180 <= lon_f <= 180 and -90 <= lat_f <= 90):
+                    raise BadRequestException("'lon'/'lat' are out of bounds.")
+                if not 0 < km <= spatial_api.MAX_KM:
+                    raise BadRequestException(f"'km' must be greater than 0 and at most {spatial_api.MAX_KM:g}.")
+                if match == 'within':
+                    # Contained-in: the whole geometry inside the circle. Index-served
+                    # (geom @ circle), and a polygon that merely contains the centre,
+                    # such as an empire, no longer matches.
+                    geoms = PlaceGeom.objects.filter(geom__within=spatial_api.circle(lon_f, lat_f, km))
+                else:
+                    # The pre-2026-11 query, unchanged: ST_DistanceSphere <= m, which
+                    # no index serves (a sequential scan).
+                    pnt = Point(lon_f, lat_f, srid=4326)
+                    geoms = PlaceGeom.objects.filter(geom__distance_lte=(pnt, D(km=km)))
 
             elif qtype == 'bbox':
                 if not all([sw, ne]):
@@ -240,10 +278,26 @@ class SpatialAPIView(generics.ListAPIView):
                 if not (
                         -180 <= sw_lon <= 180 and -90 <= sw_lat <= 90 and -180 <= ne_lon <= 180 and -90 <= ne_lat <= 90):
                     raise BadRequestException("Bounding box coordinates are out of bounds.")
+                if (abs(ne_lon - sw_lon) > spatial_api.MAX_BBOX_SPAN_DEG
+                        or abs(ne_lat - sw_lat) > spatial_api.MAX_BBOX_SPAN_DEG):
+                    raise BadRequestException(
+                        f"Bounding box too large: at most {spatial_api.MAX_BBOX_SPAN_DEG:g} degrees "
+                        f"in each direction.")
                 bbox = Polygon.from_bbox([sw_lon, sw_lat, ne_lon, ne_lat])
-                placeids = PlaceGeom.objects.filter(geom__within=bbox).values_list('place_id', flat=True)
+                geoms = (PlaceGeom.objects.filter(geom__within=bbox) if match == 'within'
+                         else PlaceGeom.objects.filter(geom__intersects=bbox))
             else:
                 raise BadRequestException("Spatial query requires 'type' parameter to be 'nearby' or 'bbox'.")
+
+            if match == 'within':
+                # Contained-in is per PLACE: one of its geometries outside the circle
+                # or box excludes it, though another lies inside.
+                inside = set(geoms.values_list('place_id', flat=True))
+                outside = set(PlaceGeom.objects.filter(place_id__in=inside, geom__isnull=False)
+                              .exclude(id__in=geoms.values('id')).values_list('place_id', flat=True))
+                placeids = inside - outside
+            else:
+                placeids = geoms.values_list('place_id', flat=True)
 
             # Query places and apply additional filters
             # place#310: only places the requester may see, whatever the spatial hit.
@@ -265,32 +319,45 @@ class SpatialAPIView(generics.ListAPIView):
                 fclasses = list(set([x.upper() for x in fc.split(',')]))
                 qs = qs.filter(fclasses__overlap=fclasses)
 
-            filtered = qs[:pagesize]
-            serializer = LPFSerializer(filtered, many=True, context={'request': self.request})
+            filtered = list(qs.select_related('dataset')[:pagesize])
+            if geometry_mode == 'full':
+                serializer = LPFSerializer(filtered, many=True, context={'request': self.request})
+            else:
+                summaries = (spatial_api.geometry_summaries([p.id for p in filtered])
+                             if geometry_mode == 'point' else {})
+                serializer = LPFSummarySerializer(filtered, many=True, context={
+                    'request': self.request, 'geometry_mode': geometry_mode,
+                    'geometry_summaries': summaries})
             result.update({
                 "count": qs.count(),
                 "features": serializer.data,
                 "pagesize": len(serializer.data),
+                "pagesize_max": pagesize_max,
+                "geometry_mode": geometry_mode,
+                "match": match,
                 # Aggregated source terms at the response root (place#157). Taken
                 # from the queryset rather than the serialized output so the
                 # dataset FK is read directly.
                 "attribution": safe_attribution_block(
-                    datasets=set(filtered.values_list('dataset_id', flat=True))),
+                    datasets=set(p.dataset_id for p in filtered)),
             })
 
+        except spatial_api.SpatialParamError as e:
+            return JsonResponse({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST,
+                                json_dumps_params=self.JSON_PARAMS)
         # Handle specific error types without generic fallback
         except (ValueError, TypeError, ValidationError) as e:
             logger.error("Parameter error: %s", e)
             return JsonResponse(
                 {"error": str(e)}, status=status.HTTP_400_BAD_REQUEST,
-                json_dumps_params={'ensure_ascii': False, 'indent': 2}
+                json_dumps_params=self.JSON_PARAMS
             )
         except Place.DoesNotExist:
             result["errors"] = "No matching places found."
             return JsonResponse(result, status=status.HTTP_404_NOT_FOUND,
-                                json_dumps_params={'ensure_ascii': False, 'indent': 2})
+                                json_dumps_params=self.JSON_PARAMS)
 
-        return JsonResponse(result, json_dumps_params={'ensure_ascii': False, 'indent': 2})
+        return JsonResponse(result, json_dumps_params=self.JSON_PARAMS)
 
 
 def bad_request_trap(request):
