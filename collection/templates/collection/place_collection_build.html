@@ -336,17 +336,16 @@
                       {% endif %}
                     {% endfor %}
                   </select>
+                  <i class="fas fa-question-circle ms-1" data-bs-toggle="tooltip"
+                     title="Lists the datasets you own or collaborate on. Pick one, then choose &quot;add all places&quot; to put its places on this collection's place list. Very large datasets (more than a few thousand rows) can be slow to annotate and to display."></i>
                 </span>
                   </p>
                   {# id, label, title, description, creator, create_date, webpage, numrows, datatype  #}
                   <div id="coll_dscards_create">
-                    <p>The select dropdown above lists datasets you "own" or have been made a
-                      collaborator on.</p>
-                    {% if coll_dsset|length == 0 %}
-                      <p id="further_explanation">Once selected, you can choose to "add all
-                        places" from it and they will appear on your collection's place list. Note that very
-                        large datasets (more than a few thousand rows) may present issues in managing
-                        annotations and in the display of the collection.</p>
+                    {% if not ds_select %}
+                      <p id="no_datasets" class="small text-muted">You don't have any datasets to add places from
+                        yet. Datasets you upload, or are a collaborator on, will be listed here.
+                        <a href="{% url 'dashboard' %}">Go to your dashboard</a>.</p>
                     {% endif %}
                     {% for d in coll_dsset %}
                       <div class="ds_card w-100">

@@ -11,7 +11,7 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
-from django.db.models import F, Min, Max
+from django.db.models import F, Min, Max, Q
 from django.db.models.functions import Coalesce
 from django.forms.models import inlineformset_factory
 from django.contrib.auth.decorators import login_required
@@ -951,24 +951,17 @@ CollectionLinkFormset = inlineformset_factory(
 
 
 # TODO: refactor to fewer views
-# The place-collection builders offer every non-superuser one extra WHG-owned sample dataset in the
-# "add places from a dataset" dropdown. The two builders have always looked up different labels
-# (create: 'owt10', update: 'owt10_foo'); kept as they were. A missing sample dataset must not take
-# the whole builder page down with a Dataset.DoesNotExist, so it is simply left out.
-SAMPLE_DATASET_LABEL_CREATE = 'owt10'
-SAMPLE_DATASET_LABEL_UPDATE = 'owt10_foo'
-
-
-def add_sample_dataset(ds_select, user, label):
-    """Insert the sample dataset (just before the last entry, as before) for non-superusers."""
-    if user.is_superuser:
-        return ds_select
-    sample = Dataset.objects.filter(label=label).first()
-    if sample is None:
-        logger.warning("Sample dataset %r not found; the collection builder dropdown goes without it", label)
-    else:
-        ds_select.insert(len(ds_select) - 1, sample)
-    return ds_select
+def datasets_for_place_collection_builder(user):
+    """The datasets a user can add places from in the place-collection builders: those they own, or
+    co-own as a collaborator with the 'owner' role; superusers get every dataset. One query. (This
+    used to load every dataset and test ``user in dataset.owners`` for each, and also slipped one
+    private WHG-owned "sample" dataset into everyone's list, which add_dataset_places then refused:
+    a private dataset cannot be pulled into a collection.)"""
+    datasets = Dataset.objects.all()
+    if not user.is_superuser:
+        datasets = datasets.filter(
+            Q(owner=user) | Q(collabs__role='owner', collabs__user_id=user)).distinct()
+    return list(datasets.order_by('title'))
 
 
 class PlaceCollectionCreateView(LoginRequiredMixin, CreateView):
@@ -997,8 +990,7 @@ class PlaceCollectionCreateView(LoginRequiredMixin, CreateView):
             # context["images_form"] = CollectionImageFormset()
 
         # owners can include place from their datasets
-        ds_select = [obj for obj in Dataset.objects.all().order_by('title') if user in obj.owners or user.is_superuser]
-        add_sample_dataset(ds_select, user, SAMPLE_DATASET_LABEL_CREATE)
+        ds_select = datasets_for_place_collection_builder(user)
 
         context['action'] = 'create'
         context['ds_select'] = ds_select
@@ -1109,8 +1101,7 @@ class PlaceCollectionUpdateView(LoginRequiredMixin, UpdateView):
         in_class = coll.group.type == 'class' if coll.group else False
         form_anno = TraceAnnotationModelForm(self.request.GET or None, auto_id="anno_%s")
         # populates dropdown
-        ds_select = [obj for obj in Dataset.objects.all().order_by('title') if user in obj.owners or user.is_superuser]
-        add_sample_dataset(ds_select, user, SAMPLE_DATASET_LABEL_UPDATE)
+        ds_select = datasets_for_place_collection_builder(user)
 
         context['action'] = 'update'
         context['ds_select'] = ds_select

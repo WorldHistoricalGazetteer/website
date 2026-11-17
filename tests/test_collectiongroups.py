@@ -48,13 +48,6 @@ class CollectionGroupScenarioTestCase(TestCase):
         self.collection.group = self.collection_group
         self.collection.save()
 
-        # the sample dataset the builder adds to non-superusers' dropdowns (optional now; see collection/tests_sample_dataset.py)
-        self.dataset = Dataset.objects.create(
-            owner=self.user,
-            title='Test Dataset',
-            label='owt10_foo',  # PlaceCollectionUpdateView adds this dataset to every non-superuser's dropdown
-            description='Test Dataset Description')
-
         # add the user to the group
         CollectionGroupUser.objects.create(
             collectiongroup=self.collection_group, user=self.user, role='member')
