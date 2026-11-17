@@ -8,7 +8,7 @@ from django.urls import reverse
 class CollectionTestCase(TestCase):
     def setUp(self):
         # Create a User
-        self.user = get_user_model().objects.create_user(name='Test User',
+        self.user = get_user_model().objects.create_user(username='testuser', given_name='Test', surname='User',
                                                          email='testuser@foo.com',
                                                          password='12345')
 
@@ -35,7 +35,7 @@ class CollectionTestCase(TestCase):
 
     def test_add_places(self):
         # Login the test client
-        self.client.login(username='testuser@foo.com', password='12345')
+        self.client.login(username='testuser', password='12345')
 
         # Call the add_places() function
         response = self.client.post(reverse('collection:collection-add-places'),
@@ -48,7 +48,7 @@ class CollectionTestCase(TestCase):
 
     def test_add_dataset_places(self):
         # Login the test client
-        self.client.login(username='testuser@foo.com', password='12345')
+        self.client.login(username='testuser', password='12345')
 
         response = self.client.post(reverse('collection:add-dsplaces',
                                             kwargs={'coll_id': self.collection.id, 'ds_id': self.dataset.id}))
@@ -61,7 +61,7 @@ class CollectionTestCase(TestCase):
 
     def test_add_and_remove_dataset_places(self):
         # Login the test client
-        self.client.login(username='testuser@foo.com', password='12345')
+        self.client.login(username='testuser', password='12345')
 
         # Call the add_dataset_places() function
         response = self.client.post(reverse('collection:add-dsplaces',

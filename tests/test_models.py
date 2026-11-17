@@ -12,9 +12,10 @@ class DatasetAndPlaceModelsTest(TestCase):
     
     @classmethod
     def setUpTestData(cls):
-        user = User.objects.create(email='user@tempy.com',password='tempy')
+        user = User.objects.create_user(username='tempy', email='user@tempy.com', password='tempy',
+                                        given_name='Tempy', surname='User')
         print("setUpTestData(): Run once to set up non-modified data for all class methods.")
-        Dataset.objects.create(
+        cls.ds = Dataset.objects.create(
             owner=user,
             label='ds_testy',
             title='Test Dataset',
@@ -23,33 +24,33 @@ class DatasetAndPlaceModelsTest(TestCase):
             datatype='place',
             public=True
         )
-        ds = get_object_or_404(Dataset,pk=1)
-        Place.objects.create(
-            dataset=ds,
+        # (don't assume pk=1: TestCase rolls back rows but not the id sequences)
+        cls.place = Place.objects.create(
+            dataset=cls.ds,
             title='Timbuktu',
             src_id='foo123',
             ccodes=['AR','CA']
         )
 
     def test_dataset(self):
-        ds = Dataset.objects.get(id=1)
+        ds = Dataset.objects.get(id=self.ds.id)
         field_label = ds.label
         #field_title = ds._meta.get_field('title').verbose_name
         field_title = ds.title
         print('made database '+field_label)
-        self.assertEquals(field_label, 'ds_testy')
-        self.assertEquals(field_title, 'Test Dataset')
+        self.assertEqual(field_label, 'ds_testy')
+        self.assertEqual(field_title, 'Test Dataset')
         
     def test_place(self):
-        p = Place.objects.get(id=1)
+        p = Place.objects.get(id=self.place.id)
         #field_title = p._meta.get_field('title').verbose_name
         field_title = p.title
         field_srcid = p.src_id
         field_ccodes = p.ccodes
         print('made place '+field_title+' ('+field_srcid+')')
-        self.assertEquals(field_title, 'Timbuktu')
-        self.assertEquals(field_srcid, 'foo123')
-        self.assertEquals(field_ccodes,['AR','CA'])
+        self.assertEqual(field_title, 'Timbuktu')
+        self.assertEqual(field_srcid, 'foo123')
+        self.assertEqual(field_ccodes,['AR','CA'])
         self.assertIn('AR',str(field_ccodes))
         
     #def test_false_is_false(self):
