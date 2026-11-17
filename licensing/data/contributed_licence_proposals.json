@@ -653,6 +653,34 @@
    "approved": true,
    "approved_by": "SG",
    "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 13,
+   "label": "us_counties_3890",
+   "title": "US Counties",
+   "spdx_id": "CC0-1.0",
+   "license_source": "upstream_terms",
+   "class": 3,
+   "confidence": "medium",
+   "evidence": "Source identified by A. Straub 2026-10-15: Atlas of Historical County Boundaries, Newberry Library, 'US Historical Counties (1629-2000)'. The Atlas states its data 'is readily available to download to be consulted, reviewed, and reused for any lawful purpose, commercial or non-commercial, without licensing or permission fees to the library' and that out-of-date copyright notices in some files can be ignored (publications.newberry.org/ahcb/usingatlas.html).",
+   "ruling": "SG, 2026-11-17: the Newberry's statement is a dedication to unrestricted reuse, recorded as CC0-1.0 (upstream_terms). Attribution to the Newberry Library's Atlas of Historical County Boundaries is nonetheless given in the dataset's citation.",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-11-17"
+  },
+  {
+   "dataset_id": 1438,
+   "label": "ds_1438",
+   "title": "Exploring Slave Trade in Asia",
+   "spdx_id": "CC-BY-SA-4.0",
+   "license_source": "upstream_terms",
+   "class": 3,
+   "confidence": "high",
+   "evidence": "Source identified by A. Straub 2026-10-15: version 2 of 'ESTA Database Locations', dataverse.nl doi:10.34894/JV0VBF (now at version 7). Version 2 terms: CC-BY-SA-4.0, with proper credit via the data citation expected under Dataverse community norms. The uploaded 475-row sheet is the 'standardised_summary' sheet, not the 1,942-row 'standardised_name_original' sheet.",
+   "ruling": "SG, 2026-11-17: record CC-BY-SA-4.0 (upstream_terms); cite the ESTA deposit; note that the dataset holds the summary sheet only.",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-11-17"
   }
  ],
  "approved": "2026-10-10"
