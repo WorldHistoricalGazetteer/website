@@ -1,4 +1,4 @@
-"""The contributor feed: "Link your records" (place#334 sections 4c, 4d, 4i, 4j; Phase 2: place#338).
+"""The contributor feed: "Match your places" (place#334 sections 4c, 4d, 4i, 4j; Phase 2: place#338).
 
 One page (``/datasets/<id>/matches/``) and its JSON:
 
@@ -45,7 +45,7 @@ logger = logging.getLogger("reconciliation")
 PAGE_SIZE = 25
 TABS = ["confident", "ambiguous", "weak", "none", "later", "unqueried"]
 TAB_LABELS = {"confident": "Likely the same place", "ambiguous": "Which one, if any?",
-              "weak": "Weak suggestions", "none": "Nothing found", "later": "Later",
+              "weak": "Weak suggestions", "none": "Nothing found", "later": "Not sure yet",
               "unqueried": "Waiting for search"}
 RELATIONS = ("closeMatch", "exactMatch")   # Q1: closeMatch by default, exactMatch under "advanced"
 
@@ -405,7 +405,7 @@ def feed_review(request, id):
             return JsonResponse({"error": "nothing to link"}, status=400)
         if any(c.status == "rejected" for c in cands):
             # Setting a suggestion aside and then linking it would leave the record saying both.
-            return JsonResponse({"error": "A suggestion you set aside cannot be linked until you undo that."},
+            return JsonResponse({"error": "A suggestion you set aside cannot be marked Same place until you undo that."},
                                 status=409)
         try:
             with transaction.atomic():
@@ -458,10 +458,10 @@ def feed_review(request, id):
         if not same and not nots:
             return JsonResponse({"error": "nothing decided"}, status=400)
         if any(c.status == "rejected" for c, _ in same):
-            return JsonResponse({"error": "A suggestion you set aside cannot be linked until you undo that."},
+            return JsonResponse({"error": "A suggestion you set aside cannot be marked Same place until you undo that."},
                                 status=409)
         if any(c.status == "accepted" for c, _ in nots):
-            return JsonResponse({"error": "A suggestion you linked cannot be set aside until you undo that."},
+            return JsonResponse({"error": "A suggestion you marked Same place cannot be set aside until you undo that."},
                                 status=409)
         try:
             with transaction.atomic():

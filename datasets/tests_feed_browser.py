@@ -137,6 +137,7 @@ class FeedBrowserTests(LiveServerTestCase):
         c.force_login(self.user)
         ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME, "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
                           "url": self.live_server_url}])
+        ctx.add_init_script("try { if (!sessionStorage.getItem('t_seeded')) { localStorage.setItem('mf.shortcuts', 'on'); localStorage.setItem('whg_match_tour_seen', 'true'); localStorage.setItem('mf.intro', 'hidden'); } } catch (e) {}")
         page = ctx.new_page()
 
         page.route("**/*", lambda route: feed_route(route, block_bundle))
@@ -208,7 +209,7 @@ class FeedBrowserTests(LiveServerTestCase):
                 results = {"flow_raised": False, "error": str(exc)[:80] and False}
         passed = {k: v for k, v in results.items() if v}
         self.assertEqual(passed, {}, f"checks passed on a page with no feed bundle: {passed}")
-        self.assertIn("Link your records: Parishes", page.content())  # the page was served; only its bundle is missing
+        self.assertIn("Match your places: Parishes", page.content())  # the page was served; only its bundle is missing
 
 
 # The positions the map test reads: each marker's centre on screen against MapLibre's own
@@ -267,6 +268,7 @@ class MapBrowserBase(LiveServerTestCase):
         c.force_login(self.user)
         ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME, "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
                           "url": self.live_server_url}])
+        ctx.add_init_script("try { if (!sessionStorage.getItem('t_seeded')) { localStorage.setItem('mf.shortcuts', 'on'); localStorage.setItem('whg_match_tour_seen', 'true'); localStorage.setItem('mf.intro', 'hidden'); } } catch (e) {}")
         page = ctx.new_page()
         self.external = set()
         page.route("**/*", lambda route: feed_route(route, block_bundle, block, self.external, self.live_server_url))
@@ -409,7 +411,7 @@ class FeedMapBrowserTests(MapBrowserBase):
         if not all(r[k] for k in ("chosen_explicit", "group_mate_untouched", "one_link_and_no_public_distinct")):
             print("[debug]", (chosen.status, chosen.decision_source), (other.status, other.decision_source), links)
         r["header_progress_moved"] = self.wait_for(
-            page, "document.getElementById('mf_progress').textContent.includes('1 link')", 5000)
+            page, "document.getElementById('mf_progress').textContent.includes('1 match')", 5000)
         # A record with no location at all: a clear "no location" state, never an empty box.
         if self.nowhere_tier == "ambiguous":     # the next record still to decide: it follows on by itself
             pass
@@ -527,7 +529,7 @@ class FeedMapBrowserTests(MapBrowserBase):
                 results = {"flow_raised": False, "error": str(exc)[:80] and False}
         passed = {k: v for k, v in results.items() if v}
         self.assertEqual(passed, {}, f"checks passed on a page with no feed bundle: {passed}")
-        self.assertIn("Link your records: Parishes map", page.content())
+        self.assertIn("Match your places: Parishes map", page.content())
 
 
 @unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
@@ -639,16 +641,53 @@ class FeedRedesignBrowserTests(MapBrowserBase):
         self.assertTrue(self.wait_for(page, "document.querySelector('.mf-seg-btn--unsure[data-i=\"1\"]').getAttribute('aria-pressed') === 'true'", 5000))
         page.keyboard.press("c")       # the same key again takes it back
         self.assertTrue(self.wait_for(page, "document.querySelector('.mf-seg-btn--unsure[data-i=\"1\"]').getAttribute('aria-pressed') === 'false'", 5000))
-        # Switch the one-key shortcuts off: "n" (None of these fits) does nothing; the row's own keys still work.
+        # Switch the shortcuts off: no key does anything (they are an opt-in), but the buttons still work.
         page.uncheck("#mf_shortcuts")
         page.focus("#mf_cands .mf-row[data-i='2']")
         page.keyboard.press("n")
         page.wait_for_timeout(600)
         self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
         page.keyboard.press("s")
+        page.wait_for_timeout(400)
+        self.assertEqual(page.evaluate("document.querySelector('.mf-seg-btn--same[data-i=\"2\"]').getAttribute('aria-pressed')"), "false")
+        page.click(".mf-seg-btn--same[data-i='2']")
         self.assertTrue(self.wait_for(page, "document.querySelector('.mf-seg-btn--same[data-i=\"2\"]').getAttribute('aria-pressed') === 'true'", 5000))
         # and the buttons are reachable with Tab when the shortcuts are off
         self.assertEqual(page.evaluate("document.querySelector('.mf-seg-btn[data-i=\"0\"]').tabIndex"), 0)
+
+    def test_defaults_tooltips_heading_and_tour(self):
+        """Shortcuts are an opt-in (hidden and inert until switched on), the fit buttons explain
+        themselves, the heading leads with the page name, and the tour only highlights."""
+        self.springfield()
+        page = self.open(tier="ambiguous")
+        # a fresh browser: no stored preferences, so the first visit starts the tour by itself
+        page.evaluate("localStorage.clear(); sessionStorage.setItem('t_seeded', '1')")
+        page.reload()
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.ready === true", 20000))
+        self.assertTrue(self.wait_for(page, "!!document.querySelector('.driver-popover')", 10000), "first visit starts the tour")
+        self.assertTrue(page.evaluate("window.__whgMatchFeed.touring"))
+        page.keyboard.press("Escape")
+        if not self.wait_for(page, "!document.querySelector('.driver-popover') && !window.__whgMatchFeed.touring", 3000):
+            print("[debug] after Escape:", page.evaluate("[!!document.querySelector('.driver-popover'), window.__whgMatchFeed.touring, document.activeElement.tagName, document.body.className]"))
+        self.assertTrue(self.wait_for(page, "!document.querySelector('.driver-popover') && !window.__whgMatchFeed.touring", 3000))
+        self.assertFalse(page.evaluate("document.getElementById('mf_shortcuts').checked"))
+        self.assertTrue(page.evaluate("document.getElementById('mf_keylist').hidden"))
+        self.assertFalse(page.evaluate("[...document.querySelectorAll('.mf-bar kbd')].some((k) => k.offsetParent !== null)"))
+        page.keyboard.press("n")
+        page.wait_for_timeout(400)
+        self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
+        for act in ("fit-near", "fit-all"):
+            self.assertTrue(page.evaluate("(a) => (document.querySelector(`[data-act=${a}]`).title || '').length > 20", act))
+        h1 = page.evaluate("document.querySelector('h1').textContent.replace(/\\s+/g, ' ').trim()")
+        self.assertTrue(h1.startswith("Match your places"), h1)
+        page.check("#mf_shortcuts")
+        self.assertFalse(page.evaluate("document.getElementById('mf_keylist').hidden"))
+        # the tour button repeats it, and a tour decides nothing
+        page.click("#mf_tour_button")
+        self.assertTrue(self.wait_for(page, "!!document.querySelector('.driver-popover')", 5000))
+        page.keyboard.press("ArrowRight")          # the tour's own key: it must not move to another record
+        page.keyboard.press("Escape")
+        self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
 
     def test_tabs_are_a_tablist_with_a_panel_and_arrow_keys(self):
         self.springfield()

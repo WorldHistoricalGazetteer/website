@@ -287,7 +287,7 @@ class LinksProgressSectionTests(FeedTestBase):
         self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk]})
         html = self.render_for(self.owner)
         self.assertIn('data-testid="links-progress"', html)
-        self.assertIn("1 link", html)
+        self.assertIn("1 match", html)
         self.assertIn("50% reviewed", html)
         from unittest.mock import patch
         self.ds.public = True

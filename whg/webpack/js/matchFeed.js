@@ -22,6 +22,7 @@
 // .map.renders moves each time the map panel is redrawn; .regions says which regions are drawn
 // (record, rows, map, bar) so a guided tour can wait on state, not on timers.
 import '../css/matchFeed.css';
+import { startMatchTour, hasSeenMatchTour } from './matchFeedTour';
 import { constraintChipsHTML, bindConstraintChips, esc } from './constraintChips';
 
 const root = document.getElementById('match_feed');
@@ -30,7 +31,7 @@ const S = {
   dec: new Map(),            // row index -> { d: 'same'|'not'|'unsure', src: 'explicit'|'prefilled'|'default' }
   focus: null,               // the row with the focus (roving tabindex, map highlight)
   undo: [], relaxed: new Set(), searchResults: null, handSel: null, searchChips: [],
-  shortcuts: store('local', 'mf.shortcuts') !== 'off',
+  shortcuts: store('local', 'mf.shortcuts') === 'on',   // off until the person switches them on
   publish: store('session', 'mf.publish') === '1',
   note: '', relation: 'closeMatch',   // kept across redraws; both reset when the record changes
 };
@@ -95,7 +96,7 @@ function updateCounts(counts) {
 function updateProgress(p) {
   const el = document.getElementById('mf_progress');
   if (!el || !p) return;
-  el.textContent = `${p.reviewed} / ${p.records} reviewed · ${p.links} link${p.links === 1 ? '' : 's'}`;
+  el.textContent = `${p.reviewed} / ${p.records} reviewed · ${p.links} match${p.links === 1 ? '' : 'es'}`;
 }
 
 function years(mm) {
@@ -262,9 +263,9 @@ function rowHTML(c, i, r) {
     c.location_withheld ? 'location not available to you' : (c.location === null ? 'no location' : '')].filter(Boolean).join(' · ');
   const warn = warnText(c);
   const why = whyText(c);
-  const state = done ? (c.status === 'accepted' ? 'linked' : 'set aside') : (v ? `${v.d}${v.src === 'prefilled' ? ' (filled in)' : ''}` : 'not marked');
+  const state = done ? (c.status === 'accepted' ? 'matched' : 'set aside') : (v ? `${v.d}${v.src === 'prefilled' ? ' (filled in)' : ''}` : 'not marked');
   const seg = done
-    ? `<span class="badge ${c.status === 'accepted' ? 'bg-success' : 'bg-secondary'}">${c.status === 'accepted' ? 'linked' : 'not this one'}</span>`
+    ? `<span class="badge ${c.status === 'accepted' ? 'bg-success' : 'bg-secondary'}">${c.status === 'accepted' ? 'matched' : 'not this one'}</span>`
     : `<div class="mf-seg" role="group" aria-label="Decision for ${i + 1}, ${esc(title)}" data-tour="row-state">
         ${[['same', 'Same place'], ['not', 'Not the same'], ['unsure', "Can't tell"]].map(([d, label]) =>
     `<button type="button" class="mf-seg-btn mf-seg-btn--${d}${v && v.d === d ? ` is-on${v.src === 'prefilled' ? ' is-prefilled' : ''}` : ''}"
@@ -327,7 +328,7 @@ function renderQueue() {
     const done = isDecided(r);
     return `<li><button type="button" class="list-group-item list-group-item-action${i === S.idx ? ' active' : ''}${done ? ' mf-queue--done' : ''}"
       data-qi="${i}" aria-current="${i === S.idx ? 'true' : 'false'}" dir="auto">${esc(r.title)}
-      ${done ? `<span class="badge bg-light text-dark ms-1">${esc(r.state === 'linked' ? 'linked' : 'done')}</span>` : ''}</button></li>`;
+      ${done ? `<span class="badge bg-light text-dark ms-1">${esc(r.state === 'linked' ? 'matched' : 'done')}</span>` : ''}</button></li>`;
   }).join('') || '<li class="list-group-item text-secondary">Nothing in this tab.</li>';
   document.getElementById('mf_more').hidden = S.next == null;
 }
@@ -360,7 +361,7 @@ function barHTML(r, t) {
       ${has ? `<div class="mf-summary" id="mf_summary" data-tour="summary">${summaryHTML(r, t)}</div>` : ''}
       <div class="d-flex flex-wrap gap-2 align-items-center">
         ${has ? `<button type="button" class="btn btn-sm btn-primary" data-act="save" data-tour="save" ${canSave ? '' : 'disabled'}>Save decision <kbd>Enter</kbd></button>
-        <button type="button" class="btn btn-sm btn-outline-warning" data-act="none">None of these fits <kbd>n</kbd></button>` : ''}
+        <button type="button" class="btn btn-sm btn-outline-warning" data-act="none" data-tour="none">None of these fits <kbd>n</kbd></button>` : ''}
         ${waiting ? '' : '<button type="button" class="btn btn-sm btn-outline-secondary" data-act="later" data-tour="later">Not sure yet <kbd>l</kbd></button>'}
         <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo" ${S.undo.length ? '' : 'disabled'}>Undo <kbd>u</kbd></button>
       </div>
@@ -763,6 +764,7 @@ root.addEventListener('click', (e) => {
     if (c) { S.handSel = Number(b.dataset.i); review({ action: 'link', target: c.candidate_id, relation: relation() }); }
   } else if (act === 'none') review({ action: 'none' });
   else if (act === 'later') review({ action: 'later' });
+  else if (act === 'tour') startMatchTour();
   else if (act === 'undo') undo();
   else if (act === 'prev') move(-1);
   else if (act === 'next') move(1);
@@ -785,6 +787,7 @@ root.addEventListener('change', (e) => {
   if (e.target && e.target.id === 'mf_shortcuts') {
     S.shortcuts = e.target.checked;
     store('local', 'mf.shortcuts', S.shortcuts ? 'on' : 'off');
+    syncShortcutUI();
     renderRecord({ keepSearch: true, refit: false });
   }
 });
@@ -806,12 +809,17 @@ document.getElementById('mf_more').addEventListener('click', () => load(S.tab, t
 bindConstraintChips(root, () => S.searchChips, S.relaxed, () => search());
 
 // The shortcut switch lives in the key legend; its state is remembered on this device.
-(function legend() {
+function syncShortcutUI() {
   const box = document.getElementById('mf_shortcuts');
   if (box) box.checked = S.shortcuts;
-}());
+  const list = document.getElementById('mf_keylist');
+  if (list) list.hidden = !S.shortcuts;
+  root.classList.toggle('mf-keys-on', S.shortcuts);   // key hints on the buttons show only then
+}
+syncShortcutUI();
 
 document.addEventListener('keydown', (e) => {
+  if (window.__whgMatchFeed.touring) return;   // the tour owns the keyboard while it runs
   const tag = (e.target && e.target.tagName) || '';
   const inField = /INPUT|TEXTAREA|SELECT/.test(tag);
   if (inField || e.metaKey || e.ctrlKey || e.altKey) {
@@ -835,8 +843,8 @@ document.addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.key === ' ') && /^(BUTTON|A|SUMMARY)$/.test(tag)) return;
   const r = current();
   const onRow = !!(e.target && e.target.closest && e.target.closest('#mf_cands .mf-row'));
-  // Keys that belong to the focused row work whenever it has the focus (they act on that row only);
-  // the global one-key shortcuts below can be switched off.
+  // All keys below are shortcuts: they are off until the person switches them on.
+  if (!S.shortcuts) return;
   if (onRow && r) {
     const i = Number(e.target.closest('.mf-row').dataset.i);
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -849,7 +857,6 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'x') { e.preventDefault(); setRow(i, 'not'); return; }
     if (e.key === '?' || e.key === 'c') { e.preventDefault(); setRow(i, 'unsure'); return; }
   }
-  if (!S.shortcuts) return;
   if (/^[1-9]$/.test(e.key) && r) {
     const i = Number(e.key) - 1;
     if (i < r.candidates.length) focusRow(i);
@@ -863,4 +870,16 @@ document.addEventListener('keydown', (e) => {
   else return;
 });
 
-load(S.tab).then(() => { window.__whgMatchFeed.ready = true; });
+// The note above the tabs: dismissed once, remembered on this device.
+(function intro() {
+  const box = document.getElementById('mf_intro');
+  if (!box) return;
+  if (store('local', 'mf.intro') !== 'hidden') box.hidden = false;
+  document.getElementById('mf_intro_close').addEventListener('click', () => { box.hidden = true; store('local', 'mf.intro', 'hidden'); });
+}());
+
+load(S.tab).then(() => {
+  window.__whgMatchFeed.ready = true;
+  // First visit only, and only when there is something on screen for the tour to point at.
+  if (!hasSeenMatchTour() && document.querySelector('#mf_cands .mf-row')) startMatchTour();
+});

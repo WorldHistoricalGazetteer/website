@@ -95,3 +95,7 @@
 .mf-map-marker--record { background: #fff; color: #b26a00; border-color: #b26a00; font-size: 1rem;
   width: 26px; height: 26px; z-index: 3; }
 @media (max-width: 1199.98px) { .mf-map-panel { position: static; } .mf-map, .mf-map-empty { height: 240px; } }
+
+/* Key hints on buttons are clutter until the person turns the keyboard shortcuts on. */
+.mf-page:not(.mf-keys-on) .mf-bar kbd,
+.mf-page:not(.mf-keys-on) #mf_search kbd { display: none; }

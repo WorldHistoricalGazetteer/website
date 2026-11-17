@@ -243,7 +243,7 @@ class CompletionMailTests(Base):
             self.assertIn("Clergy places", text)
             self.assertIn('href="https://whgazetteer.org/datasets/7/matches/"', text)
             self.assertIn("1 of them has at least one suggestion", text)
-            self.assertIn("Link", text)
+            self.assertIn("matches", text)
             self.assertIsNone(FORBIDDEN.search(text))
             self.assertEqual("Not every record was checked" in text, limited)
             self.assertEqual("looked again" in text, refresh)

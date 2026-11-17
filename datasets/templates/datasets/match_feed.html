@@ -1,4 +1,4 @@
-<!-- datasets/match_feed.html: "Link your records", the contributor feed (place#338) -->
+<!-- datasets/match_feed.html: "Match your places", the contributor feed (place#338) -->
 {% extends "main/base_webpack.html" %}
 {% load static %}
 
@@ -6,7 +6,7 @@
 <link href="{% static 'webpack/match_feed.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
 {% endblock %}
 
-{% block title %}<title>Link your records: {{ ds.title }}</title>{% endblock %}
+{% block title %}<title>Match your places: {{ ds.title }}</title>{% endblock %}
 
 {% block content %}
 <div class="container mf-page" id="match_feed"
@@ -17,16 +17,27 @@
      data-progress-url="{% url 'datasets:ds_matches_progress' ds.id %}"
      data-regenerate-url="{% url 'datasets:ds_matches_regenerate' ds.id %}">
   <div class="d-flex flex-wrap justify-content-between align-items-baseline mt-3 mb-2 gap-2">
-    <h1 class="h4 mb-0"><a href="{% url 'datasets:ds_status' ds.id %}">{{ ds.title }}</a> · Link your records
-      <span class="badge bg-warning text-dark align-middle ms-1">beta</span></h1>
-    <div class="small text-secondary" id="mf_progress">
-      {{ progress.reviewed }} / {{ progress.records }} reviewed · {{ progress.links }} link{{ progress.links|pluralize }}
-    </div>
+    <h1 class="h4 mb-0">Match your places <span class="badge bg-warning text-dark align-middle mx-1">beta</span>
+      · <a href="{% url 'datasets:ds_status' ds.id %}">{{ ds.title }}</a></h1>
+    <div class="small text-secondary">
+    <button type="button" class="btn btn-sm btn-outline-secondary py-0 me-2" id="mf_tour_button" data-act="tour">Tour</button>
+    <span id="mf_progress">
+      {{ progress.reviewed }} / {{ progress.records }} reviewed · {{ progress.links }} match{{ progress.links|pluralize:"es" }}
+    </span></div>
+  </div>
+
+  <div class="alert alert-light border small mf-intro" id="mf_intro" role="note" hidden data-tour="intro">
+    <button type="button" class="btn-close float-end" id="mf_intro_close" aria-label="Hide this note"></button>
+    Some of your places may already be in WHG, from GeoNames, Wikidata or other gazetteers.
+    For each suggestion, say if it is the same place. &ldquo;Same place&rdquo; adds a signed note that connects the two records.
+    Nothing is merged or changed: your record stays yours. WHG can then show the two records together.
+    This is optional, and you can undo any answer.
+    <button type="button" class="btn btn-sm btn-link p-0 ms-1" data-act="tour">Take the tour</button>
   </div>
 
   {% if not progress.generation %}
   <div class="alert alert-info" id="mf_no_generation">
-    No suggestions have been prepared for this dataset yet.
+    No suggestions have been prepared for this gazetteer yet.
     <button type="button" class="btn btn-sm btn-primary ms-2" data-act="regenerate">Prepare suggestions</button>
   </div>
   {% elif progress.generation.status != "finished" %}
@@ -64,8 +75,8 @@
           <section class="mf-map-panel" id="mf_map_panel" aria-label="Map of this record and its suggestions" data-tour="map" hidden>
             <div class="mf-map" id="mf_map"></div>
             <div class="mf-map-tools small" id="mf_map_tools" hidden>
-              <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-act="fit-near">Fit nearby</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-act="fit-all">Fit all</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-act="fit-near" title="Zoom the map to this record and the suggestions close to it" aria-label="Fit nearby: zoom the map to this record and the suggestions close to it">Fit nearby</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0" data-act="fit-all" title="Zoom the map out to show every suggestion, however far away" aria-label="Fit all: zoom the map out to show every suggestion, however far away">Fit all</button>
             </div>
             <div class="mf-map-empty" id="mf_map_none" hidden>
               <i class="fas fa-map-marker-alt me-1" aria-hidden="true"></i>
@@ -81,11 +92,16 @@
     </div>
   </div>
   <div class="small text-secondary mt-3" id="mf_keys">
-    Keys: <kbd>1</kbd>–<kbd>9</kbd> go to a suggestion · <kbd>↑</kbd>/<kbd>↓</kbd> move between suggestions ·
-    on a suggestion: <kbd>s</kbd> Same place, <kbd>x</kbd> Not the same, <kbd>c</kbd> or <kbd>?</kbd> Can't tell ·
-    <kbd>Enter</kbd> save · <kbd>n</kbd> None of these fits · <kbd>l</kbd> Not sure yet (moves it to Later) · <kbd>u</kbd> undo ·
-    <kbd>/</kbd> search · <kbd>←</kbd>/<kbd>→</kbd> other record
-    <label class="ms-2 text-nowrap"><input type="checkbox" id="mf_shortcuts" checked> Keyboard shortcuts</label>
+    <div class="form-check form-switch d-inline-block mb-0">
+      <input class="form-check-input" type="checkbox" role="switch" id="mf_shortcuts">
+      <label class="form-check-label" for="mf_shortcuts">Keyboard shortcuts</label>
+    </div>
+    <div class="mt-1" id="mf_keylist" hidden>
+      <kbd>1</kbd>–<kbd>9</kbd> go to a suggestion · <kbd>↑</kbd>/<kbd>↓</kbd> move between suggestions ·
+      on a suggestion: <kbd>s</kbd> Same place, <kbd>x</kbd> Not the same, <kbd>c</kbd> or <kbd>?</kbd> Can't tell ·
+      <kbd>Enter</kbd> save · <kbd>n</kbd> None of these fits · <kbd>l</kbd> Not sure yet (moves it to Later) · <kbd>u</kbd> undo ·
+      <kbd>/</kbd> search · <kbd>←</kbd>/<kbd>→</kbd> other record
+    </div>
   </div>
 </div>
 {% endblock %}
