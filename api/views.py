@@ -221,8 +221,9 @@ class SpatialAPIView(generics.ListAPIView):
     required); `api.spatial_legacy.to_reconcile_query` maps the old parameters and
     lists what has no equivalent. No sunset date is set, so no `Sunset` header.
     Every response carries `Deprecation` (RFC 9745) and `Link` headers and a
-    `deprecation` member; each call is logged (logger `api.views`, "api/spatial call")
-    so use can be measured before retirement.
+    `deprecation` member; each call is logged ("legacy api call"), all added by
+    `api.deprecation.deprecated_endpoint` in api/urls.py, shared with the other
+    legacy v3 endpoints.
     """
     renderer_classes = [JSONRenderer]
     serializer_class = LPFSerializer
@@ -234,41 +235,13 @@ class SpatialAPIView(generics.ListAPIView):
     # Compact JSON: indent=2 roughly doubled the bytes of a big polygon.
     JSON_PARAMS = {'ensure_ascii': False}
 
-    # RFC 9745: the date it was deprecated, as a structured-field date (2026-11-17).
-    DEPRECATION = "@1794873600"
-    LINK = ('<https://whgazetteer.org/reconcile>; rel="successor-version", '
-            '<https://docs.whgazetteer.org/content/technical/apis.html#the-legacy-spatial-endpoint-is-deprecated>; rel="deprecation"')
-    # The notice every response of this endpoint carries at its root, first key.
-    # Keep the message identical to the docs (content/technical/apis.md).
-    DEPRECATION_BODY = {
-        "deprecated": True,
-        "message": ("This endpoint is deprecated and will be retired when WHG moves to v4. Switch to the "
-                    "Reconciliation API (POST /reconcile) spatial filters (lat/lng/radius or bounds), which "
-                    "require an API token: generate one on your profile page "
-                    "(https://whgazetteer.org/profile/); see "
-                    "https://docs.whgazetteer.org/content/technical/apis.html#api-tokens."),
-        "replacement": "POST https://whgazetteer.org/reconcile (spatial-only query: lat/lng/radius or bounds)",
-        "docs": "https://docs.whgazetteer.org/content/technical/apis.html#the-legacy-spatial-endpoint-is-deprecated",
-        "token_docs": "https://docs.whgazetteer.org/content/technical/apis.html#api-tokens",
-        "token_required": True,
-        "sunset": None,
-    }
-
     def get(self, *args, **kwargs):
-        params = self.request.query_params
-        logger.info("api/spatial call type=%s geometry=%s match=%s km=%s pagesize=%s auth=%s ua=%r",
-                    params.get('type'), params.get('geometry'), params.get('match'), params.get('km'),
-                    params.get('pagesize'), bool(getattr(self.request.user, 'is_authenticated', False)),
-                    (self.request.META.get('HTTP_USER_AGENT') or '')[:120])
-        return self._answer(params)
+        return self._answer(self.request.query_params)
 
     def _json(self, data, status=status.HTTP_200_OK):
-        """Every response of this endpoint: compact JSON, the deprecation member and headers."""
-        data = {"deprecation": self.DEPRECATION_BODY, **data}
-        response = JsonResponse(data, status=status, json_dumps_params=self.JSON_PARAMS)
-        response["Deprecation"] = self.DEPRECATION
-        response["Link"] = self.LINK
-        return response
+        """Every response of this endpoint is compact JSON. The deprecation notice and
+        headers are added by api.deprecation.deprecated_endpoint (api/urls.py)."""
+        return JsonResponse(data, status=status, json_dumps_params=self.JSON_PARAMS)
 
     def _answer(self, params):
 

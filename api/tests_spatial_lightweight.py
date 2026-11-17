@@ -344,11 +344,12 @@ class SpatialDeprecationTests(TestCase):
         self.assertIn("features", ok.json())
 
     def test_each_call_is_logged(self):
-        with self.assertLogs("api.views", level="INFO") as logs:
+        with self.assertLogs("api.deprecation", level="INFO") as logs:
             self.client.get(URL, {"type": "nearby", "lon": "0", "lat": "0", "km": "5"},
                             HTTP_USER_AGENT="probe-agent/1.0")
-        line = next(m for m in logs.output if "api/spatial call" in m)
-        self.assertIn("type=nearby", line)
+        line = next(m for m in logs.output if "legacy api call" in m)
+        self.assertIn("endpoint=spatial", line)
+        self.assertIn("origin=external", line)
         self.assertIn("probe-agent/1.0", line)
 
     def test_swagger_marks_it_deprecated(self):

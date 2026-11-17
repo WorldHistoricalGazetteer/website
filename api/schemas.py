@@ -815,7 +815,7 @@ spatial_schema = extend_schema(
         "**Deprecated** (2026-11-17): retired when WHG switches to v4; no date set yet. Use a spatial-only "
         "`POST /reconcile` query instead (`lat`/`lng`/`radius` or `bounds`, with `relation` and an API "
         "token); see https://docs.whgazetteer.org/content/technical/apis.html"
-        "#the-legacy-spatial-endpoint-is-deprecated for the parameter mapping. Responses carry "
+        "#mapping-legacy-spatial-queries for the parameter mapping. Responses carry "
         "`Deprecation` and `Link: <...>; rel=\"successor-version\"` headers and a `deprecation` member.\n\n"
         "Searches the places held in WHG's own database (contributed and published datasets), NOT the "
         "gazetteer index behind the Atlas and the Reconciliation API, which also takes spatial-only queries "
