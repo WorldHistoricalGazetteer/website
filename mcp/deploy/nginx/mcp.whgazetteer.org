@@ -1,0 +1,62 @@
+# mcp.whgazetteer.org -> WHG MCP server (compose project ~/stacks/mcp, container whg-mcp on 127.0.0.1:8020).
+# Live copy: /etc/nginx/sites-available/mcp.whgazetteer.org, symlinked from sites-enabled/.
+# deploy.sh only renders ~/nginx-sites/<site> and the deployment repo's `make nginx-sync` copies without
+# deleting, so neither removes this file. Its zones and log format live HERE (not in conf.d/00-whg-edge.conf,
+# which nginx-sync overwrites). $whg_rl_key (client address, IPv6 keyed on its /64) comes from 00-whg-edge.conf.
+#
+# No $whg_block User-Agent blocklist here on purpose: MCP clients are programs (node-fetch, python httpx, ...).
+# The MCP server's own upstream calls to whgazetteer.org still pass through the main vhost's rules.
+
+limit_req_zone  $whg_rl_key zone=mcp_rl:10m rate=30r/m;
+limit_conn_zone $whg_rl_key zone=mcp_conn:10m;
+
+log_format mcp_log '$remote_addr - [$time_local] "$request" $status $body_bytes_sent '
+                   '"$http_user_agent" rt=$request_time urt=$upstream_response_time lr=$limit_req_status';
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name mcp.whgazetteer.org;
+    access_log /var/log/nginx/mcp.access.log mcp_log;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name mcp.whgazetteer.org;
+
+    # TEMPORARY self-signed certificate until DNS exists and Let's Encrypt can issue (see mcp/deploy/README.md).
+    ssl_certificate     /etc/nginx/ssl/mcp.whgazetteer.org-selfsigned.crt;
+    ssl_certificate_key /etc/nginx/ssl/mcp.whgazetteer.org-selfsigned.key;
+    # After `certbot certonly --nginx -d mcp.whgazetteer.org --account bc752e357f22755a54d4a2291bb3bde9`:
+    # ssl_certificate     /etc/letsencrypt/live/mcp.whgazetteer.org/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/mcp.whgazetteer.org/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    access_log /var/log/nginx/mcp.access.log mcp_log;
+    error_log  /var/log/nginx/mcp.error.log warn;
+
+    client_max_body_size 64k;              # JSON-RPC requests are small
+
+    limit_req  zone=mcp_rl burst=20 nodelay;
+    limit_req_status 429;
+    limit_conn mcp_conn 10;
+    limit_conn_status 429;
+
+    location / {
+        proxy_pass http://127.0.0.1:8020;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+        proxy_buffering off;               # streamable HTTP / SSE
+        proxy_cache off;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;            # upstream WHG calls time out well inside this
+    }
+}
