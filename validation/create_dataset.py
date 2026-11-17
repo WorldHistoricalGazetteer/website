@@ -11,7 +11,7 @@ import redis
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from django.db import transaction, IntegrityError, DataError
+from django.db import transaction, IntegrityError, DataError, connection
 from django.db.models import Max
 from django.urls import reverse
 from django.utils import timezone
@@ -96,6 +96,35 @@ class PrimaryKeyManager:
         else:
             logger.error(f"Model class {model_name} not found.")
             return None
+
+
+def resync_pk_sequences(model_classes):
+    """Bring each model's Postgres id sequence up to the highest id in its table.
+
+    `ds_insert` writes related rows with explicit pks taken from the Redis counters, which never
+    advances the table's own sequence. Anything that later lets Postgres assign the id (bulk_create in
+    the v3 review screen, the admin, ...) then collides: on 2026-11-17 every accepted Wikidata match
+    returned a 500 (`place_geom_pkey`, `place_name_pkey`) with the sequences up to 18,000 behind.
+    Only ever raises a sequence, so it is safe to run at any time and repeatedly.
+    Returns {table: new_last_value} for the sequences it moved."""
+    moved = {}
+    with connection.cursor() as cur:
+        for model in model_classes:
+            table = model._meta.db_table
+            cur.execute("SELECT pg_get_serial_sequence(%s, 'id')", [table])
+            seq = cur.fetchone()[0]
+            if not seq:
+                continue
+            cur.execute(f'SELECT max(id) FROM "{table}"')
+            max_id = cur.fetchone()[0]
+            if max_id is None:
+                continue
+            cur.execute(f"SELECT last_value, is_called FROM {seq}")
+            last, called = cur.fetchone()
+            if max_id > (last if called else last - 1):
+                cur.execute("SELECT setval(%s, %s)", [seq, max_id])
+                moved[table] = max_id
+    return moved
 
 
 def safe_key(value):
@@ -544,6 +573,15 @@ def ds_insert(jsonld_filepath, ds, task_id):
         except Exception as e:
             logger.error(f"Failed to insert data into dataset: {e}")
             raise Exception(f"Failed to insert data into dataset: {e}, Errors: {errors}")
+
+    # Committed: explicit-pk inserts leave the table sequences behind (see resync_pk_sequences).
+    # Not needed after a failure, which rolled the rows back.
+    try:
+        moved = resync_pk_sequences([globals()[f'Place{m}'] for m, _, _ in data_mappings.values()])
+        if moved:
+            logger.info(f"ds_insert: resynced id sequences {moved}")
+    except Exception as e:
+        logger.error(f"ds_insert: could not resync id sequences: {e}")
 
 
 def parse_dates(feature):
