@@ -123,6 +123,7 @@ urlpatterns = [
                   path('principles/', views.principles_view, name="principles"),
                   # Retired v1/v2 "About" siblings: permanent redirects to what replaced them.
                   path('licensing/', RedirectView.as_view(pattern_name='licenses', permanent=True)),
+                  path('licences/', RedirectView.as_view(pattern_name='licenses', permanent=True)),
                   path('credits/', RedirectView.as_view(pattern_name='credits', permanent=True)),
                   path('system/', RedirectView.as_view(pattern_name='about', permanent=True)),
 

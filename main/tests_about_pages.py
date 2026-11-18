@@ -36,7 +36,7 @@ class AboutPagesTests(TestCase):
             self.assertEqual(self.client.get(path).status_code, 200, path)
 
     def test_retired_siblings_redirect_permanently(self):
-        for old, new in (("/licensing/", "/licenses/"), ("/credits/", "/people_overview/"), ("/system/", "/about/")):
+        for old, new in (("/licensing/", "/licenses/"), ("/licences/", "/licenses/"), ("/credits/", "/people_overview/"), ("/system/", "/about/")):
             resp = self.client.get(old)
             self.assertEqual(resp.status_code, 301, old)
             self.assertEqual(resp["Location"], new, old)
@@ -114,12 +114,16 @@ class AboutPagesTests(TestCase):
         self.assertIn("Principles of the World Historical Gazetteer", html)
         self.assertIn('id="principles-draft-banner"', html)
         self.assertIn('<meta name="robots" content="noindex, nofollow">', html)
+        # A multi-line {# #} is not a Django comment and would print its text into the page.
+        self.assertNotIn("DRAFT transcription of", html)
+        self.assertNotIn("{#", html)
 
     @override_settings(PRINCIPLES_PAGE_ENABLED=True)
     def test_principles_public_when_enabled(self):
         resp = self.client.get("/principles/")
         self.assertEqual(resp.status_code, 200)
         html = resp.content.decode()
+        self.assertNotIn("DRAFT transcription of", html)
         self.assertIn("Principles of the World Historical Gazetteer", html)
         self.assertNotIn('id="principles-draft-banner"', html)
         self.assertNotIn('content="noindex', html)
