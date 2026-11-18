@@ -8,7 +8,7 @@ the POST /reconcile body that replaces them at the v4 cutover. Pure function, no
 from django.test import SimpleTestCase
 
 from api.spatial import SpatialParamError
-from api.spatial_legacy import NO_EQUIVALENT, to_reconcile_query
+from api.spatial_legacy import DATASET_NOTE, NO_EQUIVALENT, to_reconcile_query
 
 
 class LegacyMappingTests(SimpleTestCase):
@@ -41,6 +41,9 @@ class LegacyMappingTests(SimpleTestCase):
         out, q = self.q(type="bbox", sw="-2,50", ne="0,52", fc="p,a,P", dataset="42", pagesize="5000")
         self.assertEqual(q["fclasses"], ["A", "P"])
         self.assertEqual(q["dataset"], 42)
+        # /reconcile does not filter on `dataset`: narrow to WHG's places and say so.
+        self.assertEqual(q["namespaces"], ["whg"])
+        self.assertIn(DATASET_NOTE, out["notes"])
         self.assertEqual(q["limit"], 1000)
         self.assertEqual(out["dropped"], {})
         self.assertEqual(self.q(type="bbox", sw="-2,50", ne="0,52", pagesize="7")[1]["limit"], 7)

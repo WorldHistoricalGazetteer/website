@@ -15,6 +15,10 @@ themselves are untouched. Every response it wraps gets:
   ...") so retirement can be measured on external use. ``in-app`` means the
   request carried a same-origin Referer or a session cookie.
 
+At the v4 cutover ``LEGACY_API_MODE`` switches what answers behind the same
+headers: ``compat`` translates to the successor API, ``gone`` answers 410
+(``api.legacy_compat``; the default ``deprecated`` is everything above).
+
 The replacements are the ones content/technical/apis.md documents. Where the docs
 name none, the notice says "replacement to be confirmed" rather than guess.
 """
@@ -130,23 +134,44 @@ def _insert_member(content, member):
 
 def deprecated_endpoint(key):
     """Wrap a view callable (``View.as_view()`` or a function) as a deprecated
-    legacy endpoint. See the module docstring."""
+    legacy endpoint. See the module docstring.
+
+    What answers depends on ``LEGACY_API_MODE`` (``api.legacy_compat``), read per
+    request: ``deprecated`` (default) the legacy view; ``compat`` the successor
+    API through a translation; ``gone`` a 410. In ``compat`` and ``gone``, an
+    in-app request still gets the legacy view while
+    ``LEGACY_API_INAPP_PASSTHROUGH`` is on (the default)."""
+    from api import legacy_compat  # imports this module's constants
+
     member = notice(key)
     link = link_header(key)
 
     def decorator(view):
+        compat = legacy_compat.compat_view(key, view)
+
         @wraps(view)
         def wrapped(request, *args, **kwargs):
-            logger.info("legacy api call endpoint=%s path=%s origin=%s auth=%s ua=%r",
-                        key, request.path, request_origin(request),
+            origin = request_origin(request)
+            mode = legacy_compat.endpoint_mode(key)
+            served = mode
+            if mode != "deprecated" and origin == "in-app" and legacy_compat.inapp_passthrough():
+                served = "deprecated"
+            logger.info("legacy api call endpoint=%s path=%s origin=%s auth=%s mode=%s served=%s ua=%r",
+                        key, request.path, origin,
                         bool(getattr(getattr(request, "user", None), "is_authenticated", False)),
-                        (request.META.get("HTTP_USER_AGENT") or "")[:120])
-            response = view(request, *args, **kwargs)
+                        mode, served, (request.META.get("HTTP_USER_AGENT") or "")[:120])
+            if served == "gone":
+                response = legacy_compat.gone_response(key, request, kwargs)
+            elif served == "compat":
+                response = compat(request, *args, **kwargs)
+            else:
+                response = view(request, *args, **kwargs)
             if hasattr(response, "render") and not getattr(response, "is_rendered", True):
                 response.render()
             response["Deprecation"] = DEPRECATION_HEADER
             response["Link"] = link
-            if (not getattr(response, "streaming", False)
+            # A 410 body is itself the retirement notice: no "will be retired" member.
+            if (response.status_code != 410 and not getattr(response, "streaming", False)
                     and "json" in (response.get("Content-Type") or "")):
                 body = _insert_member(response.content, member)
                 if body is not None:

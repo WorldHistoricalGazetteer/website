@@ -1,13 +1,14 @@
 """Translate a legacy ``GET /api/spatial/`` query into its ``POST /reconcile``
 equivalent, for the v4 cutover (when /api/spatial/ is retired).
 
-NOT wired to any URL. ``POST /reconcile`` takes a JSON body
-(``{"queries": {"q0": {...}}}``) and an API token, so an HTTP redirect from the old
-GET cannot carry the translated query: a 301/307 keeps the method (GET) and the
-query string, and the old callers send no token. The realistic redirection is a
-server-side shim at the old URL that calls ``to_reconcile_query`` and then either
-answers with the reshaped result or refuses with a 410 naming the replacement and
-the translated body. ``to_reconcile_query`` is pure (no I/O) so both can use it.
+``POST /reconcile`` takes a JSON body (``{"queries": {"q0": {...}}}``) and an API
+token, so an HTTP redirect from the old GET cannot carry the translated query: a
+301/307 keeps the method (GET) and the query string, and the old callers send no
+token. The redirection is therefore a server-side shim at the old URL,
+``api.legacy_compat`` (``LEGACY_API_MODE``): in ``compat`` mode it runs this
+translation and answers with the reshaped result; in ``gone`` mode it refuses with
+a 410 naming the replacement and the translated body. ``to_reconcile_query`` is
+pure (no I/O) so both can use it.
 
 What the replacement searches differs: /api/spatial/ searches only the places in
 WHG's own database (contributed datasets); /reconcile searches the gazetteer index
@@ -34,6 +35,9 @@ NO_EQUIVALENT = {
     "count": "No total count of matches; page with limit/offset.",
     "auth": "/reconcile requires an API token (401 without); /api/spatial/ was anonymous.",
 }
+
+DATASET_NOTE = ("/reconcile accepts 'dataset' but does not filter by it: 'namespaces': ['whg'] keeps the "
+                "candidates to WHG's own places; keep those whose id starts 'place:whg:<dataset id>:'.")
 
 
 def to_reconcile_query(params):
@@ -86,6 +90,13 @@ def to_reconcile_query(params):
         if not str(p["dataset"]).isdigit():
             raise spatial_api.SpatialParamError("'dataset' must be an integer id.")
         q["dataset"] = int(p["dataset"])
+        # /reconcile accepts `dataset` (it lets a name-less query through) but applies
+        # no filter for it: neither the legacy ES query nor the gateway body carries it
+        # (read from api/reconcile_helpers.build_es_query and api/crc_client, 2026-11-18).
+        # Narrowing to WHG's own places is the part the API can express; the dataset
+        # itself is filtered on the candidate ids (`place:whg:<dataset id>:...`).
+        q["namespaces"] = ["whg"]
+        notes.append(DATASET_NOTE)
     if p.get("collection"):
         dropped["collection"] = NO_EQUIVALENT["collection"]
     raw = str(p.get("pagesize", spatial_api.DEFAULT_PAGESIZE))

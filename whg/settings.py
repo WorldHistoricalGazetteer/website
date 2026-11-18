@@ -63,6 +63,15 @@ except FileNotFoundError:
 # places.v4_landing.v4_landing_enabled(). Set V4_LANDING_ENABLED=1 in env or local_settings.
 V4_LANDING_ENABLED = os.environ.get('V4_LANDING_ENABLED', '') == '1' or bool(globals().get('V4_LANDING_ENABLED', False))
 
+# Legacy v3 JSON endpoints (/api/spatial/, /api/db/, /api/index/, /api/place/..., /api/geojson/) at the
+# v4 cutover: 'deprecated' (default: legacy views + deprecation notice, unchanged), 'compat' (old URLs
+# translated to /reconcile and the Entity API; token required) or 'gone' (HTTP 410). Read per request
+# by api.legacy_compat, which documents the other LEGACY_API_* settings. Set in env or local_settings.
+LEGACY_API_MODE = os.environ.get('LEGACY_API_MODE') or globals().get('LEGACY_API_MODE', 'deprecated')
+# While True, WHG's own pages keep the legacy views in 'compat'/'gone' (they still call three of these).
+LEGACY_API_INAPP_PASSTHROUGH = (os.environ.get('LEGACY_API_INAPP_PASSTHROUGH', '') != '0'
+                                and bool(globals().get('LEGACY_API_INAPP_PASSTHROUGH', True)))
+
 # CRC Gateway (Pitt CRC Elasticsearch + FastAPI gateway)
 # Set CRC_GATEWAY_URL in env vars or local_settings to enable.
 # Leave unset on production until ready to go live.
