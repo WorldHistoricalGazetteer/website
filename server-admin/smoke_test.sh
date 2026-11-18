@@ -153,7 +153,16 @@ api_json() { # $1=path  $2=grep-token expected in body
 }
 api_json "/api/sources/"     '"namespace"'
 api_json "/api/attribution/" '"whg"'
-api_json "/api/place/88106/" '"title"'
+# The place payload the site's own pages use. Anonymous callers of this internal route need a CSRF
+# cookie and header (the same as the site's JS); /api/place/ is deprecated and goes away at the v4
+# switch, so it is not tested here.
+CSRF_JAR=$(mktemp)
+curl -s -o /dev/null -c "$CSRF_JAR" -A "$UA" "$BASE/" --max-time 30
+CSRF_TOKEN=$(awk '$6=="csrftoken"{print $7}' "$CSRF_JAR")
+body=$(curl -s -w $'\n%{http_code}' -A "$UA" -b "$CSRF_JAR" -H "X-CSRFToken: $CSRF_TOKEN" "$BASE/places/88106/panel/" --max-time 30)
+code=$(printf '%s' "$body" | tail -1); body=$(printf '%s' "$body" | sed '$d')
+rm -f "$CSRF_JAR"
+if [ "$code" = "200" ] && printf '%s' "$body" | grep -q '"title"'; then ok "/places/88106/panel/ → 200, contains 'title'"; else bad "/places/88106/panel/ → $code (expected 200 with 'title')"; fi
 api_json "/api/area_list/"   '"type"'
 
 # ── 3. Deep container-side checks (ES, outbound libs, forms, suite) ──────────
