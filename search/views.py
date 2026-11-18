@@ -1276,7 +1276,22 @@ def suggester(q, indices, qstr=None):
             return 0
         return 1 if target in {_fold(n) for n in (h.get('searchy') or [])} else 2
 
-    sortedsugs = sorted(suggestions, key=lambda x: (_tier(x), -x['linkcount']))
+    tiers = {id(x): _tier(x) for x in suggestions}
+    # Historical names: when no LINKED record is titled the query, the linked record that
+    # merely carries it as a variant is the real place and the unlinked namesakes are
+    # strays (Constantinople -> Istanbul, Peking -> Beijing, Bombay -> Mumbai). Promote
+    # linked exact matches above unlinked ones then. Where a linked title match exists
+    # (Rome, Vienna, Delhi) nothing is promoted, so those orders are unchanged, and a
+    # fuzzy near-miss (tier 2) is never promoted whatever its links.
+    promote = target and not any(tiers[id(x)] == 0 and x['linkcount'] for x in suggestions)
+
+    def _key(x):
+        t = tiers[id(x)]
+        if promote:
+            return (t == 2, x['linkcount'] == 0, t, -x['linkcount'])
+        return (t, -x['linkcount'])
+
+    sortedsugs = sorted(suggestions, key=_key)
     # TODO: there may be parents and children
     return sortedsugs
 
