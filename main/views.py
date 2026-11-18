@@ -78,6 +78,11 @@ def OpenAPIView(request):
 
 
 def get_task_progress(request, taskid):
+    # Login required (anonymous could poll any task until 2026-11-18). A Celery task id cannot
+    # be tied to its requester here, so this is not scoped per user. 401 JSON like
+    # validation.tasks.get_task_status, since callers poll it by AJAX.
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
     task = AsyncResult(taskid)
 
     if isinstance(task.backend, DisabledBackend):
