@@ -231,6 +231,8 @@ def _clear_download_cache(ds):
         except Exception:  # noqa: BLE001 - a stale cache is rebuilt later; never fail the write
             pass
     transaction.on_commit(clear)
+    from datasets.location_index import location_changed  # the index re-reads the dataset too
+    transaction.on_commit(lambda: location_changed(ds.pk))
 
 
 def adopt(user, ds, place_pk, candidate_pk):
