@@ -1182,6 +1182,11 @@ def _adapt_hits(data: dict) -> list[dict]:
             "_confidence": hit.get("confidence"),
             "_source": {
                 "place_id": place_id,  # Namespaced, e.g. "gn:745044"
+                # The source namespace, read off the id. The embargo filters in api/reconcile.py
+                # (place#218) test `_source.namespace`; a gateway hit carried none, so for every
+                # gateway hit they compared None against the hidden set and kept it. The hit-level
+                # filter is the ONLY exclusion for a caller who asked for all sources.
+                "namespace": str(place_id).split(":", 1)[0] if ":" in str(place_id) else None,
                 "title": title,
                 "names": names,
                 "searchy": searchy,

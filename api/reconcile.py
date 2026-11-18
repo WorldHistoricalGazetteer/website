@@ -854,7 +854,10 @@ class SuggestEntityView(AuthenticatedAPIView):
                      request.META.get('REMOTE_ADDR'), request.user, prefix,
                      {k: v for k, v in request.GET.items() if k != 'token'})
 
-        if not prefix:
+        # No prefix is an empty answer, EXCEPT for a circle (`lat`+`lng`+`radius`): the same "places in
+        # this circle" question that POST /reconcile answers without a `query` (place#345, #353).
+        circle_only = not prefix and all(request.GET.get(k, "").strip() for k in ("lat", "lng", "radius"))
+        if not prefix and not circle_only:
             return JsonResponse({"result": []})
 
         # --- 1. Get Parameters ---
@@ -876,6 +879,38 @@ class SuggestEntityView(AuthenticatedAPIView):
             cursor = int(request.GET.get("cursor", 0))
         except (ValueError, TypeError):
             return json_error("Invalid 'limit' or 'cursor' parameter. They must be integers.")
+
+        if circle_only:
+            # Spatial-only suggest (place#353). Places only (periods have no location), the gateway
+            # only (the legacy index cannot filter on a circle), through the same normaliser and gateway
+            # client as /reconcile, so the radius cap (500 km), the `within` default and the embargo
+            # rules are shared rather than copied.
+            if type not in ("all", "place"):
+                return JsonResponse({"result": []})
+            try:
+                nq = normalise_query_params({
+                    "lat": request.GET.get("lat"), "lng": request.GET.get("lng"),
+                    "radius": request.GET.get("radius"), "limit": max(1, min(cursor + limit, 500)),
+                    **({"countries": ccodes} if ccodes else {}),
+                    **({"fclasses": fclasses} if fclasses else {}),
+                    **({"types": types} if types else {}),
+                })
+            except ValueError as e:
+                return json_error(str(e))
+            circle_hits = []
+            if namespaces is None or namespaces:
+                circle_hits = _drop_withheld_hits(
+                    crc_reconcile_search(nq, user=request.user, namespaces=namespaces), _suggest_withheld)
+                if _suggest_hidden:
+                    circle_hits = [h for h in circle_hits
+                                   if (h.get("_source") or {}).get("namespace") not in _suggest_hidden]
+            circle_candidates = [make_candidate(h, "", 1.0, SCHEMA_SPACE) for h in circle_hits]
+            for rank, candidate in enumerate(circle_candidates):
+                candidate["score_scale"] = "gateway"
+                candidate["source_rank"] = rank
+            results = {"result": circle_candidates[cursor:cursor + limit]}
+            logger.info("GET /suggest/entity (circle only) response: %d candidates", len(results["result"]))
+            return JsonResponse(results)
 
         # --- 2. Search for Places (Elasticsearch) ---
         place_candidates = []

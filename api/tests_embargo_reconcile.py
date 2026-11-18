@@ -134,8 +134,8 @@ class ReconcileWiringTests(SimpleTestCase):
             src.count("not in _hidden_ns"), 2,
             "expected the legacy arm AND the gateway arm to be filtered in reconcile_place_es")
         self.assertEqual(
-            src.count("not in _suggest_hidden"), 2,
-            "expected both arms to be filtered in SuggestEntityView")
+            src.count("not in _suggest_hidden"), 3,
+            "expected both arms AND the circle-only (no prefix) arm to be filtered in SuggestEntityView")
 
     def test_the_embargoed_namespace_is_not_reported_as_searched(self):
         """Naming it discloses its existence — the thing the embargo is for. And
