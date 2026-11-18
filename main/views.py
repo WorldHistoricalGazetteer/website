@@ -1149,8 +1149,8 @@ def beta_status_view(request):
 # ── WHG Analytics (in-house proxy for Plausible) ────────────────────────────────────────────────
 # Staff-only admin tool (dashboard_admin → Tools → "Analytics"). Aggregates all three WHG Plausible
 # sites (main / blog / docs) via the Stats API into one page — top-line metrics, a visitors-over-time
-# chart, and breakdowns (pages/sources/countries/devices/browsers/OS) — plus the Map-your-Data usage
-# funnel (main-site custom events) at the bottom. Replaces both the external Plausible link and the
+# chart, and breakdowns (pages/sources/countries/devices/browsers/OS) — plus the usage funnel of
+# WHG's built-in (beta) Map your Data (main-site custom events) at the bottom. Replaces both the external Plausible link and the
 # CE-absent funnel feature. Multi-site fetches run concurrently.
 PLAUSIBLE_PERIODS = [('7d', 'Last 7 days'), ('30d', 'Last 30 days'), ('month', 'This month'),
                      ('6mo', 'Last 6 months'), ('12mo', 'Last 12 months')]
@@ -1178,7 +1178,18 @@ MYD_OTHER = [
     ('MyD: shared', 'Created a read-only share link'),
     ('MyD: shared open', 'Opened a shared project'),
     ('MyD: conflict', 'Hit a merge conflict'),
+    ('MyD: extract column', 'Extracted places from a text column'),
 ]
+# Map your Data is moving out of WHG into PLATO Tools, which keeps files on the user's computer and
+# looks places up through WHG's API with a beta account's token. The MyD events above come only from
+# WHG's own built-in version (/reconciliation/, beta-gated), so the panel is labelled as that. PLATO
+# Tools runs no tracker that reports here, and WHG cannot yet tell its API calls from any other
+# client's, so nothing on this page measures it. See developer/analytics-map-your-data.md.
+PLATO_TOOLS_URL = 'https://plato.pelagios.org/tools/'
+PLATO_TOOLS_GUIDE_URL = 'https://plato.pelagios.org/guide/tools.html#map-your-data'
+# Below this many importing visitors in a period, step percentages are not shown: with a handful of
+# visitors (often one, and often staff testing) a "100%" or "0%" says nothing about conversion.
+MYD_PCT_MIN_BASE = 20
 
 
 def _plausible_get(path, params, site_id):
@@ -1477,6 +1488,38 @@ def _svg_donut(rows):
     return {'r': r, 'circ': round(circ, 2), 'segs': segs, 'total': total}
 
 
+API_ORIGIN_LABELS = {
+    'plato-tools': 'PLATO Tools (plato.pelagios.org)', 'pelagios': 'pelagios.org', 'whg-site': "WHG's own pages",
+    'whg-docs': 'WHG documentation', 'other-web': 'Another website', 'none': 'No Origin header (script, OpenRefine, curl ...)',
+}
+API_CLIENT_LABELS = {
+    'whg-mcp': 'WHG MCP server', 'openrefine': 'OpenRefine', 'python': 'Python script', 'curl': 'curl', 'postman': 'Postman',
+    'browser': 'Web browser', 'other': 'Other software', 'none': 'No User-Agent',
+}
+
+
+def _api_origin_panel(rows_of, results, period):
+    """API_Call events by `origin` and by `client`, with the denominator: ALL API_Call events in the period.
+    Events sent before the props were added (2026-11-18 deploy) carry neither and appear as 'before tracking'.
+    Self-reported headers: indicative, not authoritative."""
+    total = 0
+    for r in rows_of(('events', PLAUSIBLE_MAIN)):
+        if r.get('name') == 'API_Call':
+            total = r.get('events', 0) or 0
+    def table(prop, labels):
+        rows = [r for r in rows_of(('api_' + prop, PLAUSIBLE_MAIN)) if r.get(prop) not in (None, '(none)', '')]  # Plausible keys the row by the bare prop name
+        tagged = sum(r.get('events', 0) or 0 for r in rows)
+        out = [{'key': r[prop], 'label': labels.get(r[prop], r[prop]),
+                'events': r.get('events', 0) or 0, 'visitors': r.get('visitors', 0) or 0,
+                'pct': round(100 * (r.get('events', 0) or 0) / total, 1) if total else None} for r in rows]
+        out.sort(key=lambda x: -x['events'])
+        return out, tagged
+    origins, tagged = table('origin', API_ORIGIN_LABELS)
+    clients, _ = table('client', API_CLIENT_LABELS)
+    return {'total': total, 'tagged': tagged, 'untagged': max(total - tagged, 0), 'origins': origins, 'clients': clients,
+            'has_data': bool(origins or clients)}
+
+
 @login_required
 def plausible_analyser_view(request):
     if not request.user.is_staff:
@@ -1507,6 +1550,12 @@ def plausible_analyser_view(request):
             'metrics': 'visitors', 'limit': 10}, site)
     tasks[('events', PLAUSIBLE_MAIN)] = ('breakdown', {'period': period, 'property': 'event:name',
         'metrics': 'visitors,events', 'limit': 200}, PLAUSIBLE_MAIN)
+    # API calls by origin / client (api/middleware.py adds the `origin` and `client` props to API_Call; they must
+    # be allow-listed in the Plausible site settings, done 2026-11-18). Not counted in the page's error banner:
+    # an empty answer is the normal state until events carrying the props have arrived.
+    for prop in ('origin', 'client'):
+        tasks[('api_' + prop, PLAUSIBLE_MAIN)] = ('breakdown', {'period': period, 'property': 'event:props:' + prop,
+            'metrics': 'events,visitors', 'filters': 'event:name==API_Call', 'limit': 30}, PLAUSIBLE_MAIN)
 
     from concurrent.futures import ThreadPoolExecutor
     results, errors = {}, []
@@ -1518,8 +1567,8 @@ def plausible_analyser_view(request):
                 results[key] = fut.result()
             except Exception as e:  # noqa: BLE001 - surface any thread error
                 results[key] = (None, str(e))
-    for res in results.values():
-        if res[1]:
+    for key, res in results.items():
+        if res[1] and not (isinstance(key, tuple) and str(key[0]).startswith('api_')):
             errors.append(res[1])
 
     def rows_of(key):
@@ -1656,7 +1705,7 @@ def plausible_analyser_view(request):
         {'title': 'Browsers', 'icon': 'fa-window-maximize', 'donut': _svg_donut(merge('browser', 'browser', 6))},
     ]
 
-    # ── Map your Data funnel (main-site custom events) ──
+    # ── Map your Data funnel: WHG's built-in (beta) version only; see PLATO_TOOLS_URL above ──
     by_name = {r['name']: r for r in rows_of(('events', PLAUSIBLE_MAIN))}
 
     def mk(name, label):
@@ -1666,12 +1715,21 @@ def plausible_analyser_view(request):
 
     funnel = [mk(n, l) for n, l in MYD_FUNNEL]
     base_v = funnel[0]['visitors'] if funnel else 0
+    myd_show_pct = base_v >= MYD_PCT_MIN_BASE
     prev_v = None
     for step in funnel:
-        step['pct'] = round(100 * step['visitors'] / base_v, 1) if base_v else 0
-        step['drop'] = round(100 * (prev_v - step['visitors']) / prev_v, 1) if prev_v else None
+        if myd_show_pct:
+            step['pct'] = round(100 * step['visitors'] / base_v, 1)
+            step['drop'] = round(100 * (prev_v - step['visitors']) / prev_v, 1) if prev_v else None
+        else:
+            step['pct'] = step['drop'] = None
         prev_v = step['visitors']
     others = [mk(n, l) for n, l in MYD_OTHER]
+    # Who can open the built-in version at all (users.models.User.can_access_beta, as a query).
+    myd_beta_accounts = reg.filter(Q(is_staff=True) | Q(is_superuser=True)
+                                   | Q(role__in=('beta_tester', 'superuser'))).count()
+
+    api_origin = _api_origin_panel(rows_of, results, period)
 
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
@@ -1685,6 +1743,9 @@ def plausible_analyser_view(request):
         'country_map': country_map, 'country_colors': country_colors,
         'coverage': coverage,
         'funnel': funnel, 'others': others, 'base_v': base_v,
+        'myd_show_pct': myd_show_pct, 'myd_pct_min_base': MYD_PCT_MIN_BASE,
+        'myd_beta_accounts': myd_beta_accounts, 'api_origin': api_origin,
+        'plato_tools_url': PLATO_TOOLS_URL, 'plato_tools_guide_url': PLATO_TOOLS_GUIDE_URL,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
     })
