@@ -126,9 +126,11 @@ def _after_change(datasets, collections=()):
     """After commit, never raising into the caller: the download caches of each dataset in
     ``datasets`` (``{dataset pk: (public, place pks)}``) cleared, its map data (and that of the
     ``collections`` showing its records) dropped and rebuilt at once, and, for a public dataset,
-    the changed records re-indexed (``datasets.tasks.refresh_index_after_location_change``)."""
+    the changed records re-indexed: ``pub`` by ``datasets.tasks.refresh_index_after_location_change``,
+    the gateway by ``datasets.location_index.location_changed``."""
     def run():
         from api.download_file import FileCache
+        from datasets.location_index import location_changed
         from datasets.tasks import refresh_index_after_location_change
         from utils.mapdata import delete_mapdata_cache
         for ds_pk, (public, place_pks) in datasets.items():
@@ -142,6 +144,10 @@ def _after_change(datasets, collections=()):
                     refresh_index_after_location_change.delay(ds_pk, sorted(place_pks))
                 except Exception:  # noqa: BLE001 - the index sweep and the QC report catch it
                     logger.warning("re-index of dataset %s not queued", ds_pk, exc_info=True)
+                try:
+                    location_changed(ds_pk)   # the gateway index: debounced re-ingest (place#350)
+                except Exception:  # noqa: BLE001
+                    logger.warning("gateway re-index of dataset %s not queued", ds_pk, exc_info=True)
         for category, pk in [("datasets", d) for d in datasets] + [("collections", c) for c in collections]:
             try:
                 delete_mapdata_cache.delay(category, pk, refresh=True)

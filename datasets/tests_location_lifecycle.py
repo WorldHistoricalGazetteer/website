@@ -336,10 +336,12 @@ class LinkRetractionTests(LifecycleTestBase):
 
     def test_retraction_on_a_public_dataset_refreshes_its_index_and_download(self):
         with patch("api.download_file.FileCache.delete_cache") as dc, \
-                patch("utils.mapdata.delete_mapdata_cache.delay") as md:
+                patch("utils.mapdata.delete_mapdata_cache.delay") as md, \
+                patch("datasets.location_index.location_changed") as lc:
             with self.captureOnCommitCallbacks(execute=True):
                 attestations.withdraw(self.link_row(), by=self.owner)
         self.refresh_mock.assert_called_once_with(self.ds.pk, [self.hodd.pk])
+        lc.assert_called_once_with(self.ds.pk)                      # the gateway index
         self.assertTrue(any(c.args[:2] == ("dataset", self.ds.pk) for c in dc.call_args_list))
         md.assert_any_call("datasets", self.ds.pk, refresh=True)
 
