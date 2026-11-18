@@ -36,7 +36,7 @@ class LangPrivateUseTests(SimpleTestCase):
             self.assertTrue(self.lang_ok(example), example)
 
     def test_private_use_accepted(self):
-        for tag in ('ar-Latn-x-ijmes', 'tr-x-a1', 'de-Arab-AR-x-abc-def'):
+        for tag in ('ar-Latn-x-ijmes', 'tr-x-a1', 'de-Arab-AR-x-abc-def', 'x-ijmes', 'X-ijmes'):
             self.assertTrue(self.lang_ok(tag), tag)
 
     def test_toponym_with_private_use_accepted(self):
@@ -47,8 +47,11 @@ class LangPrivateUseTests(SimpleTestCase):
             self.assertTrue(self.lang_ok(tag), tag)
 
     def test_malformed_tags_still_refused(self):
-        for tag in ('ar-Latn-x-', 'ar-Latn-x-toolongtag', 'not a tag', '', 'ar-Latn-x-a b'):
+        for tag in ('ar-Latn-x-', 'ar-Latn-x-toolongtag', 'not a tag', '', 'ar-Latn-x-a b', 'x', 'x-', 'x-toolongtag1', 'xx-'):
             self.assertFalse(self.lang_ok(tag), tag)
+
+    def test_standalone_private_use_toponym(self):
+        self.assertTrue(self.toponym_ok('Qanawat@x-ijmes'))
 
     def test_malformed_toponym_language_still_refused(self):
         self.assertFalse(self.toponym_ok('Qanawat@ar-Latn-x-toolongtag'))
