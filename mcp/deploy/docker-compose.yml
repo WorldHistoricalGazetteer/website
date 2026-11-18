@@ -1,0 +1,43 @@
+# WHG MCP server: compose project on the production droplet at ~/stacks/mcp (copy of this file).
+# No secrets in this file: the server's WHG service token comes from mcp.env on the host (never committed;
+# see mcp.env.example and README.md in this directory).
+name: mcp
+
+services:
+  mcp:
+    image: worldhistoricalgazetteer/whg-mcp:0.2.3
+    container_name: whg-mcp
+    restart: unless-stopped
+    user: "1000:999"                       # the image's non-root `mcp` user
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 64
+    cpus: 1.0
+    env_file:
+      - ./mcp.env                          # WHG_API_TOKEN=... (host only, mode 600)
+    environment:
+      # Calls go to the host's own nginx (TLS, real certificate, Host whgazetteer.org) rather than hairpinning
+      # through the reserved IP, so nginx logs this container's address and the WHG-MCP/<version> User-Agent.
+      WHG_BASE_URL: https://whgazetteer.org
+      WHG_MCP_PUBLIC_HOST: mcp.whgazetteer.org
+      WHG_MCP_DAILY_BUDGET: "2000"
+      WHG_MCP_TRANSPORT: streamable-http
+      WHG_MCP_HOST: 0.0.0.0
+      WHG_MCP_PORT: "8000"
+    extra_hosts:
+      - "whgazetteer.org:host-gateway"
+    ports:
+      - "127.0.0.1:8020:8000"              # loopback only; nginx (mcp.whgazetteer.org) is the public face
+    networks: [mcp]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+networks:
+  mcp:
+    name: mcp
