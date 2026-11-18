@@ -1623,6 +1623,13 @@ def index_dataset_on_publish(dataset_id):
                 # `indexed` comes from a marker written last, by this job, after a zero-error bulk;
                 # a job that failed after indexing has still indexed the dataset.
                 if body.get("indexed") is True:
+                    from datasets.location_index import job_predates
+                    if job_predates(ds.index_job_id, ds.index_pending_since):
+                        # The dataset changed after this job started (an adopted or placed
+                        # location, place#350), so the index may not have it: index again.
+                        Dataset.objects.filter(pk=ds.pk).update(index_job_id="", index_failure_reason="")
+                        index_dataset_on_publish.apply_async(args=[ds.pk], countdown=60)
+                        return {"status": "pending", "gateway": "superseded"}
                     Dataset.objects.filter(pk=ds.pk).update(
                         index_pending_since=None, index_job_id="", index_failure_reason="")
                     return {"status": "indexed"}
@@ -1744,3 +1751,28 @@ def sweep_index_pending():
     for pk in pks:
         index_dataset_on_publish.delay(pk)
     return {"checked": len(pks)}
+
+
+@shared_task()
+def refresh_index_after_location_change(dataset_id, place_ids):
+    """place#343: an adopted location went back with its Link (``datasets.location_lifecycle``).
+    The ``pub`` index: each of the records it was on that is in it is removed and indexed again
+    without it (``index_to_pub`` takes only records not in it). The gateway index is
+    ``datasets.location_index.location_changed``'s business (called beside this). Nothing for a
+    dataset that is no longer public (it has left the indexes already). Best-effort."""
+    ds = Dataset.objects.filter(pk=dataset_id).first()
+    if ds is None or not ds.public:
+        return {"status": "skipped"}
+    from places.models import Place
+    pids = list(Place.objects.filter(id__in=list(place_ids), dataset=ds, idx_pub=True).values_list("id", flat=True))
+    for pid in pids:
+        try:
+            unindex_from_pub(place_id=pid)
+        except Exception:  # noqa: BLE001 - the next publication re-indexes; never fail the rest
+            logger.exception("unindex of place %s after a location change failed", pid)
+    if pids:
+        try:
+            index_to_pub(ds.pk)
+        except Exception:  # noqa: BLE001
+            logger.exception("index_to_pub after a location change failed for dataset %s", ds.pk)
+    return {"status": "done", "places": len(pids)}

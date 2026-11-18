@@ -181,3 +181,46 @@ class RecordReviewState(models.Model):
 
     def __str__(self):
         return f"record {self.place_id}: {self.tier}/{self.state}"
+
+
+class RetractedLocation(models.Model):
+    """An adopted location (place#350) that went back with its Link (place#343).
+
+    When the Link a location was adopted through stops standing (withdrawn, rejected or
+    superseded by any route) the ``PlaceGeom`` row is taken off the record, so no surface that
+    reads ``place.geoms`` (Record page, downloads, APIs, indexing) can show it, and it is kept
+    here exactly as it was: nothing is silently lost, and ``datasets.location_lifecycle.restore``
+    can put it back. A row leaves this table only with its record or its dataset.
+    """
+    place = models.ForeignKey("places.Place", on_delete=models.CASCADE, related_name="+")
+    dataset = models.ForeignKey("datasets.Dataset", on_delete=models.CASCADE,
+                                related_name="retracted_locations")
+    attestation = models.ForeignKey("api.ContributorAttestation", null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="+")
+    # The PlaceGeom as it was, field by field.
+    geom_pk = models.BigIntegerField()
+    src_id = models.CharField(max_length=100, blank=True, default="")
+    jsonb = models.JSONField(default=dict)
+    geom_wkt = models.TextField(blank=True, default="")
+    geom_src = models.CharField(max_length=30, blank=True, default="")
+    task_id = models.CharField(max_length=100, blank=True, default="")
+    reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name="+")
+    created = models.DateTimeField(null=True, blank=True)
+    # Why and when it went back; and, if it was put back, when and as which row.
+    reason = models.CharField(max_length=40)
+    retracted_at = models.DateTimeField(default=timezone.now)
+    retracted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name="+")
+    restored_at = models.DateTimeField(null=True, blank=True)
+    restored_geom_pk = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "retracted_location"
+        constraints = [
+            # One archive row per adopted row: retracting twice cannot duplicate it.
+            models.UniqueConstraint(fields=["geom_pk"], name="retracted_location_one_per_geom"),
+        ]
+
+    def __str__(self):
+        return f"retracted location {self.geom_pk} of record {self.place_id} ({self.reason})"

@@ -694,6 +694,21 @@ function renderAttribution(data) {
         </div>`;
 }
 
+/** place#350: a location adopted from a matched place, or placed on the map by
+ *  the dataset owner, is labelled as such. The server sends the sentence
+ *  (``location_provenance[].label``, the Record page's own wording, read from the
+ *  live record) only after its visibility check; nothing here composes it.
+ *  Exported for the Atlas portal (atlas.js renderPortal). */
+export function renderLocationProvenance(data) {
+    const rows = (data && Array.isArray(data.location_provenance)) ? data.location_provenance : [];
+    const lines = rows.map(r => (r && typeof r.label === 'string') ? r.label : '').filter(Boolean);
+    if (!lines.length) return '';
+    return lines.map(l => `
+        <div class="popup-location-provenance small text-muted" data-testid="location-provenance">
+            <i class="fas fa-location-dot me-1" aria-hidden="true"></i>${esc(l)}
+        </div>`).join('');
+}
+
 /* Native share sheet available *and* worth offering (place#155 follow-up).
    `navigator.share()` opens the OS share sheet — Messages/SMS, WhatsApp, Signal,
    email — which is what "share a pin" means on a phone. The message is sent by the
@@ -843,6 +858,7 @@ function renderPopup(data, requestedId) {
     ${renderDepictionHero(data)}
     ${renderChips(data)}
     <div class="popup-body">
+        ${renderLocationProvenance(data)}
         ${renderMetaList(data)}
         ${renderDescription(data)}
         ${renderNames(data)}

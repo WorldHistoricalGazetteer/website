@@ -761,4 +761,4 @@ def remove_files(**kwargs):
 
 
 # place#338 (v4 reconciliation Phase 2): match candidates and the contributor feed.
-from datasets.models_matching import CandidateGeneration, MatchCandidate, RecordReviewState  # noqa: E402,F401
+from datasets.models_matching import CandidateGeneration, MatchCandidate, RecordReviewState, RetractedLocation  # noqa: E402,F401

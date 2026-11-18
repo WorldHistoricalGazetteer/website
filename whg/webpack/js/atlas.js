@@ -21,7 +21,7 @@ import { clusterHits, suggestTheta, DEFAULT_PARAMS } from './clustering.js';
 import { ATLAS_DEFAULT_THETA, ATLAS_DEFAULT_MATCH_MODE, ATLAS_DEFAULT_CLUSTERING } from './atlas_cluster_defaults.js';
 import { encodeRecipeToken, decodeRecipeToken, recipePid, retrievalFromSearchBody, RecipeError } from './locus_recipe.js';
 import PlaceList from './atlasPlaceList.js';
-import { setWebTemplates, renderAttestControl, isBetaUser, LOCUS_PAGE_URL, LOCUS_TOKEN_PARAM } from './gazetteerInteraction.js';
+import { setWebTemplates, renderAttestControl, isBetaUser, LOCUS_PAGE_URL, LOCUS_TOKEN_PARAM, renderLocationProvenance } from './gazetteerInteraction.js';
 import { idbGet, idbPut, loadAatVocab, aatVocabLoadError } from './aatVocab.js';
 import { variantLabels } from './toponyms.js';
 import { atlasNotice, fetchJSON, failureHtml, messageHtml } from './atlasNotice.js';
@@ -2790,6 +2790,8 @@ function renderPortal(place, pid) {
         h += `<p class="portal-record-link"><a href="${escapeHtml(place.record_url)}" target="_blank" rel="noopener">`
             + `<i class="fas fa-file-lines me-1"></i>Open the record page</a></p>`;
     }
+    // place#350: an adopted or hand-placed location says where it came from.
+    h += renderLocationProvenance(place);
 
     const names = (place.names || []).map(n => escapeHtml(n.label || n.toponym)).filter(Boolean);
     if (names.length) h += `<p><strong>Names:</strong> ${names.join(', ')}</p>`;

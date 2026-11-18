@@ -530,6 +530,11 @@ def feed_review(request, id):
             if choice == "remove":
                 for g in adopted:
                     location_adoption.remove(request.user, ds, st.place_id, g.pk)
+            else:
+                # place#343: kept by the owner's explicit choice, so the Link's withdrawal below
+                # does not take it back (datasets.location_lifecycle).
+                from datasets.location_lifecycle import keep_after_undo
+                keep_after_undo(request.user, adopted)
         # Undo: take back the Links this person made from this record's suggestions, and put
         # the record back in its tab. Rows are withdrawn, never deleted.
         # That includes hand-search Links (no candidate), found by the feed marker that

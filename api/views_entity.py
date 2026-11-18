@@ -795,7 +795,7 @@ def _contributed_popup_payload(place, place_id):
         if isinstance(url, str) and url:
             depictions.append({"@id": url, "title": j.get("title") or "", "license": j.get("license") or ""})
 
-    return {
+    out = {
         "place_id": place_id,
         "title": place.title or "",
         "namespace": "whg",
@@ -811,6 +811,13 @@ def _contributed_popup_payload(place, place_id):
         "depictions": depictions,
         "attribution": dataset_attribution(place.dataset),
     }
+    # place#350: a location adopted from a matched place, or placed on the map by the owner, is
+    # labelled as such (the Record page's wording), read from the live rows.
+    from datasets.location_index import location_labels
+    added = location_labels(place, place.geoms.all())
+    if added:
+        out["location_provenance"] = added
+    return out
 
 
 @method_decorator(csrf_exempt, name='dispatch')

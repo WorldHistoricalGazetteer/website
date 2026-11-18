@@ -768,3 +768,80 @@ def authority_datasets_schema():
         },
     )
 
+
+
+# /api/spatial/ (SpatialAPIView). A legacy v3 endpoint that searches the places in
+# WHG's own database only; documented here so its parameters and limits are visible.
+_SPATIAL_PARAMS = [
+    OpenApiParameter("type", str, OpenApiParameter.QUERY, required=True, enum=["nearby", "bbox"],
+                     description="`nearby` (needs `lon`, `lat`, `km`) or `bbox` (needs `sw`, `ne`)."),
+    OpenApiParameter("lon", float, OpenApiParameter.QUERY, description="Centre longitude (`nearby`)."),
+    OpenApiParameter("lat", float, OpenApiParameter.QUERY, description="Centre latitude (`nearby`)."),
+    OpenApiParameter("km", float, OpenApiParameter.QUERY,
+                     description="Radius in kilometres (`nearby`), greater than 0 and at most 500. "
+                                 "A circle that would contain a pole is refused under `match=within`."),
+    OpenApiParameter("sw", str, OpenApiParameter.QUERY,
+                     description="South-west corner `lon,lat` (`bbox`). Width and height at most 30 degrees each."),
+    OpenApiParameter("ne", str, OpenApiParameter.QUERY, description="North-east corner `lon,lat` (`bbox`)."),
+    OpenApiParameter("geometry", str, OpenApiParameter.QUERY, enum=["point", "none", "full"], default="point",
+                     description=(
+                         "`point` (default): each Feature's `geometry` is ONE Point lying on the place's "
+                         "geometry (ST_PointOnSurface, not the centroid), with a GeoJSON `bbox` "
+                         "`[west, south, east, north]` covering all its geometries (rounded outward to 6 "
+                         "decimals). `none`: `geometry` is null, no `bbox`. `full`: every stored geometry, "
+                         "exactly as returned before 2026-11 (which can be tens of MB for one polity); at "
+                         "most 20 places a page. Under `point`/`none`, `properties` gain `geometry_mode`, "
+                         "`geometry_url` (the full record), `geometry_types`, `geometry_count` and "
+                         "`vertex_count`.")),
+    OpenApiParameter("match", str, OpenApiParameter.QUERY, enum=["within", "intersects"], default="within",
+                     description=(
+                         "`within` (default): a place matches only if ALL its geometry lies inside the "
+                         "circle or box, so a polygon that contains the centre but extends beyond it is "
+                         "excluded. `intersects`: any of its geometry comes within `km` of the centre (the "
+                         "`nearby` behaviour before 2026-11; not index-served, slower) or touches the box.")),
+    OpenApiParameter("pagesize", int, OpenApiParameter.QUERY, default=20,
+                     description="Places per response: at most 200, or 20 with `geometry=full`. Larger values "
+                                 "are clamped; `pagesize_max` in the response says to what."),
+    OpenApiParameter("fc", str, OpenApiParameter.QUERY, description="Comma-separated feature classes, e.g. `P,A`."),
+    OpenApiParameter("dataset", int, OpenApiParameter.QUERY, description="Restrict to one dataset (id)."),
+    OpenApiParameter("collection", int, OpenApiParameter.QUERY, description="Restrict to one collection (id)."),
+]
+
+spatial_schema = extend_schema(
+    tags=["Entity API"],
+    deprecated=True,
+    summary="DEPRECATED: places near a point or inside a box (legacy, WHG database only)",
+    description=(
+        "**Deprecated** (2026-11-17): retired when WHG switches to v4; no date set yet. Use a spatial-only "
+        "`POST /reconcile` query instead (`lat`/`lng`/`radius` or `bounds`, with `relation` and an API "
+        "token); see https://docs.whgazetteer.org/content/technical/apis.html"
+        "#mapping-legacy-spatial-queries for the parameter mapping. Responses carry "
+        "`Deprecation` and `Link: <...>; rel=\"successor-version\"` headers and a `deprecation` member.\n\n"
+        "Searches the places held in WHG's own database (contributed and published datasets), NOT the "
+        "gazetteer index behind the Atlas and the Reconciliation API, which also takes spatial-only queries "
+        "(`lat`/`lng`/`radius`, `bounds`, `contained_in`). Returns a GeoJSON FeatureCollection of LPF "
+        "Features with root keys `count`, `pagesize`, `pagesize_max`, `geometry_mode`, `match` and "
+        "`attribution`. `count` is the number of matching places; `features` holds at most `pagesize`."
+    ),
+    parameters=_SPATIAL_PARAMS,
+    responses={
+        200: OpenApiResponse(
+            response=OpenApiTypes.OBJECT,
+            description="FeatureCollection.",
+            examples=[OpenApiExample("geometry=point (default)", value={
+                "type": "FeatureCollection", "count": 1, "pagesize": 1, "pagesize_max": 200,
+                "geometry_mode": "point", "match": "within",
+                "features": [{
+                    "type": "Feature", "uri": "https://whgazetteer.org/api/place/123",
+                    "geometry": {"type": "Point", "coordinates": [-1.0803, 53.9599]},
+                    "bbox": [-1.0901, 53.955, -1.07, 53.9651],
+                    "properties": {"place_id": 123, "title": "York", "geometry_mode": "point",
+                                   "geometry_url": "https://whgazetteer.org/api/place/123/",
+                                   "geometry_types": ["POLYGON"], "geometry_count": 1, "vertex_count": 412},
+                }],
+                "attribution": {},
+            })],
+        ),
+        400: OpenApiResponse(description="Missing or invalid parameter, or a limit exceeded (`error` says which)."),
+    },
+)

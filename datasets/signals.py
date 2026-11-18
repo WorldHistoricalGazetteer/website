@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models.signals import pre_delete, pre_save, post_save
 from django.dispatch import receiver
 
+from api.models import ContributorAttestation
 from utils.doi import doi
 from .models import Dataset, DatasetFile
 from .utils import compute_dataset_bbox
@@ -134,10 +135,25 @@ def restore_links_when_public(sender, instance, **kwargs):
     if not getattr(instance, "_went_public", False):
         return
     instance._went_public = False
+    # place#343: an adopted location whose Link no longer stands, or whose source's terms
+    # changed while the dataset was private, is taken off before publication can show it
+    # (``datasets.location_lifecycle``; both routes to public pass here, lifecycle included).
+    from datasets.location_lifecycle import enforce
+    enforce(instance)
     if getattr(instance, "_lifecycle_activates", False):
         return
     from api.attestations import activate_for_dataset
     activate_for_dataset(instance.id, by=None)
+
+
+@receiver(post_save, sender=ContributorAttestation, dispatch_uid="datasets.location_lifecycle")
+def link_saved_takes_back_adopted_location(sender, instance, **kwargs):
+    """place#343: a Link that stops standing (withdrawn, rejected, superseded, by any route that
+    saves it) takes back the location adopted through it (``datasets.location_lifecycle``). The
+    same ``post_save`` hook ``api/signals.py`` forwards Links from. No query for a standing Link."""
+    from datasets.location_lifecycle import on_link_saved
+    on_link_saved(instance)
+
 
 
 @receiver(post_save, sender=Dataset)

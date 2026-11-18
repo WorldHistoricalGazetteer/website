@@ -223,29 +223,50 @@ def check_link_resolution(ds):
 
 def check_locations_added(ds):
     """place#350: locations the owner adopted from a matched place (count per source) or placed on
-    the map, so an editor sees them as such, never as the contributor's own. Information only."""
-    from datasets.location_adoption import ADOPTED, PLACED, source_label
-    from places.models import PlaceGeom
-    by_source, placed, ids = {}, 0, []
-    for place_id, j in (PlaceGeom.objects.filter(place__dataset=ds.label, jsonb__provenance__kind__in=(ADOPTED, PLACED))
-                        .values_list("place_id", "jsonb")):
-        p = (j or {}).get("provenance") or {}
-        ids.append(place_id)
-        if p.get("kind") == ADOPTED:
-            ns = str(p.get("source") or "")
-            by_source[ns] = by_source.get(ns, 0) + 1
-        else:
-            placed += 1
+    the map, so an editor sees them as such, never as the contributor's own.
+
+    Information only, with one exception (place#343, ``datasets/location_lifecycle.py``): an
+    adopted location still on its record although its Link no longer stands, or its source's
+    terms no longer allow it, FAILS the check, because it should not be shown at all. Whether the
+    dataset is private is said out loud (the locations are then seen only by its own circle), and
+    locations that went back with their Link are counted, not silently dropped."""
+    from api.dataset_access import is_dataset_embargoed
+    from datasets.location_adoption import source_label
+    from datasets.location_lifecycle import counts
+    n = counts(ds)
+    by_source, placed = n["by_source"], n["placed"]
     total = placed + sum(by_source.values())
     parts = []
     if by_source:
         parts.append("adopted from a matched place: " + ", ".join(
-            f"{source_label(ns)} {n}" for ns, n in sorted(by_source.items())))
+            f"{source_label(ns)} {k}" for ns, k in sorted(by_source.items())))
+        if n["kept"]:
+            parts.append(f"kept by the owner after undoing the match: {n['kept']}")
     if placed:
         parts.append(f"placed on the map by the owner: {placed}")
-    out = _check("locations_added", "Locations added after upload", "ok", total,
-                 ("; ".join(parts) + ".") if parts else "None.", _examples(ids))
-    out["by_source"], out["placed"] = by_source, placed
+    if n["retracted"]:
+        parts.append(f"{n['retracted']} went back with its match (Link withdrawn or rejected) and is "
+                     "no longer shown")
+    private = not ds.public or is_dataset_embargoed(ds.pk)
+    detail = ("; ".join(parts) + ".") if parts else "None."
+    if private and total:
+        detail += (" The dataset is not public: these locations are shown only to the dataset's owner "
+                   "and collaborators, and are not indexed.")
+    problems = {}
+    for _g, why in n["problems"]:
+        problems[why] = problems.get(why, 0) + 1
+    if problems:
+        out = _check("locations_added", "Locations added after upload", "fail", total,
+                     detail + " Should not be shown: " + ", ".join(
+                         f"{k} ({why})" for why, k in sorted(problems.items()))
+                     + ". They are taken off when the dataset is next published; staff can do it now "
+                       "(manage.py location_lifecycle --dataset <id>).",
+                     _examples([g.place_id for g, _ in n["problems"]]))
+    else:
+        out = _check("locations_added", "Locations added after upload", "ok", total, detail,
+                     _examples([g.place_id for g in n["rows"]]))
+    out.update(by_source=by_source, placed=placed, kept=n["kept"], retracted=n["retracted"],
+               visibility="private" if private else "public", should_not_be_visible=problems)
     return out
 
 

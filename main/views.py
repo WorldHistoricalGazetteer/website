@@ -948,6 +948,22 @@ BETA_STATUS_SECTIONS = [
                      "later. Nothing is merged or changed: your record stays yours. Nothing is marked on "
                      "your behalf either; only the answers you give are recorded, and any of them can be "
                      "undone. Beta testers reach it from their dashboard."},
+            {"name": "Locations for records that have none", "stage": "beta", "version": "4.0",
+             "body": "Many historical datasets arrive with names but no coordinates. In Match your places, "
+                     "the owner of a dataset can now add a location to a record that has none, in one of two "
+                     "optional ways. After answering Same place, they can adopt the matched place's location "
+                     "when it comes from a source whose terms allow that (public-domain or attribution-only "
+                     "sources: for now GeoNames, Wikidata, Getty TGN and Pleiades, as single points). It is "
+                     "stored as a separate location labelled with its source, the date and who adopted it, "
+                     "never as the owner's own, and it can be removed. Or they can place the location "
+                     "themselves by clicking on the map. Suggestions from sources whose terms do not allow "
+                     "their coordinates to be copied are shown as hints only; nothing snaps to them, and "
+                     "the position you click is rounded to what the zoom level supports and marked "
+                     "approximate. Nothing is adopted automatically or in bulk, and adopting a location "
+                     "never changes your match. The label is shown on the Record page, in the Atlas popup, in "
+                     "downloads and in the quality-control report. If a dataset is withdrawn or made "
+                     "private its adopted locations are hidden with it, and if the match behind an adopted "
+                     "location is withdrawn the location goes back with it."},
             {"name": "Atlas: a map-first way into the gazetteer", "stage": "beta", "version": "4.0",
              "body": "The Atlas groups places as you pan and zoom, so that very large gazetteers stay "
                      "legible at every scale, and narrows what you see by date (including holding the map "
@@ -989,19 +1005,6 @@ BETA_STATUS_SECTIONS = [
         "heading": "In development",
         "note": "Being built; parts may already be visible.",
         "items": [
-            {"name": "Locations for records that have none", "stage": "dev", "version": "4.0",
-             "body": "Many historical datasets arrive with names but no coordinates. We are adding two "
-                     "optional steps to Match your places for a record that has no location of its own, "
-                     "open only to the dataset's owner, and not yet available to anyone. After answering "
-                     "Same place, the owner can adopt the matched place's location when it comes from a "
-                     "source whose terms allow that (public-domain or attribution-only sources, such as "
-                     "GeoNames or Wikidata). It is stored as a separate location labelled as coming from "
-                     "that source, never as the owner's own, and it can be undone. Or the owner can place "
-                     "the location themselves by clicking on the map. Suggestions from sources whose terms "
-                     "do not allow their coordinates to be copied are still shown as hints, but nothing "
-                     "snaps to them, and the position you click is rounded to what the zoom level supports "
-                     "and marked approximate. Locations are single points to begin with; nothing is adopted "
-                     "automatically or in bulk, and adopting a location never changes your match."},
             {"name": "Citations and contributor credit (CRediT)", "stage": "dev", "version": "4.0",
              "body": "The first part is live: on a dataset's metadata page, the people who worked on it can "
                      "be credited by the role they played, using the CRediT roles, and those credits are "
@@ -1088,8 +1091,11 @@ BETA_STATUS_SECTIONS = [
             {"name": "Retiring the older API endpoints", "stage": "horizon", "staff": True,
              "body": "The older v3 endpoints (/api/spatial/, /api/db/, /api/index/, /api/place/ and "
                      "/api/geojson/) are to be retired at the switch to v4, in favour of the reconciliation "
-                     "service and the Entity API. Deprecation notices for them have been written but are "
-                     "not yet live, and two forms of them still have no documented replacement."},
+                     "service and the Entity API. Since 18 November 2026 they carry a deprecation notice in "
+                     "their responses and Deprecation and Link headers, with no retirement date yet; "
+                     "/api/spatial/ now returns a point and bounding box by default (geometry=full for "
+                     "the old output) and matches places wholly inside the circle. Two forms of them still "
+                     "have no documented replacement."},
             {"name": "Joining the Open Metadata Exchange (with ISKME)", "stage": "horizon",
              "body": "A proposal to make WHG a node in the Open Metadata Exchange (OME), a peer-to-peer "
                      "metadata-sharing network that is an ISKME initiative. WHG would feed its place "
