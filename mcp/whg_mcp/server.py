@@ -50,6 +50,9 @@ mcp = FastMCP(
         allowed_hosts=[PUBLIC_HOST, "localhost", "127.0.0.1", "localhost:*", "127.0.0.1:*"],
         allowed_origins=[f"https://{PUBLIC_HOST}", "http://localhost:*", "http://127.0.0.1:*"]),
 )
+# FastMCP (mcp 1.30) takes no version and the low-level Server then reports the SDK's own version
+# in initialize serverInfo. Set ours on the low-level Server; pinned by a test.
+mcp._mcp_server.version = __version__
 
 _client: Optional[WHGClient] = None
 

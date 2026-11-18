@@ -347,3 +347,25 @@ async def test_get_place_accepts_plain_numbers_as_well_as_strings():
     """Models send a bare number for an id (found live 2026-11-18: an int was rejected)."""
     out = await server.get_place([169687, "place:gn:745044"])
     assert [p["@id"] for p in out["places"]] == ["/entity/place:169687/api", "/entity/place:gn:745044/api"]
+
+
+def test_initialize_reports_this_servers_version_not_the_sdks(monkeypatch):
+    """serverInfo.version was importlib.metadata.version('mcp') (1.30.0): FastMCP passes no version to
+    the low-level Server. Read it off a real initialize handshake."""
+    import importlib.metadata
+    from starlette.testclient import TestClient
+    from whg_mcp import __version__
+    # A session manager runs once per instance; the transport test above may already have used it.
+    monkeypatch.setattr(server.mcp, "_session_manager", None)
+    app = server.mcp.streamable_http_app()
+    body_ = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}}
+    hdr = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json",
+           "Host": server.PUBLIC_HOST}
+    with TestClient(app) as c:
+        r = c.post("/", json=body_, headers=hdr)
+    assert r.status_code == 200
+    info = r.json()["result"]["serverInfo"]
+    assert info["name"] == "World Historical Gazetteer"     # control: the right field was read
+    assert info["version"] == __version__
+    assert info["version"] != importlib.metadata.version("mcp")
