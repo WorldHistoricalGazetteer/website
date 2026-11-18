@@ -1224,7 +1224,14 @@ def suggestionItem(s):
 """
 
 
-def suggester(q, indices):
+def _fold(text):
+    """Case- and diacritic-insensitive form of a name, for exact-match tests."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(text or "")).casefold()
+    return " ".join("".join(c for c in t if not unicodedata.combining(c)).split())
+
+
+def suggester(q, indices, qstr=None):
     # print('suggester q', q)
     # print('suggester indices', indices)
     try:
@@ -1253,8 +1260,19 @@ def suggester(q, indices):
         logger.debug(f"ES query failed: {e}")
         return []
 
-    sortedsugs = sorted(suggestions, key=lambda x: x['linkcount'], reverse=True)
-    # print('sortedsugs', sortedsugs)
+    # place#354: sorting on linkcount alone put fuzzy near-misses (Helsingborg for
+    # "Helsinki", Kochi for "Sochi") above the exact match whenever they had more
+    # linked records. Exact-name matches come first; within each tier, more links
+    # first; ties keep Elasticsearch's relevance order (sorted() is stable).
+    target = _fold(qstr)
+
+    def _exact(sug):
+        if not target:
+            return False
+        h = sug['hit']
+        return target in {_fold(n) for n in [h.get('title'), *(h.get('searchy') or [])]}
+
+    sortedsugs = sorted(suggestions, key=lambda x: (not _exact(x), -x['linkcount']))
     # TODO: there may be parents and children
     return sortedsugs
 
@@ -1454,7 +1472,7 @@ class SearchViewV3(View):
         else:
             q = SearchViewV3.build_search_query(params)
             es_apply_visibility(q, request.user)  # place#310
-            suggestions = suggester(q, [idx, 'pub'])
+            suggestions = suggester(q, [idx, 'pub'], qstr=qstr)
             suggestions = [suggestionItem(s) for s in suggestions]
             result = {'parameters': params, 'suggestions': suggestions}
 
