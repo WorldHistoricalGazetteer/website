@@ -289,7 +289,8 @@
 
                 function customResult(resultElement, result) {
                     $(".dl-table").stopSpin();
-                    const fn = result.filename;
+                    const fn = result && result.filename;
+                    if (!fn) return;  // a failed task, or a result with no file
                     const link = '[ <span class="dl-save"><a href="/' + fn + '" title="downloaded: ' + dater() +
                         '" download>save</a></span> ]';
                     $(resultElement).append($('<p>').html(link));
@@ -315,7 +316,9 @@
                         success: function (response) {
                             $(".dl-table").spin();
                             const task_id = response.task_id;
-                            const progressUrl = "/celery-progress/" + task_id + "/";
+                            // /task_progress/ (main.views.get_task_progress, login-gated) answers in
+                            // the shape CeleryProgressBar reads; /celery-progress/ is not routed.
+                            const progressUrl = "/task_progress/" + task_id + "/";
                             CeleryProgressBar.initProgressBar(progressUrl, {
                                 pollingInterval: 500,
                                 onResult: customResult,

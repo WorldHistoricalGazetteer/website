@@ -85,8 +85,18 @@
                             </tr>
                             <tr>
                                 <td>WHG identifier:</td>
-                                <td>{{ object.id }} (<a href="/api/db/?id={{ object.id }}" target="_blank">Linked Places
-                                    record</a>)
+                                {% comment %}
+                                  The Entity API (successor of the deprecated /api/db/?id=). It admits a signed-in
+                                  session; for WHG-hosted records it refuses anonymous callers (401, API token
+                                  needed), so anonymous visitors get a sign-in link rather than a link that fails.
+                                {% endcomment %}
+                                <td>{{ object.id }}
+                                    {% if user.is_authenticated %}(<a href="/entity/place:{{ object.id }}/api" target="_blank"
+                                        rel="noopener" class="lpf-record-link">Linked Places record</a>)
+                                    {% else %}<span class="text-muted small lpf-record-signin">(Linked Places record:
+                                        <a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}">sign in</a>
+                                        or use an API token)</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             <tr>

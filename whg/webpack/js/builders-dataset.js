@@ -77,7 +77,9 @@ $(function() {
 			success: function(response) {
 				if ($("#ds_downloads").length) {
 					let task_id = response.task_id
-					var progressUrl = "/celery-progress/" + task_id + "/";
+					// /task_progress/ (main.views.get_task_progress, login-gated) answers in the
+					// shape CeleryProgressBar reads; /celery-progress/ has not been routed since 2024.
+					var progressUrl = "/task_progress/" + task_id + "/";
 					CeleryProgressBar.initProgressBar(progressUrl, {
 						pollingInterval: 500,
 						onResult: customResult,
@@ -228,7 +230,8 @@ $(function() {
 		console.log('celery result', result)
 		console.log('celery resultElement', resultElement)
 		$("#ds_downloads").stopSpin();
-		let fn = result.filename
+		let fn = result && result.filename
+		if (!fn) return  // a failed task, or a result with no file
 		let link = '[ <span class="dl-save"><a href="/' + fn +
 				'" title="downloaded: ' + dater() + '" download>save</a></span> ]'
 		$(resultElement).append(

@@ -30,10 +30,13 @@ they do, read on every request, so a flip needs only a settings reload:
 ``LEGACY_API_INAPP_PASSTHROUGH`` (default True)
     In ``compat`` and ``gone`` modes, a request from WHG's own pages (same-origin
     Referer or a session cookie, ``api.deprecation.request_origin``) still gets the
-    legacy view, because the site itself still calls three of these endpoints
+    legacy view. It existed because the site itself called these endpoints
     (``whg/webpack/js/portal.js`` -> /api/spatial/?geometry=full,
     ``whg/webpack/js/getPlace.js`` -> /api/place/<id>, ``places/templates/places/
-    place_detail.html`` -> /api/db/?id=). Set it False once those are migrated.
+    place_detail.html`` and ``api.serializers.PlaceTableSerializer`` -> /api/db/?id=).
+    Those were migrated 2026-11-18 (to POST /reconcile, the internal /places/<id>/panel/,
+    /entity/place:<id>/api and /places/<id>/detail; pinned by
+    places/tests_inapp_legacy_callers.py), so it can be set False once that is deployed.
 
 What each endpoint becomes in ``compat``:
 

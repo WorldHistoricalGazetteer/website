@@ -1,6 +1,7 @@
 # main.views
 from celery.backends.base import DisabledBackend
 from celery.result import AsyncResult
+from celery.states import READY_STATES
 from celery.utils.log import get_task_logger
 from django.apps import apps
 from django.conf import settings
@@ -37,6 +38,7 @@ from whgmail.messaging import WHGmail, zulip_notification
 
 from bootstrap_modal_forms.generic import BSModalCreateView
 import json
+import os
 import random
 import requests
 import sys
@@ -77,6 +79,32 @@ def OpenAPIView(request):
     return render(request, 'main/openapi.html', {'schema_url': '/api/schema/'})
 
 
+# The only keys of a finished task's result that /task_progress/ passes on: the
+# download tasks' file path (utils.tasks.make_download), which the page links to.
+TASK_RESULT_KEYS = ('filename',)
+
+
+def _media_relative_filename(filename):
+    """A task's output path as the page links to it, ``'/' + filename``: relative to the
+    site root under MEDIA_URL (``media/downloads/<name>``), never the server's absolute
+    path. make_download returns ``os.path.join(MEDIA_ROOT, ...)``, which the page turned
+    into ``href="//app/media/..."`` (a host named "app"). None for anything outside
+    MEDIA_ROOT."""
+    if not isinstance(filename, str) or not filename:
+        return None
+    media_url = settings.MEDIA_URL.strip('/')
+    root = os.path.abspath(settings.MEDIA_ROOT)
+    if os.path.isabs(filename):
+        absolute = os.path.abspath(filename)
+        if not absolute.startswith(root + os.sep):
+            return None
+        return f"{media_url}/{os.path.relpath(absolute, root)}"
+    relative = os.path.normpath(filename.lstrip('/'))
+    if relative.startswith(media_url + '/') and '..' not in relative.split('/'):
+        return relative
+    return None
+
+
 def get_task_progress(request, taskid):
     # Login required (anonymous could poll any task until 2026-11-18). A Celery task id cannot
     # be tied to its requester here, so this is not scoped per user. 401 JSON like
@@ -85,24 +113,56 @@ def get_task_progress(request, taskid):
         return JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
     task = AsyncResult(taskid)
 
+    # `state` + `progress.current/total` are what the polling callers read
+    # (whg/webpack/js/mapFunctions.js). `complete`, `success`, `result` and
+    # `progress.percent/pending` are added so this is also a drop-in for the
+    # retired '/celery-progress/<id>/' that CeleryProgressBar
+    # (whg/static/celery_progress/celery_progress.js) polls: without `complete` it
+    # stops at the first answer with "Data Error". `result` is reduced to
+    # TASK_RESULT_KEYS: any signed-in user may poll any task id, so a task's
+    # result is not handed over whole, and a failure gets no exception text.
     if isinstance(task.backend, DisabledBackend):
         return JsonResponse({
             'state': 'DISABLED',
-            'progress': {'current': 0, 'total': 0}
+            'progress': {'current': 0, 'total': 0, 'percent': 0, 'pending': False},
+            'complete': True, 'success': False, 'result': 'Task results are unavailable.',
         })
 
-    response_data = {
-        'state': task.state,
-        'progress': {'current': 0, 'total': 0}
-    }
+    state = task.state
+    current = total = 0
+    complete = state in READY_STATES
+    success = None
+    result = None
+    if complete:
+        success = state == 'SUCCESS'
+        if success:
+            raw = task.result
+            result = ({k: raw[k] for k in TASK_RESULT_KEYS if k in raw}
+                      if isinstance(raw, dict) else None)
+            if result and 'filename' in result:
+                result['filename'] = _media_relative_filename(result['filename'])
+        else:
+            result = 'The task did not complete.'
+    elif isinstance(task.result, dict):
+        current = task.result.get('current', 0)
+        total = task.result.get('total', 0)
 
-    if isinstance(task.result, dict):
-        response_data['progress'] = {
-            'current': task.result.get('current', 0),
-            'total': task.result.get('total', 0)
-        }
+    if success:
+        percent = 100
+    else:
+        try:
+            percent = round(float(current) / float(total) * 100, 2) if total else 0
+        except (TypeError, ValueError):
+            percent = 0
 
-    return JsonResponse(response_data)
+    return JsonResponse({
+        'state': state,
+        'progress': {'current': current, 'total': total, 'percent': percent,
+                     'pending': state == 'PENDING'},
+        'complete': complete,
+        'success': success,
+        'result': result,
+    })
 
 
 class AnnouncementListView(ListView):

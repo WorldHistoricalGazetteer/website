@@ -699,17 +699,52 @@ function nearbyPlaces() {
         const lat = center.lat;
         $('#update_nearby').show();
 
-        // geometry=full: the map draws each place's own shapes. The default match=within
-        // keeps out polygons that merely contain the centre (e.g. empires), which were
-        // what made this response ~100 MB.
-        fetch(`/api/spatial/?type=nearby&lon=${lon}&lat=${lat}&km=${radius}&geometry=full`)
+        // A spatial-only POST /reconcile query, the successor of the legacy
+        // /api/spatial/?type=nearby (deprecated v3 API; mapping as api/spatial_legacy.py).
+        // namespaces ['whg'] keeps the old population (WHG's own places only); relation
+        // 'within' keeps out polygons that merely contain the centre (e.g. empires).
+        // Candidates carry a representative point, not the full geometry, so each nearby
+        // place is drawn as a point. Same-origin with the CSRF header: a signed-in session
+        // or an anonymous visitor of this public page is admitted without an API token.
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        fetch('/reconcile', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: JSON.stringify({
+                queries: {
+                    q0: {
+                        lat: lat, lng: lon, radius: Number(radius),
+                        relation: 'within', containment: 'fuzzy',
+                        namespaces: ['whg'], limit: 20
+                    }
+                }
+            })
+        })
             .then((response) => {
                 if (!response.ok) {
                     throw new Error('Failed to fetch nearby places.');
                 }
                 return response.json(); // Parse the response JSON
             })
-            .then((data) => {
+            .then((body) => {
+                const q0 = (body && body.q0) || {};
+                if (q0.error) throw new Error(`Nearby places: ${q0.error}`);
+                const data = {
+                    type: 'FeatureCollection',
+                    features: (q0.result || [])
+                        .filter(c => Array.isArray(c.repr_point) && c.repr_point.length === 2)
+                        .map(c => ({
+                            type: 'Feature',
+                            geometry: {type: 'Point', coordinates: c.repr_point},
+                            properties: {
+                                title: c.name,
+                                place_id: String(c.id || '').replace(/^place:/, ''),
+                                namespace: c.namespace,
+                                ccodes: c.ccodes || []
+                            }
+                        }))
+                };
                 data.features.forEach((feature, index) => feature.id = index);
                 nearbyFeatureCollection = data; // Set the global variable
                 console.log(nearbyFeatureCollection);

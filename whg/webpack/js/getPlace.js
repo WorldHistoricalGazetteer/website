@@ -19,8 +19,10 @@ export function popupFeatureHTML(feature, clickable=true) { // TODO: Improve sty
 export const getPlace = debounce(getPlaceBouncing, 300);
 export function getPlaceBouncing(pid, cid, callback) {
     const cidQueryParam = Number.isInteger(cid) ? `?cid=${cid}` : '';
+    // The panel's own internal route (places/urls.py 'place-panel'), not the legacy
+    // /api/place/<id>/ (deprecated v3 API): same payload, untouched by LEGACY_API_MODE.
     $.ajax({
-        url: `/api/place/${pid}${cidQueryParam}`,
+        url: `/places/${pid}/panel/${cidQueryParam}`,
     }).done(data => {
         if (cidQueryParam === '') {
             parsePlace(data);

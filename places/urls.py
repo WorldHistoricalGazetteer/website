@@ -1,16 +1,19 @@
 # places.urls
 
-from django.urls import path
+from django.urls import path, re_path
 from django.conf.urls.static import static
 from django.conf import settings
 from django.views.generic.base import TemplateView, RedirectView
 
+from api.views import PlacesDetailAPIView
 from . import views
 from .v4_landing import legacy_portal_view, portal_pid_view, portal_whg_id_view
 from elastic.es_utils import fetch
 
 # place actions
 app_name='places'
+place_panel_view = PlacesDetailAPIView.as_view()
+
 urlpatterns = [
 
     # START new urls-> views (kg 2023-10-31)
@@ -44,6 +47,16 @@ urlpatterns = [
     
     # ??
     path('<int:id>/full', views.PlaceFullView.as_view(), name='place-full'),
+
+    # The place-detail side panel of the dataset / collection browse pages
+    # (whg/webpack/js/getPlace.js): one place or a dash-joined list, ?cid=<collection id>
+    # for that collection's annotations. The same aggregated payload /api/place/<id>/ has
+    # served the panel, mounted here so the site's own pages make no call to the legacy
+    # v3 API (deprecated 2026-11-17, api.deprecation): what LEGACY_API_MODE does to
+    # /api/place/ never reaches the panel. Internal, not an API product: the Entity API
+    # (/entity/place:<id>/api) is the public successor, but carries none of traces (cid),
+    # datasets, extent, fclass descriptions, country labels or attestation years.
+    re_path(r'^(?P<pk_list>\d+(?:-\d+)*)/panel/$', place_panel_view, name='place-panel'),
 
     # place#120: a bare /places/<id> (no /portal/ or /detail suffix) 404'd; redirect
     # it to the portal so external/legacy place links resolve gracefully. Placed last
