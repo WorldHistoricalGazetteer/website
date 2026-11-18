@@ -537,6 +537,32 @@ class SearchDatabaseSerializer(serializers.HyperlinkedModelSerializer):
                   )
 
 
+# The child relations LPFSerializer reads through ``place.<relation>.all()``. ``names`` is not
+# among them: its source, ``placename_set``, is not an attribute of Place (the reverse accessor
+# is ``names``), so DRF skips the field and an LPF Feature has never carried ``names``.
+LPF_CHILD_RELATIONS = ('types', 'links', 'related', 'whens', 'descriptions', 'depictions')
+
+
+def prefetch_lpf(places, geometries=True):
+    """Fill the prefetch cache of a page of Places (a list, already fetched) for
+    ``LPFSerializer`` / ``LPFSummarySerializer``: one query per child relation for the
+    whole page instead of one per relation per place (2026-11-18: a 20-place
+    /api/spatial/ page ran ~125 queries). ``geometries=False`` for the summary
+    serializer, which never reads ``place.geoms`` (the full polygons are exactly what
+    it exists to avoid loading).
+
+    Prefetching a reverse FK also caches each geometry's ``place`` as the page's own
+    instance, so ``PlaceGeomSerializer.get_ds`` (``obj.place.dataset``) costs nothing
+    when the page was fetched with ``select_related('dataset')``. Row order within a
+    place is unchanged in kind: neither the old per-place query nor the batched one has
+    an ORDER BY (none of these models has Meta.ordering).
+    """
+    from django.db.models import prefetch_related_objects
+    lookups = LPF_CHILD_RELATIONS + (('geoms',) if geometries else ())
+    prefetch_related_objects(list(places), *lookups)
+    return places
+
+
 class LPFSerializer(serializers.Serializer):
     names = PlaceNameSerializer(source="placename_set", many=True, read_only=True)
     types = PlaceTypeSerializer(many=True, read_only=True)

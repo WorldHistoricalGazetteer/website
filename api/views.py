@@ -41,7 +41,7 @@ from api.serializers import (
     UserSerializer, DatasetSerializer, PlaceSerializer,
     PlaceTableSerializer, PlaceGeomSerializer, AreaSerializer,
     FeatureSerializer, LPFSerializer, LPFSummarySerializer, PlaceCompareSerializer, ErrorResponseSerializer,
-    GallerySerializer)
+    GallerySerializer, prefetch_lpf)
 from api import spatial as spatial_api
 from api.schemas import spatial_schema
 from areas.models import Area
@@ -340,6 +340,8 @@ class SpatialAPIView(generics.ListAPIView):
             # sequential scan of place_geom with ST_DistanceSphere per row (nearby) or a
             # second index scan (bbox); the endpoint has no offset, so nobody pages by it.
             filtered, count, count_capped = bounded_search(qs, pagesize, select_related=('dataset',))
+            # One query per child relation for the whole page, not per place (prefetch_lpf).
+            prefetch_lpf(filtered, geometries=(geometry_mode == 'full'))
             if geometry_mode == 'full':
                 serializer = LPFSerializer(filtered, many=True, context={'request': self.request})
             else:
@@ -924,7 +926,9 @@ class SearchAPIView(generics.ListAPIView):
                 qs = qs.filter(ccodes__overlap=cc)
 
         # One bounded scan for page and count (the attribution below also used to re-run it).
-        filtered, count, count_capped = bounded_search(qs, pagesize)
+        # select_related: the serializer reads place.dataset (label, title, uri) per place.
+        filtered, count, count_capped = bounded_search(qs, pagesize, select_related=('dataset',))
+        prefetch_lpf(filtered)
 
         serializer = LPFSerializer(filtered, many=True, context={'request': self.request})
         result = {
