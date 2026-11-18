@@ -2281,6 +2281,19 @@ def license_view(request):
     return render(request, 'main/license.html')
 
 
+def principles_view(request):
+    """/principles/: WHG's principles (DRAFT until settings.PRINCIPLES_PAGE_ENABLED is set).
+
+    While the switch is off the page exists only for staff, who see it with a draft
+    banner so the text can be reviewed in place; everyone else gets the ordinary 404,
+    so its existence is not disclosed. The template is noindex while off.
+    """
+    enabled = bool(getattr(settings, 'PRINCIPLES_PAGE_ENABLED', False))
+    if not enabled and not request.user.is_staff:
+        raise Http404
+    return render(request, 'main/principles.html', {'principles_draft': not enabled})
+
+
 def terms_of_use_view(request):
     return render(request, 'main/terms_of_use.html')
 

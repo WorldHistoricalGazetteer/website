@@ -98,14 +98,15 @@
               </ul>
               </li>
               <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" role="button"
+                <a id="aboutDropdown" class="nav-link dropdown-toggle" href="#" role="button"
                    data-bs-toggle="dropdown" aria-expanded="false">
                   About
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end">
-                  <li><a class="dropdown-item" href="{% url 'about' %}">Vision & mission</a></li>
-                  <li><a class="dropdown-item" href="{% url 'credits' %}">Project overview & people</a></li>
+                  <li><a class="dropdown-item" href="{% url 'about' %}">About WHG</a></li>
+                  <li><a class="dropdown-item" href="{% url 'credits' %}">People & credits</a></li>
                   <li><a class="dropdown-item" href="{% url 'publications' %}">Publications & press</a></li>
+                  <li><a class="dropdown-item" href="{% url 'licenses' %}">Data licences</a></li>
                   <li>
                     <hr class="dropdown-divider">
                   </li>
@@ -186,7 +187,7 @@
             $("#links_other").removeClass('d-none')
         }
       language = window.navigator.language.substr(0,2)
-      abouts = ['/about/','/system/','/licensing/','/credits/']
+      abouts = ['/about/','/people_overview/','/publications/','/licenses/','/principles/','/announcements/']
       clicked = window.location.pathname
 
       if($.inArray(clicked, abouts) > -1) {

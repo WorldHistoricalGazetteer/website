@@ -366,7 +366,11 @@ Promise.all([
         }
 
         // Highlight active links based on the URL
-        var abouts = ['/about/', '/system/', '/licensing/', '/credits/'];
+        // The About toggle lists its own pages (data-active-paths, base_webpack.html), so a menu
+        // change needs no bundle rebuild; the literal list is the fallback for older templates.
+        var aboutPaths = $('#aboutDropdown').attr('data-active-paths');
+        var abouts = aboutPaths ? aboutPaths.split(/\s+/).filter(Boolean)
+            : ['/about/', '/people_overview/', '/publications/', '/licenses/', '/principles/', '/announcements/'];
         var clicked = window.location.pathname;
 
         if ($.inArray(clicked, abouts) > -1) {

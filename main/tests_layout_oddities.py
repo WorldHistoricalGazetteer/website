@@ -311,7 +311,7 @@ PEOPLE = """() => {
   const imgs = col ? [...col.querySelectorAll('img')] : [];
   const cr = col ? col.getBoundingClientRect() : null;
   return {inner: innerWidth, scroll: document.documentElement.scrollWidth,
-          heading: !![...document.querySelectorAll('h3')].find(h => /Project overview/.test(h.textContent)),
+          heading: !![...document.querySelectorAll('h3')].find(h => /People & credits/.test(h.textContent)),
           colW: cr ? cr.width : 0,
           imgs: imgs.map(i => ({src: i.src.split('/').pop(), loaded: i.complete && i.naturalWidth > 0,
                                 w: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height,

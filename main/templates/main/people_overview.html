@@ -1,5 +1,5 @@
 {% extends "main/base_webpack.html" %}
-{% block title %}<title>WHG::Credits</title>{% endblock %}
+{% block title %}<title>WHG::People & credits</title>{% endblock %}
 {% block extra_css %}
     /* (Inside the base template's <style>.) The logos keep their sizes where the column is wide enough and shrink with it
        below that (col-sm-3 is 156 px wide at 768, 216 at 1024). Sizes are widths so
@@ -17,39 +17,12 @@
     <div class="d-flex justify-content-center mt-3">
         <div class="row">
             <div id="credits_left" class="col-sm-9">
-                <h3>Project overview</h3>
-                <div>
-                    <h5>Funding and awards</h5>
-                </div>
-                <p class="mb-1">
-                    The project was initiated in 2017 under a 3-year Preservation and Access grant from the US National Endowment for the Humanities (NEH)
-                    (<a href="https://securegrants.neh.gov/publicquery/main.aspx?f=1&amp;gn=PW-253719-17" target="_blank">PW‑253719‑17</a>).
-                </p>
-                <p class="mb-1">
-                    In January, 2023 the project was awarded a 3-year Digital Humanities Advancement Grant from the NEH.
-                </p>
-                <p class="mb-1">
-                    Since 2025, it has been supported by ongoing in-kind contributions from the
-                    <a href="https://www.ishi.pitt.edu/" target="_blank">University of Pittsburgh Institute for Spatial History Innovation</a>.
-                </p>
-                <p class="mb-1">
-                    From 2017-2025, it was supported by the
-                    <a href="https://www.worldhistory.pitt.edu" target="_blank">University of Pittsburgh World History Center</a>.
-                </p>
-                <p class="mb-1">
-                    Development of Version 2 in 2021 and further improvements in 2022 were generously supported by the
-                    <a href="https://huc.knaw.nl/" target="_blank">KNAW Humanities Cluster</a> in the Netherlands.
-                </p>
-                <p class="mb-1">
-                    The <a href="https://www.ucis.pitt.edu/asc/" target="_blank">Asian Studies Center at Pitt</a> has supported development of the
-                    <b>Teaching with WHG</b> section of the site and the Place Collection feature introduced in v2.1
-                </p>
-                <p class="mb-1">
-                    The <a href="https://www.ucis.pitt.edu/crees/" target="_blank">Center for Russian, East European, and Eurasian Studies</a> at Pitt</a> has supported development of the Dataset Collection feature and exemplar data in that broad region.
-                </p>
-                <p>
-                    World Historical Gazetteer received the 2021 "<b>Best DH Tool or Suite of Tools Award</b>" from
-                    <a href="http://dhawards.org/dhawards2021/results/" target="_blank">Digital Humanities Awards</a>
+                <h3>People &amp; credits</h3>
+                {# "Funding and awards" moved to the About page (about.html#funding); the logos stay here. #}
+                <p id="funding-pointer">
+                    The project's funders, supporters and awards are listed under
+                    <a href="{% url 'about' %}#funding">Funding and awards</a> on the
+                    <a href="{% url 'about' %}">About</a> page.
                 </p>
                 <div class="row">
                     <div class="col-sm-10">

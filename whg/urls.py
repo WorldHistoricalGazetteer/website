@@ -120,6 +120,11 @@ urlpatterns = [
 
                   # static content
                   path('about/', TemplateView.as_view(template_name="main/about.html"), name="about"),
+                  path('principles/', views.principles_view, name="principles"),
+                  # Retired v1/v2 "About" siblings: permanent redirects to what replaced them.
+                  path('licensing/', RedirectView.as_view(pattern_name='licenses', permanent=True)),
+                  path('credits/', RedirectView.as_view(pattern_name='credits', permanent=True)),
+                  path('system/', RedirectView.as_view(pattern_name='about', permanent=True)),
 
                   # Unlisted working draft of the declared-use questionnaire (place#158 C7).
                   # Deliberately not linked from anywhere and marked noindex: it is a

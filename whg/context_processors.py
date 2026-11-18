@@ -75,3 +75,18 @@ def phonetics_visible(request):
     """
     from phonetics.visibility import is_visible
     return {'PHONETICS_VISIBLE': is_visible(getattr(request, 'user', None))}
+
+
+def principles_page(request):
+    """Whether the About menu offers the Principles page (and labels it a draft).
+
+    Mirrors main.views.principles_view: with PRINCIPLES_PAGE_ENABLED off the page
+    is staff-only, so the menu offers it to staff alone, marked draft.
+    """
+    enabled = bool(getattr(settings, 'PRINCIPLES_PAGE_ENABLED', False))
+    user = getattr(request, 'user', None)
+    is_staff = bool(user is not None and getattr(user, 'is_staff', False))
+    return {
+        'PRINCIPLES_PAGE_ENABLED': enabled,
+        'PRINCIPLES_IN_MENU': enabled or is_staff,
+    }

@@ -353,12 +353,22 @@
                     </li>
                     <!-- about -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                           aria-expanded="false">
+                        {# data-active-paths: pages that light up this toggle (read by base.js) #}
+                        <a id="aboutDropdown" class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                           aria-expanded="false"
+                           data-active-paths="{% url 'about' %} {% url 'credits' %} {% url 'publications' %} {% url 'licenses' %} {% url 'principles' %} {% url 'announcements-list' %}">
                             About </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
+                        <ul class="dropdown-menu dropdown-menu-end" id="aboutDropdownMenu">
                             <li>
-                                <a class="dropdown-item" href="{% url 'credits' %}">Project overview & people</a>
+                                <a class="dropdown-item" href="{% url 'about' %}">About WHG</a>
+                            </li>
+                            {% if PRINCIPLES_IN_MENU %}
+                            <li>
+                                <a class="dropdown-item" href="{% url 'principles' %}">Principles{% if not PRINCIPLES_PAGE_ENABLED %} <span class="badge text-bg-warning">draft</span>{% endif %}</a>
+                            </li>
+                            {% endif %}
+                            <li>
+                                <a class="dropdown-item" href="{% url 'credits' %}">People & credits</a>
                             </li>
                             <li>
                                 <a class="dropdown-item" href="{% url 'publications' %}">Publications & press</a>

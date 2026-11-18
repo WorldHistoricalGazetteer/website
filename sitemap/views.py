@@ -18,16 +18,22 @@ class StaticViewSitemap(Sitemap):
     lastmod = None
 
     def items(self):
-        return [
+        from django.conf import settings
+        items = [
             'home',
             'about',
             'teaching',
             'credits',
+            'licenses',
             'datasets:dataset-gallery',
             'publications',
             'workbench',
             'announcements-list'
         ]
+        # Draft until signed off: not advertised while the switch is off (main.views.principles_view).
+        if getattr(settings, 'PRINCIPLES_PAGE_ENABLED', False):
+            items.insert(2, 'principles')
+        return items
 
     def location(self, item):
         return reverse(item)

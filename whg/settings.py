@@ -63,6 +63,12 @@ except FileNotFoundError:
 # places.v4_landing.v4_landing_enabled(). Set V4_LANDING_ENABLED=1 in env or local_settings.
 V4_LANDING_ENABLED = os.environ.get('V4_LANDING_ENABLED', '') == '1' or bool(globals().get('V4_LANDING_ENABLED', False))
 
+# The /principles/ page (DRAFT text from WHG_V4_Principles.docx, awaiting review). OFF: the page 404s for
+# everyone but staff (who see it with a DRAFT banner, noindex), and it is absent from the About menu and the
+# sitemap. Set PRINCIPLES_PAGE_ENABLED=1 in env or local_settings once the text has been signed off.
+PRINCIPLES_PAGE_ENABLED = (os.environ.get('PRINCIPLES_PAGE_ENABLED', '') == '1'
+                           or bool(globals().get('PRINCIPLES_PAGE_ENABLED', False)))
+
 # Legacy v3 JSON endpoints (/api/spatial/, /api/db/, /api/index/, /api/place/..., /api/geojson/) at the
 # v4 cutover: 'deprecated' (default: legacy views + deprecation notice, unchanged), 'compat' (old URLs
 # translated to /reconcile and the Entity API; token required) or 'gone' (HTTP 410). Read per request
@@ -356,6 +362,7 @@ TEMPLATES = [
                 'whg.context_processors.registry_version',
                 'whg.context_processors.overlay_license',
                 'whg.context_processors.phonetics_visible',
+                'whg.context_processors.principles_page',
             ],
             'builtins': [
                 'whg.builtins',

@@ -6,26 +6,81 @@
 {% block content %}
   <div class="container">
     <div class="d-flex justify-content-center mt-3">
-      <h3>About the World Historical Gazetteer</h3>
+      <h1 class="h3">About the World Historical Gazetteer</h1>
     </div>
-    <div id="about_content" class="">
+    <div id="about_content" class="mb-5">
       <div id="vision_mission" class="row">
         <div class="col-sm-9">
-          <h5>Our Vision</h5>
-          <p>Empowering discovery by connecting place names across time and language</p>
-          <h5>Project Mission</h5>
+          <h2 class="h5">Our vision</h2>
+          <p>Empowering discovery by connecting place names across time and language.</p>
+          <h2 class="h5">Our mission</h2>
           <p>The mission of the World Historical Gazetteer is to build a platform for open linked historical place data in order to foster deeper understanding of place history and to improve discovery of places that have had many names over time. The WHG place index is accessible through tools and services that permit users to search and browse information about places, augment and contribute their own place records, assemble and publish information about places, and use information about places in teaching and communication.
           </p>
+          {% if PRINCIPLES_PAGE_ENABLED %}
+          <p>The <a href="{% url 'principles' %}">principles</a> behind this work set out what WHG is, how it models places, and what it values.</p>
+          {% endif %}
         </div>
         <div class="col-sm-3 d-flex align-items-center justify-content-center">
           <img src="{% static '/images/whg_logo.svg' %}" alt="The World Historical Gazetteer"/>
         </div>
       </div>
-      <h5>Status</h5>
-      <p>Development of the WHG platform is always ongoing. New content is added continually, from contributions of users and by WHG staff. Please <a data-whg-modal="/contact_modal/">get in touch</a> to discuss prospective data contributions, and with feedback about any aspect of the project.</p>
-      <p>Our Version 1 beta launched in October, 2019. For an overview of what has changed since then, what you can do, and what is in the works, please see the <a href="https://docs.whgazetteer.org/">project documentation site.</a></p>
 
+      <h2 id="status" class="h5">Current status</h2>
+      <p>Development of the WHG platform is always ongoing. New content is added continually, from contributions of users and by WHG staff. The current release is
+        <a href="https://github.com/WorldHistoricalGazetteer/website/releases/tag/v{{ APP_VERSION }}" target="_blank" rel="noopener">version {{ APP_VERSION }}</a>;
+        new tools are tested with a group of beta testers before they are released to everyone. Announcements of new features and data appear under
+        <a href="{% url 'announcements-list' %}">News &amp; announcements</a>, and the
+        <a href="https://docs.whgazetteer.org/" target="_blank" rel="noopener">project documentation</a> explains what you can do on the platform today.</p>
+      <p>Please <a data-whg-modal="/contact_modal/" href="#">get in touch</a> to discuss prospective data contributions, and with feedback about any aspect of the project.</p>
+
+      {# Moved here from /people_overview/ (which keeps a pointer to #funding). #}
+      <section id="funding" aria-labelledby="funding-heading">
+        <h2 id="funding-heading" class="h5">Funding and awards</h2>
+        <p class="mb-1">
+          The project was initiated in 2017 under a 3-year Preservation and Access grant from the US National Endowment for the Humanities (NEH)
+          (<a href="https://securegrants.neh.gov/publicquery/main.aspx?f=1&amp;gn=PW-253719-17" target="_blank" rel="noopener">PW‑253719‑17</a>).
+        </p>
+        <p class="mb-1">
+          In January, 2023 the project was awarded a 3-year Digital Humanities Advancement Grant from the NEH.
+        </p>
+        <p class="mb-1">
+          Since 2025, it has been supported by ongoing in-kind contributions from the
+          <a href="https://www.ishi.pitt.edu/" target="_blank" rel="noopener">University of Pittsburgh Institute for Spatial History Innovation</a>.
+        </p>
+        <p class="mb-1">
+          From 2017 to 2025, it was supported by the
+          <a href="https://www.worldhistory.pitt.edu" target="_blank" rel="noopener">University of Pittsburgh World History Center</a>.
+        </p>
+        <p class="mb-1">
+          Development of Version 2 in 2021 and further improvements in 2022 were generously supported by the
+          <a href="https://huc.knaw.nl/" target="_blank" rel="noopener">KNAW Humanities Cluster</a> in the Netherlands.
+        </p>
+        <p class="mb-1">
+          The <a href="https://www.ucis.pitt.edu/asc/" target="_blank" rel="noopener">Asian Studies Center at Pitt</a> has supported development of the
+          <b>Teaching with WHG</b> section of the site and the Place Collection feature introduced in v2.1.
+        </p>
+        <p class="mb-1">
+          The <a href="https://www.ucis.pitt.edu/crees/" target="_blank" rel="noopener">Center for Russian, East European, and Eurasian Studies</a> at Pitt has supported development of the Dataset Collection feature and exemplar data in that broad region.
+        </p>
+        <p>
+          World Historical Gazetteer received the 2021 "<b>Best DH Tool or Suite of Tools Award</b>" from
+          <a href="http://dhawards.org/dhawards2021/results/" target="_blank" rel="noopener">Digital Humanities Awards</a>.
+        </p>
+      </section>
+
+      <h2 id="more" class="h5">Find out more</h2>
+      <ul>
+        <li><a href="https://docs.whgazetteer.org/" target="_blank" rel="noopener">Documentation</a>: guides, tutorials and technical reference</li>
+        {% if PRINCIPLES_PAGE_ENABLED %}
+        <li><a href="{% url 'principles' %}">Principles</a></li>
+        {% endif %}
+        <li><a href="{% url 'credits' %}">People &amp; credits</a>: the project team, former members, advisory board and acknowledgements</li>
+        <li><a href="{% url 'publications' %}">Publications &amp; press</a></li>
+        <li><a href="{% url 'licenses' %}">Data licences</a> and <a href="{% url 'software-licenses' %}">software licences</a>; WHG's own <a data-whg-modal="/license/" href="#">licensing policy</a></li>
+        <li><a href="{% url 'terms_of_use' %}">Terms of use</a> and <a href="{% url 'privacy_policy' %}">privacy policy</a></li>
+        <li><a href="https://github.com/WorldHistoricalGazetteer/whg3" target="_blank" rel="noopener">Source code</a> and
+          <a href="https://github.com/WorldHistoricalGazetteer/website/releases" target="_blank" rel="noopener">release notes</a></li>
+      </ul>
     </div>
   </div>
 {% endblock %}
-
