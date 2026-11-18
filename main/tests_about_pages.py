@@ -126,7 +126,8 @@ class AboutPagesTests(TestCase):
                      "reambiguation", "licensing large-scale calls", "cluster of attestations", "Hard links"):
             self.assertNotIn(gone, html, gone)
         for kept in ("BSD", "first-class way to use WHG", "without lowering the bar", "plato.pelagios.org",
-                     "/licenses/", "/about/#funding", "place/issues/352", "V4 requirements checklist"):
+                     "/licenses/", "/about/#funding", "place/issues/352", "V4 requirements checklist",
+                     "MCP server", "<strong>Aspiration:", "<li>a reference work</li>"):
             self.assertIn(kept, html, kept)
 
     @override_settings(PRINCIPLES_PAGE_ENABLED=True)
