@@ -23,7 +23,7 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, override_setti
 from api import legacy_compat
 from api.deprecation import DEPRECATION_HEADER, notice
 from api.legacy_compat import LegacyParamError, check_legacy_api_settings, endpoint_mode, plan_for
-from api.spatial_legacy import DATASET_NOTE, to_reconcile_query
+from api.spatial_legacy import to_reconcile_query
 
 RF = RequestFactory()
 
@@ -66,10 +66,11 @@ class MappingTests(SimpleTestCase):
                                                           "pagesize": "7"})["body"]["queries"]["q0"])
         self.assertNotIn("token", p["params"])  # never echoed
 
-    def test_spatial_dataset_narrows_to_whg_and_says_why(self):
+    def test_spatial_dataset_is_passed_to_reconcile_as_is(self):
+        # /reconcile filters on `dataset` itself, so the translation no longer narrows to `whg`.
         p = plan("spatial", type="nearby", lon="0", lat="0", km="5", dataset="42")
-        self.assertEqual((p["query"]["dataset"], p["query"]["namespaces"], p["dataset_pk"]), (42, ["whg"], 42))
-        self.assertIn(DATASET_NOTE, p["notes"])
+        self.assertEqual((p["query"]["dataset"], p["dataset_pk"]), (42, 42))
+        self.assertNotIn("namespaces", p["query"])
 
     def test_spatial_refusal_is_a_param_error(self):
         with self.assertRaises(LegacyParamError):
@@ -296,17 +297,71 @@ class CompatModeTests(_Fixture):
         self.assertEqual(body["attribution"], {"sources": {}})
         self.assertIn("count", body["compat"]["no_equivalent"])
 
-    def test_dataset_is_filtered_on_the_candidate_ids(self):
-        mine = dict(GN, id=f"place:whg:{self.ds.id}:lc1", namespace="whg")
-        other = dict(GN, id="place:whg:99999:z", namespace="whg")
-        with patch("api.reconcile.process_queries", return_value=_candidates(other, mine)) as pq:
-            body = self.get("/api/db/", {"name": "Compatville", "dataset": "lc_ds"}).json()
-        self.assertEqual(pq.call_args[0][0]["q0"]["namespaces"], ["whg"])
-        self.assertEqual([f["id"] for f in body["features"]], [mine["id"]])
+    def _through_reconcile(self, url, params):
+        """The compat view over the REAL process_queries / reconcile_place_es, with a fake gateway
+        (honours `namespaces`) and a fake legacy index (ignores the dataset label)."""
+        def gw(place_id):
+            return {"_id": place_id, "_score": 3.0,
+                    "_source": {"place_id": place_id, "title": "Compatville", "ccodes": ["GB"]}}
+
+        def legacy(pk, label, src_id):
+            return {"_id": pk, "_score": 3.0, "_source": {"place_id": pk, "dataset": label, "src_id": src_id,
+                                                          "title": "Compatville", "ccodes": ["GB"]}}
+
+        gw_hits = [gw("gn:2643743"), gw(f"whg:{self.ds.id}:lc9"), gw("whg:99999:z")]
+        legacy_hits = [legacy(str(self.place.id), "lc_ds", "lc1"), legacy("8000001", "other_ds", "o1")]
+
+        def fake_crc(query, user=None, namespaces=None, meta=None):
+            return [h for h in gw_hits if not namespaces or h["_source"]["place_id"].split(":")[0] in namespaces]
+
+        from api.tests_reconcile_dataset_filter import inline_reconcile
+        pool, conn = inline_reconcile()  # the workers must see this TestCase's uncommitted rows
+        with pool, conn, patch("api.reconcile.crc_reconcile_search", side_effect=fake_crc), \
+                patch("api.reconcile.es_search", return_value=legacy_hits):
+            return self.get(url, params)
+
+    def test_dataset_is_filtered_by_reconcile_itself(self):
+        # The compat layer used to narrow to `whg` and keep the candidates whose id starts
+        # `place:whg:<dataset id>:`. /reconcile now filters on `dataset`, and the layer does not.
+        # Equivalence: the old rule applied to the UNFILTERED candidates gives exactly what is now
+        # served with `dataset` — and the unfiltered list is the presence control.
+        circle = {"type": "nearby", "lon": "-1", "lat": "51", "km": "5"}
+        lc = f"place:whg:{self.ds.id}:"
+        cases = (
+            ("/api/db/", {"name": "Compatville"}, {"dataset": "lc_ds"}, [lc + "lc1", lc + "lc9"]),
+            ("/api/index/", {"name": "Compatville"}, {"dataset": "lc_ds"}, [lc + "lc1", lc + "lc9"]),
+            # A circle suppresses the legacy arm (the gateway serves `whg`), so only lc9 here.
+            ("/api/spatial/", circle, {"dataset": str(self.ds.id)}, [lc + "lc9"]),
+        )
+        for url, base, ds_param, expected in cases:
+            with self.subTest(url=url):
+                key = url.strip("/").split("/")[1]
+                ids = [f["id"] for f in self.assertCompat(self._through_reconcile(url, base), key)["features"]]
+                self.assertIn("place:gn:2643743", ids)
+                self.assertIn("place:whg:99999:z", ids)
+                old_rule = sorted(i for i in ids if i.startswith(lc))
+                self.assertEqual(old_rule, expected)
+                body = self.assertCompat(self._through_reconcile(url, {**base, **ds_param}), key)
+                self.assertEqual(sorted(f["id"] for f in body["features"]), old_rule)
 
     def test_db_unknown_dataset_is_400(self):
         r = self.get("/api/db/", {"name": "x", "dataset": "nosuch"})
         self.assertEqual(r.status_code, 400)
+
+    def test_db_private_dataset_answers_as_an_unknown_one(self):
+        # place#310: the label of a dataset outside the caller's circle is not confirmed.
+        nosuch = self.get("/api/db/", {"name": "x", "dataset": "nosuch"})
+        private = self.get("/api/db/", {"name": "x", "dataset": "lc_private"})
+        self.assertEqual((private.status_code, nosuch.status_code), (400, 400))
+        self.assertEqual(private.json()["error"].replace("lc_private", "?"),
+                         nosuch.json()["error"].replace("nosuch", "?"))
+        # Presence control: the owner's own private label does resolve.
+        from api.models import APIToken
+        APIToken.objects.create(user=self.owner, key="lc-owner-token")
+        with patch("api.reconcile.process_queries", return_value=_candidates()) as pq:
+            r = self.client.get("/api/db/", {"name": "x", "dataset": "lc_private", "token": "lc-owner-token"})
+        self.assertEqual(r.status_code, 200, r.content[:300])
+        self.assertEqual(pq.call_args[0][0]["q0"]["dataset"], self.private.id)
 
     def test_a_failed_query_is_400_not_an_empty_200(self):
         with patch("api.reconcile.process_queries",

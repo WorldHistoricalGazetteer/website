@@ -69,7 +69,7 @@ from rest_framework.views import APIView
 from api import spatial as spatial_api
 from api.authentication import TokenQueryOrBearerAuthentication
 from api.deprecation import PROFILE, TOKEN_DOCS, _ENDPOINTS, _TOKEN_TAIL
-from api.spatial_legacy import DATASET_NOTE, NO_EQUIVALENT, to_reconcile_query
+from api.spatial_legacy import NO_EQUIVALENT, to_reconcile_query
 from api.throttling import consume_budget, consume_query_budget, throttle_message
 
 logger = logging.getLogger("api.deprecation")
@@ -159,9 +159,13 @@ def _year(value):
         raise LegacyParamError("'year' must be an integer.")
 
 
-def _dataset_pk_for_label(label):
+def _dataset_pk_for_label(label, user):
+    """The id of the dataset labelled ``label`` if ``user`` may see it, else None: a dataset outside
+    the requester's circle answers exactly as one that does not exist (place#310)."""
+    from api.dataset_access import visible_datasets_q
     from datasets.models import Dataset
-    return Dataset.objects.filter(label=label).values_list("id", flat=True).first()
+    return (Dataset.objects.filter(label=label).filter(visible_datasets_q(user))
+            .values_list("id", flat=True).first())
 
 
 def _ids(raw):
@@ -176,7 +180,7 @@ def _ids(raw):
     return ids
 
 
-def _name_query(p, *, fc_param, size_default, size_max, dataset_is_label):
+def _name_query(p, *, fc_param, size_default, size_max, dataset_is_label, user=None):
     """A name search on /api/db/ or /api/index/ as one /reconcile query object."""
     q, dropped, notes = {}, {}, []
     name = p.get("name") or p.get("name_contains") or p.get("namestartswith")
@@ -198,12 +202,12 @@ def _name_query(p, *, fc_param, size_default, size_max, dataset_is_label):
     dataset_pk = None
     if p.get("dataset"):
         ds = p["dataset"]
-        dataset_pk = _dataset_pk_for_label(ds) if dataset_is_label else (int(ds) if str(ds).isdigit() else None)
+        dataset_pk = (_dataset_pk_for_label(ds, user) if dataset_is_label
+                      else (int(ds) if str(ds).isdigit() else None))
         if dataset_pk is None:
             raise LegacyParamError(f"The requested dataset {ds!r} does not exist.")
+        # /reconcile filters on `dataset` itself (since 2026-11-18): that dataset's places only.
         q["dataset"] = dataset_pk
-        q["namespaces"] = ["whg"]
-        notes.append(DATASET_NOTE)
     for gone in ("context", "area"):
         if p.get(gone):
             dropped[gone] = f"No '{gone}' filter on /reconcile."
@@ -239,7 +243,7 @@ def plan_for(key, request, kwargs):
         if not raw.isdigit() or not 1 <= int(raw) <= 200:
             raise LegacyParamError("'pagesize' must be between 1 and 200.")
         q, ds_pk, dropped, notes = _name_query(p, fc_param="fc", size_default=20, size_max=200,
-                                               dataset_is_label=True)
+                                               dataset_is_label=True, user=getattr(request, "user", None))
         return {"kind": "reconcile", "query": q, "dataset_pk": ds_pk, "shape": "db",
                 "dropped": dropped, "notes": notes, "params": p}
 
@@ -255,7 +259,7 @@ def plan_for(key, request, kwargs):
         if not p.get("name"):
             raise LegacyParamError("Query requires either name, pid, or whgid.")
         q, ds_pk, dropped, notes = _name_query(p, fc_param="fclass", size_default=100, size_max=1000,
-                                               dataset_is_label=True)
+                                               dataset_is_label=True, user=getattr(request, "user", None))
         return {"kind": "reconcile", "query": q, "dataset_pk": ds_pk, "shape": "index",
                 "dropped": dropped, "notes": notes, "params": p}
 
@@ -374,10 +378,9 @@ def _run_reconcile(plan, request):
     res = out.get("q0") or {}
     if res.get("error"):
         return _json({"error": res["error"], "compat": _compat_member(plan, request)}, status=400)
+    # `dataset` is filtered by /reconcile itself (plan["query"]["dataset"]); this layer used to
+    # re-filter the candidate ids, when /reconcile accepted the parameter and ignored it.
     candidates = res.get("result") or []
-    if plan.get("dataset_pk"):
-        prefix = f"place:whg:{plan['dataset_pk']}:"
-        candidates = [c for c in candidates if str(c.get("id") or "").startswith(prefix)]
     features = [_candidate_feature(c, request) for c in candidates]
     body = {"type": "FeatureCollection", "features": features, "count": None,
             "pagesize": len(features), "parameters": plan["params"], "errors": None}

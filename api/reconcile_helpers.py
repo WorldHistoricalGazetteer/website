@@ -591,6 +591,12 @@ def build_es_query(params, size=100):
     else:  # "exact" or any other
         search_query = {"multi_match": {"query": qstr, "fields": fields}}
 
+    # A name-less query reaches the legacy index only when its sole constraint is `dataset` (a spatial
+    # scope suppresses this arm): "the places of this dataset", so match every doc and let the
+    # dataset filter below do the selecting. A multi_match with a null query is an ES 400.
+    if not qstr and params.get("dataset_label"):
+        search_query = {"match_all": {}}
+
     q = {
         "size": size,
         "query": {
@@ -688,6 +694,12 @@ def build_es_query(params, size=100):
     if geometry_filters:
         q["query"]["bool"]["must"].append({"bool": {"should": geometry_filters, "minimum_should_match": 1}})
 
+    # One WHG dataset (the reconcile `dataset` parameter, resolved to its label by reconcile_place_es).
+    # A filter, not a scoring clause; `dataset` is the keyword field the visibility filter also uses.
+    dataset_label = params.get("dataset_label")
+    if dataset_label:
+        q["query"]["bool"].setdefault("filter", []).append({"term": {"dataset": dataset_label}})
+
     # handle unlocated (default: true)
     unlocated = params.get("unlocated")
     if unlocated in [False, "false", "False", "0"]:  # explicitly false
@@ -719,6 +731,9 @@ def es_search(index=ELASTIC_INDICES, query=None, ids=None, hidden=None):
     elif query:
         params = dict(query["raw"])  # shallow copy
         params["qstr"] = query["query_text"]
+        # Set only by reconcile_place_es, from a `dataset` it has resolved for this requester; never
+        # taken from the caller's own parameters.
+        params["dataset_label"] = query.get("dataset_label")
         body = build_es_query(params, size=query["size"])
     else:
         return []

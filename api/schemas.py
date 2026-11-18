@@ -192,8 +192,8 @@ IDs of user-defined stored areas for spatial filtering. Format: `[123,456]`.
 
 ### Dataset Filtering
 
-**`dataset`** *(integer)*  
-Restrict results to specific dataset ID. Must be a valid dataset ID to which the user has access.
+**`dataset`** *(integer or string)*
+Only places of this one WHG dataset: its id (`42`, `"42"` or `"whg:42"`) or its label. Implies `namespaces: "whg"` (an explicit `namespaces` without `whg` returns nothing). A dataset that does not exist and one you may not see both return an empty `result`, not an error. May stand alone without `query` (the dataset's places, from WHG's own index).
 
 ### Source / Namespace Filtering
 
@@ -820,8 +820,9 @@ spatial_schema = extend_schema(
         "Searches the places held in WHG's own database (contributed and published datasets), NOT the "
         "gazetteer index behind the Atlas and the Reconciliation API, which also takes spatial-only queries "
         "(`lat`/`lng`/`radius`, `bounds`, `contained_in`). Returns a GeoJSON FeatureCollection of LPF "
-        "Features with root keys `count`, `pagesize`, `pagesize_max`, `geometry_mode`, `match` and "
-        "`attribution`. `count` is the number of matching places; `features` holds at most `pagesize`."
+        "Features with root keys `count`, `count_capped`, `pagesize`, `pagesize_max`, `geometry_mode`, "
+        "`match` and `attribution`. `count` is the number of matching places, counted up to 1,000: when "
+        "`count_capped` is true there are more, and `count` is 1000. `features` holds at most `pagesize`."
     ),
     parameters=_SPATIAL_PARAMS,
     responses={
@@ -829,7 +830,7 @@ spatial_schema = extend_schema(
             response=OpenApiTypes.OBJECT,
             description="FeatureCollection.",
             examples=[OpenApiExample("geometry=point (default)", value={
-                "type": "FeatureCollection", "count": 1, "pagesize": 1, "pagesize_max": 200,
+                "type": "FeatureCollection", "count": 1, "count_capped": False, "pagesize": 1, "pagesize_max": 200,
                 "geometry_mode": "point", "match": "within",
                 "features": [{
                     "type": "Feature", "uri": "https://whgazetteer.org/api/place/123",

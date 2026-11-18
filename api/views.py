@@ -335,7 +335,11 @@ class SpatialAPIView(generics.ListAPIView):
                 fclasses = list(set([x.upper() for x in fc.split(',')]))
                 qs = qs.filter(fclasses__overlap=fclasses)
 
-            filtered = list(qs.select_related('dataset')[:pagesize])
+            # Page and count from ONE bounded scan, as /api/db/ (bounded_search, below). The
+            # exact qs.count() re-ran the whole spatial match: for match=intersects a second
+            # sequential scan of place_geom with ST_DistanceSphere per row (nearby) or a
+            # second index scan (bbox); the endpoint has no offset, so nobody pages by it.
+            filtered, count, count_capped = bounded_search(qs, pagesize, select_related=('dataset',))
             if geometry_mode == 'full':
                 serializer = LPFSerializer(filtered, many=True, context={'request': self.request})
             else:
@@ -345,7 +349,9 @@ class SpatialAPIView(generics.ListAPIView):
                     'request': self.request, 'geometry_mode': geometry_mode,
                     'geometry_summaries': summaries})
             result.update({
-                "count": qs.count(),
+                # Exact unless count_capped, when it is LEGACY_DB_COUNT_CAP: "at least this many".
+                "count": count,
+                "count_capped": count_capped,
                 "features": serializer.data,
                 "pagesize": len(serializer.data),
                 "pagesize_max": pagesize_max,
@@ -817,7 +823,7 @@ import re
 LEGACY_DB_COUNT_CAP = 1000
 
 
-def bounded_search(qs, pagesize, cap=None):
+def bounded_search(qs, pagesize, cap=None, select_related=()):
     """(page, count, capped) for ``qs`` from ONE bounded scan.
 
     The matching row ids are read as ``SELECT places.id ... LIMIT cap+1``, which stops as soon
@@ -831,13 +837,17 @@ def bounded_search(qs, pagesize, cap=None):
     table when fewer than ``cap + 1`` rows match, and stops early only for a common name.
     Rows are join rows, as before: a place with two matching names appears, and is counted,
     twice.
+
+    Also used by /api/spatial/ (SpatialAPIView), whose ``qs`` has no join rows (a place id
+    filter), with ``select_related=('dataset',)`` as its page query had.
     """
     # max(): a page larger than the cap must still be filled (pagesize is at most 200 here).
     cap = max(LEGACY_DB_COUNT_CAP if cap is None else cap, pagesize)
     ids = list(qs.order_by().values_list('id', flat=True)[:cap + 1])
     capped = len(ids) > cap
     page_ids = ids[:pagesize]
-    by_id = Place.objects.in_bulk(set(page_ids))
+    page_qs = Place.objects.select_related(*select_related) if select_related else Place.objects
+    by_id = page_qs.in_bulk(set(page_ids))
     page = [by_id[i] for i in page_ids if i in by_id]
     return page, (cap if capped else len(ids)), capped
 

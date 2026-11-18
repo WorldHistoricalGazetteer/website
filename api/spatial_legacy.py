@@ -36,10 +36,6 @@ NO_EQUIVALENT = {
     "auth": "/reconcile requires an API token (401 without); /api/spatial/ was anonymous.",
 }
 
-DATASET_NOTE = ("/reconcile accepts 'dataset' but does not filter by it: 'namespaces': ['whg'] keeps the "
-                "candidates to WHG's own places; keep those whose id starts 'place:whg:<dataset id>:'.")
-
-
 def to_reconcile_query(params):
     """Map old /api/spatial/ query parameters (a dict of strings, as in a query
     string) to ``{"body": <POST /reconcile JSON>, "dropped": {param: why},
@@ -89,14 +85,10 @@ def to_reconcile_query(params):
     if p.get("dataset"):
         if not str(p["dataset"]).isdigit():
             raise spatial_api.SpatialParamError("'dataset' must be an integer id.")
+        # /reconcile keeps only that dataset's places (since 2026-11-18; until then it
+        # accepted `dataset` and filtered nothing, and this mapping narrowed to `whg` and
+        # left the caller to filter the candidate ids).
         q["dataset"] = int(p["dataset"])
-        # /reconcile accepts `dataset` (it lets a name-less query through) but applies
-        # no filter for it: neither the legacy ES query nor the gateway body carries it
-        # (read from api/reconcile_helpers.build_es_query and api/crc_client, 2026-11-18).
-        # Narrowing to WHG's own places is the part the API can express; the dataset
-        # itself is filtered on the candidate ids (`place:whg:<dataset id>:...`).
-        q["namespaces"] = ["whg"]
-        notes.append(DATASET_NOTE)
     if p.get("collection"):
         dropped["collection"] = NO_EQUIVALENT["collection"]
     raw = str(p.get("pagesize", spatial_api.DEFAULT_PAGESIZE))

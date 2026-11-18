@@ -36,14 +36,14 @@ from periods.models import Period, Chrononym
 from datasets.models import Dataset
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
-from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend, _truthy_flag
+from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend, _truthy_flag, GATEWAY_MAX_SIZE
 from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
 from django.db import connection as db_connection
 
 from .querysets import place_feature_queryset, period_public_queryset
-from .dataset_access import hidden_datasets, visible_datasets_q
+from .dataset_access import hidden_datasets, visible_datasets_q, parse_contributed_id
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
     parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE, \
@@ -1475,7 +1475,7 @@ def _has_standalone_constraint(params):
         return True
     if any(params.get(k) not in (None, "", [], {}) for k in ("bbox", "bounds", "contained_in")):
         return True
-    if "dataset" in params:
+    if params.get("dataset") not in (None, ""):
         return True
     props = params.get("properties")
     if isinstance(props, list):
@@ -1484,6 +1484,76 @@ def _has_standalone_constraint(params):
                     in _STANDALONE_PROPERTY_PIDS:
                 return True
     return False
+
+
+_DATASET_PARAM_HELP = ('`dataset` must name one WHG dataset: its id (42, "42" or "whg:42") or its '
+                       'label ("my_dataset").')
+
+
+def parse_dataset_param(value):
+    """The `dataset` query parameter as an int dataset pk, a label string, or None when absent/empty.
+
+    Accepted: an integer id, a string of digits, ``whg:<id>`` (the dataset's registry id; the prefix of
+    its places' ``whg:<id>:<src_id>`` ids), or a label. Anything else (a list, a bool, an object) is a
+    per-query ValueError. Pure: whether the dataset exists, and whether the requester may see it, is
+    decided in ``reconcile_place_es``, where a dataset that fails either answers as an empty result."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError(_DATASET_PARAM_HELP)
+    if isinstance(value, int):
+        if value < 1:
+            raise ValueError(_DATASET_PARAM_HELP)
+        return value
+    s = value.strip()
+    if not s:
+        return None
+    if s.lower().startswith(WHG_NAMESPACE + ":"):
+        tail = s.split(":", 1)[1]
+        if not tail.isdigit() or int(tail) < 1:
+            raise ValueError(_DATASET_PARAM_HELP)
+        return int(tail)
+    if s.isdigit():
+        if int(s) < 1:
+            raise ValueError(_DATASET_PARAM_HELP)
+        return int(s)
+    return s
+
+
+# A dataset that does not exist, or that the requester may not see: every hit is dropped. One value for
+# both, so that the response cannot tell them apart (place#310).
+_NO_DATASET = (None, None)
+
+
+def _resolve_dataset_scope(dataset, hidden):
+    """``(pk, label)`` of the dataset a query's `dataset` names, or ``_NO_DATASET`` when there is no such
+    dataset or it is one of ``hidden`` (the requester's withheld datasets, place#310). One query."""
+    from django.db.models import Q
+    cond = Q(id=dataset) if isinstance(dataset, int) else Q(label=dataset)
+    row = Dataset.objects.filter(cond).values_list("id", "label").first()
+    if row is None or (hidden and row[0] in hidden.pks):
+        return _NO_DATASET
+    return row
+
+
+def _keep_dataset_hits(hits, pk, label):
+    """Only the hits for places of dataset ``pk`` (label ``label``). A gateway hit names its dataset in
+    its id (``whg:<pk>:<src_id>``); a legacy hit names it by label in ``_source.dataset`` and carries a
+    numeric place key. Anything else — another gazetteer's place, a two-part ``whg:<place pk>`` id that
+    names no dataset, or any hit at all when the dataset did not resolve — is dropped."""
+    if pk is None:
+        return []
+    kept = []
+    for h in hits:
+        src = h.get("_source") or {}
+        pid = str(src.get("place_id") or h.get("_id") or "")
+        if pid.lower().startswith(WHG_NAMESPACE + ":"):
+            parsed = parse_contributed_id(pid)
+            if parsed is not None and parsed[0] == pk:
+                kept.append(h)
+        elif pid.isdigit() and src.get("dataset") == label:
+            kept.append(h)
+    return kept
 
 
 def normalise_query_params(params):
@@ -1628,7 +1698,8 @@ def normalise_query_params(params):
             except (ValueError, KeyError, IndexError, TypeError) as e:
                 raise ValueError(f"Invalid bounds: {e}")
 
-    has_dataset = "dataset" in params
+    dataset = parse_dataset_param(params.get("dataset"))
+    has_dataset = dataset is not None
     has_contained_in = bool(params.get("contained_in"))
 
     if not query_text and not (bounds or has_nearby or has_dataset or has_contained_in):
@@ -1661,6 +1732,7 @@ def normalise_query_params(params):
         "radius": radius,
         "has_nearby": bool(has_nearby),
         "has_dataset": bool(has_dataset),
+        "dataset": dataset,  # int pk, a label, or None — resolved per requester in reconcile_place_es
         "fclasses": fclasses,
         "types": types,
         "namespaces": namespaces,
@@ -1694,6 +1766,18 @@ def reconcile_place_es(query, user=None, hidden=None):
     # the gateway request and the legacy hits: this is a hybrid path and filtering one arm still leaks.
     _hidden_ns = hidden_namespaces(user)
     namespaces, _embargo_narrowed = apply_namespace_embargo(namespaces, _hidden_ns)
+
+    # `dataset`: only candidates that are places of that one WHG dataset. Until 2026-11-18 the
+    # parameter was accepted (it let a name-less query through) and filtered nothing. A WHG dataset's
+    # places are `whg` places whichever arm returns them, so the search narrows to `whg` (an explicit
+    # `namespaces` without `whg` leaves nothing to search); the legacy arm filters on the dataset label
+    # in the ES query, and both arms are filtered on the hit's dataset AFTER the visibility filters
+    # below. A dataset that does not exist and one the requester may not see resolve alike to "no
+    # dataset", so either answers with an ordinary empty result and neither is confirmed (place#310).
+    dataset_scope = None
+    if query.get("dataset") is not None:
+        dataset_scope = _resolve_dataset_scope(query["dataset"], hidden)
+        namespaces = {WHG_NAMESPACE} if namespaces is None else (set(namespaces) & {WHG_NAMESPACE})
 
     # A `contained_in` region scope is a HARD constraint (issue #143). The legacy WHG index cannot
     # enforce it — containment targets are gateway-resident place ids with no counterpart here, and the
@@ -1734,12 +1818,21 @@ def reconcile_place_es(query, user=None, hidden=None):
     #    scope is active and the gateway will serve the (properly scoped) results.
     legacy_hits = []
     if (namespaces is None or WHG_NAMESPACE in namespaces) and not suppress_legacy:
-        legacy_hits = _drop_withheld_hits(es_search(query=query, hidden=hidden), hidden)
+        if dataset_scope is None:
+            legacy_hits = _drop_withheld_hits(es_search(query=query, hidden=hidden), hidden)
+        elif dataset_scope[0] is None:
+            legacy_hits = []  # no such dataset, or not one this requester may see: nothing can match
+        else:
+            # The label filter goes into the ES query, so `size` counts this dataset's places only.
+            legacy_hits = _drop_withheld_hits(
+                es_search(query={**query, "dataset_label": dataset_scope[1]}, hidden=hidden), hidden)
         # place#218 — the legacy arm. `filter_hits_by_namespace` is the caller-driven safety net; this
         # is the registry-driven one, and it must run even when the caller named no namespaces.
         if _hidden_ns:
             legacy_hits = [h for h in legacy_hits
                            if (h.get("_source") or {}).get("namespace") not in _hidden_ns]
+        if dataset_scope is not None:
+            legacy_hits = _keep_dataset_hits(legacy_hits, *dataset_scope)
     elif suppress_legacy:
         logger.info("reconcile: suppressing legacy hits — spatial scope is enforced gateway-side only")
 
@@ -1750,14 +1843,21 @@ def reconcile_place_es(query, user=None, hidden=None):
     # Only call the gateway when at least one CRC namespace is wanted
     # (or when no namespace filter was given at all).
     if gateway_in_play:
+        # The gateway has no dataset filter, so a `dataset` query is filtered here, on the hits it
+        # returns; it asks for as many `whg` hits as the gateway will give (GATEWAY_MAX_SIZE), so that
+        # the dataset's places are not crowded out of the top `limit` by other datasets' before the
+        # filter runs. The merged list is still trimmed to `limit` below.
+        gw_query = query if dataset_scope is None else {**query, "size": GATEWAY_MAX_SIZE}
         crc_hits = _drop_withheld_hits(
-            crc_reconcile_search(query, user=user, namespaces=crc_namespaces, meta=crc_meta), hidden)
+            crc_reconcile_search(gw_query, user=user, namespaces=crc_namespaces, meta=crc_meta), hidden)
         # place#218 — the gateway arm. When the caller asked for everything we could not express
         # "all but these" in the request, so the exclusion happens here. Belt and braces even when we
         # could: the gateway is a separate service and this must not depend on it honouring the list.
         if _hidden_ns:
             crc_hits = [h for h in crc_hits
                         if (h.get("_source") or {}).get("namespace") not in _hidden_ns]
+        if dataset_scope is not None:
+            crc_hits = _keep_dataset_hits(crc_hits, *dataset_scope)
 
     # The gateway fails CLOSED on an explicitly scoped query it cannot constrain: rather than
     # answering with unscoped results it returns none and reports scope.applied = False. Legacy hits
