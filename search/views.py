@@ -770,6 +770,9 @@ def atlas_place(request):
         url = _record_urls_for_hits([{"place_id": pid}]).get(pid)
         if url and url.startswith("/atlas/"):
             place["record_url"] = url
+        added = _location_provenance_for(pid, request.user)
+        if added:
+            place["location_provenance"] = added
         return JsonResponse(place)
 
     # Enrich with the source authority's attribution (registry, per-namespace).
@@ -785,6 +788,24 @@ def atlas_place(request):
     if attribution:
         place["attribution"] = attribution
     return JsonResponse(place)
+
+
+def _location_provenance_for(pid: str, user) -> list:
+    """place#350: the adopted / placed-location labels for contributed record ``pid``, from the
+    live Postgres row (the index carries no provenance, and may lag an Undo). The Record page's
+    own visibility rule is applied again here, so a row the user may not see says nothing."""
+    from django.http import Http404
+    from api.dataset_access import get_visible_place_or_404
+    from api.reconcile_helpers import resolve_legacy_place_pk
+    from datasets.location_index import location_labels
+    pk = resolve_legacy_place_pk(pid)
+    if pk is None:
+        return []
+    try:
+        row = get_visible_place_or_404(user, pk=pk)
+    except Http404:
+        return []
+    return location_labels(row)
 
 
 def _not_redistributable_response(pid: str, ns: str, attribution: dict,

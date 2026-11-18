@@ -1623,6 +1623,13 @@ def index_dataset_on_publish(dataset_id):
                 # `indexed` comes from a marker written last, by this job, after a zero-error bulk;
                 # a job that failed after indexing has still indexed the dataset.
                 if body.get("indexed") is True:
+                    from datasets.location_index import job_predates
+                    if job_predates(ds.index_job_id, ds.index_pending_since):
+                        # The dataset changed after this job started (an adopted or placed
+                        # location, place#350), so the index may not have it: index again.
+                        Dataset.objects.filter(pk=ds.pk).update(index_job_id="", index_failure_reason="")
+                        index_dataset_on_publish.apply_async(args=[ds.pk], countdown=60)
+                        return {"status": "pending", "gateway": "superseded"}
                     Dataset.objects.filter(pk=ds.pk).update(
                         index_pending_since=None, index_job_id="", index_failure_reason="")
                     return {"status": "indexed"}
