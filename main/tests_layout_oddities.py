@@ -376,7 +376,7 @@ ABOUT_LOGOS = """() => {
                                 colLeft: cr.left, colRight: cr.right}))};
 }"""
 
-FUNDER_LOGOS = ["neh_logo_horizontal_rgb.jpg", "ishi.png", "whc_logo250.png", "logo-knaw-humanities-cluster.png",
+FUNDER_LOGOS = ["neh_logo_horizontal_rgb.jpg", "ishi_logo.png", "pitt_shield_white.png", "whc_logo250.png", "logo-knaw-humanities-cluster.png",
                 "logo-asc-pitt.png", "logo-creees-pitt.png", "dhaward.png"]
 
 

@@ -14,7 +14,7 @@ from sitemap.views import StaticViewSitemap
 
 # The funders named under "Funding and awards" (NEH, ISHI, World History Center, KNAW HuC, Asian
 # Studies Center, CREEES, DH Awards): their logos live on /about/, not /people_overview/.
-FUNDER_LOGOS = ("neh_logo_horizontal_rgb.jpg", "ishi.png", "whc_logo250.png", "logo-knaw-humanities-cluster.png",
+FUNDER_LOGOS = ("neh_logo_horizontal_rgb.jpg", "ishi_logo.png", "pitt_shield_white.png", "whc_logo250.png", "logo-knaw-humanities-cluster.png",
                 "logo-asc-pitt.png", "logo-creees-pitt.png", "dhaward.png")
 
 
@@ -69,6 +69,23 @@ class AboutPagesTests(TestCase):
             self.assertNotIn(f'href="{reverse(name)}"', html, name)
         self.assertIn('href="https://docs.whgazetteer.org/"', html)
 
+    def test_ishi_and_university_logos_and_the_crcd_credit(self):
+        import os
+        from django.conf import settings
+        html = self.client.get("/about/").content.decode()
+        # ISHI has its own logo (the tree), separate from the University's shield.
+        self.assertIn("ishi_logo.png", html)
+        self.assertNotIn("images/ishi.png", html)
+        # The University's WHITE shield is only legible on Pitt Royal Blue.
+        self.assertRegex(html, r'background-color: #003594;[^>]*>\s*<img[^>]*pitt_shield_white\.png')
+        # The Center for Research Computing and Data is credited for the infrastructure, with a link.
+        self.assertRegex(html, r'<a href="https://crc\.pitt\.edu/"[^>]*>Center for Research Computing and Data</a>')
+        self.assertIn("search and indexing infrastructure", html)
+        # The ISHI original is 15 MB (10850 px square): the served copy must stay small.
+        base = os.path.join(settings.BASE_DIR, "whg", "static", "images")
+        self.assertLess(os.path.getsize(os.path.join(base, "ishi_logo.png")), 600_000)
+        self.assertLess(os.path.getsize(os.path.join(base, "pitt_shield_white.png")), 50_000)
+
     def test_about_page_carries_funder_logos_under_funding(self):
         html = self.client.get("/about/").content.decode()
         section = re.search(r'<section id="funding".*?</section>', html, re.S)
@@ -83,7 +100,7 @@ class AboutPagesTests(TestCase):
         for i in imgs:
             alt = re.search(r'alt="([^"]*)"', i)
             self.assertTrue(alt and len(alt.group(1)) > 5, f"no useful alt text: {i}")
-            # Sized (no logo drawn at its natural size; ishi.png alone is 958 px wide).
+            # Sized (no logo drawn at its natural size; the original ISHI tree was 10850 px wide).
             self.assertRegex(i, r'width="\d+"', i)
             self.assertLessEqual(int(re.search(r'width="(\d+)"', i).group(1)), 250, i)
         self.assertIn("#funder_logos img", html)  # the max-width/height:auto rule
