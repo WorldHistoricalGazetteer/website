@@ -34,7 +34,8 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase
-from utils.livetest import drain_live_server_threads, stub_type_vocab
+from utils.livetest import (SerializedRollbackFromEmpty, drain_live_server_threads, start_sync_playwright,
+                            stub_type_vocab)
 
 from datasets import candidates
 from datasets.models_matching import CandidateGeneration, RecordReviewState
@@ -76,6 +77,18 @@ def feed_route(route, block_bundle=False, block=(), external=None, local=None):
     return route.continue_()
 
 
+def missing_cdn_fallbacks():
+    """The local copies of CDN libraries that the bundle build puts in ``static/webpack/CDNfallbacks/``
+    (``webpack.config.js``'s CopyWebpackPlugin patterns) and that are not there. ``base.js`` loads
+    them when a CDN is unreachable, which is every time under ``MapBrowserBase``."""
+    import re
+    with open(os.path.join(settings.BASE_DIR, "webpack.config.js")) as f:
+        wanted = [p.rsplit("/", 1)[-1] for p in re.findall(r"from:\s*'([^']+)',\s*to:\s*'CDNfallbacks/'", f.read())]
+    assert "jquery.min.js" in wanted, "webpack.config.js no longer lists the CDN fallbacks this check reads"
+    folder = os.path.join(settings.BASE_DIR, "static", "webpack", "CDNfallbacks")
+    return [n for n in wanted if not os.path.isfile(os.path.join(folder, n))]
+
+
 def recorded_coventry():
     with open(FIXTURE) as f:
         data = json.load(f)["data"]
@@ -85,17 +98,18 @@ def recorded_coventry():
 
 
 @unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
-class FeedBrowserTests(LiveServerTestCase):
+class FeedBrowserTests(SerializedRollbackFromEmpty, LiveServerTestCase):
     # LiveServerTestCase flushes the database after each test, which drops the gazetteer registry
     # rows the migrations seed; a Link to gn: is then refused as an unknown namespace, so the
-    # second test would fail for its neighbour's reason. Restore them.
+    # second test would fail for its neighbour's reason. Restore them. (serialized_rollback alone
+    # restored nothing once Playwright had started, and collided after a non-serialized class: hence
+    # start_sync_playwright and SerializedRollbackFromEmpty, utils/livetest.py.)
     serialized_rollback = True
     @classmethod
     def setUpClass(cls):
         os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
         super().setUpClass()
-        from playwright.sync_api import sync_playwright
-        cls._pw = sync_playwright().start()
+        cls._pw = start_sync_playwright()   # not sync_playwright().start(): see utils/livetest.py
         cls.browser = cls._pw.chromium.launch(headless=True)
         print(f"\n[match feed] bundle from {BUNDLE_DIR or 'static/webpack/'}")
 
@@ -238,7 +252,7 @@ MARKERS_JS = """() => {
 
 
 @unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the contributor feed in headless Chromium")
-class MapBrowserBase(LiveServerTestCase):
+class MapBrowserBase(SerializedRollbackFromEmpty, LiveServerTestCase):
     """What the map-page browser tests share: headless Chromium with software GL, a signed-in
     beta user (``self.user``), every host but the live server aborted, and the page's own readiness
     flag. A base with no tests of its own."""
@@ -246,10 +260,16 @@ class MapBrowserBase(LiveServerTestCase):
 
     @classmethod
     def setUpClass(cls):
+        missing = missing_cdn_fallbacks()
+        if missing:
+            # Every CDN is aborted below, so the page loads jQuery, Bootstrap, MapLibre... from these
+            # local copies. They are build output (gitignored), absent from a fresh checkout or
+            # worktree; without them the feed never becomes ready and every test times out at 30 s.
+            raise RuntimeError(f"static/webpack/CDNfallbacks/ lacks {missing}: run `npm run build:prod` "
+                               "(with .env/.env present) in this checkout before the map browser tests")
         os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = "true"
         super().setUpClass()
-        from playwright.sync_api import sync_playwright
-        cls._pw = sync_playwright().start()
+        cls._pw = start_sync_playwright()   # not sync_playwright().start(): see utils/livetest.py
         # Software GL kept as insurance (~/.claude/memory/playwright-maplibre-headless-testing.md).
         cls.browser = cls._pw.chromium.launch(
             headless=True, args=["--enable-unsafe-swiftshader", "--use-gl=angle", "--use-angle=swiftshader"])
