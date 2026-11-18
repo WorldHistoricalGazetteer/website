@@ -303,8 +303,8 @@ can init, whatever order their sections appear in.{% endcomment %}
       their own computer and looks places up in WHG with a beta account's API token. These figures count
       only WHG's own built-in version at <code>/reconciliation/</code>, which stays open to beta testers for now;
       {{ myd_beta_accounts }} active account{{ myd_beta_accounts|pluralize }} can open it (beta testers and staff).
-      Use of PLATO Tools is <strong>not</strong> measured here: it reports to no WHG tracker, and WHG's API
-      cannot yet tell its calls from any other client's.
+      Use of PLATO Tools is <strong>not</strong> measured by this funnel: it reports to no WHG tracker. Its calls
+      to WHG's API are counted separately, in the API calls by origin panel below.
       "Visitors" are Plausible's anonymous visitors, re-counted each day, so over a period of more than a
       day one person can appear several times; they are not accounts.</p>
     {% if base_v %}
@@ -335,6 +335,53 @@ can init, whatever order their sections appear in.{% endcomment %}
       </table>
     {% else %}
       <p class="text-muted mb-0">No <code>MyD: import</code> events from the in-WHG version in this period.</p>
+    {% endif %}
+  </div></div>
+
+  <!-- API calls by origin / client: API_Call events (api/middleware.py), props origin and client -->
+  <div class="card mb-4" id="an-api-origin"><div class="card-body">
+    <h5 class="card-title"><i class="fas fa-plug text-secondary me-1"></i>API calls by origin</h5>
+    <p class="small text-muted mb-3">Calls to WHG's reconciliation and suggest services
+      (<code>/reconcile</code>, <code>/suggest</code>), counted as Plausible <code>API_Call</code> events.
+      <strong>Origin</strong> comes from the browser's own Origin or Referer header, so web tools such as
+      PLATO Tools are identified without doing anything; <strong>client</strong> is a coarse class of the
+      User-Agent. Only allow-listed labels are stored: no tokens, addresses or accounts. Both headers are
+      self-reported and can be faked: indicative, not authoritative. Percentages are of all
+      {{ api_origin.total }} <code>API_Call</code> event{{ api_origin.total|pluralize }} in this period.</p>
+    {% if api_origin.has_data %}
+      <div class="row">
+        <div class="col-md-6">
+          <table class="table table-sm mb-3">
+            <thead><tr><th>Origin</th><th class="text-end">Events</th><th class="text-end">%</th></tr></thead>
+            <tbody>
+              {% for row in api_origin.origins %}
+              <tr><td>{{ row.label }}</td><td class="text-end">{{ row.events }}</td>
+                  <td class="text-end">{% if row.pct is not None %}{{ row.pct }}%{% endif %}</td></tr>
+              {% endfor %}
+              {% if api_origin.untagged %}
+              <tr class="text-muted"><td>Before origin tracking began (no label)</td>
+                  <td class="text-end">{{ api_origin.untagged }}</td><td class="text-end"></td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        <div class="col-md-6">
+          <table class="table table-sm mb-3">
+            <thead><tr><th>Client</th><th class="text-end">Events</th><th class="text-end">%</th></tr></thead>
+            <tbody>
+              {% for row in api_origin.clients %}
+              <tr><td>{{ row.label }}</td><td class="text-end">{{ row.events }}</td>
+                  <td class="text-end">{% if row.pct is not None %}{{ row.pct }}%{% endif %}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% else %}
+      <p class="text-muted mb-0" id="an-api-origin-empty">No origin data yet. Tracking began on 18 November 2026,
+        and Plausible only reports events that arrive after that; this panel fills in as calls are made.
+        {% if api_origin.total %}The {{ api_origin.total }} earlier event{{ api_origin.total|pluralize }} in this
+        period carry no origin.{% endif %}</p>
     {% endif %}
   </div></div>
 

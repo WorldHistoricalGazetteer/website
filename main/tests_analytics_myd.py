@@ -57,7 +57,7 @@ class MydPanelTests(TestCase):
         self.assertIn('being moved to PLATO Tools', panel)
         self.assertIn(f'href="{views.PLATO_TOOLS_URL}"', panel)
         self.assertIn(f'href="{views.PLATO_TOOLS_GUIDE_URL}"', panel)
-        self.assertIn('not</strong> measured here', panel)
+        self.assertIn('not</strong> measured by this funnel', panel)
 
     def test_small_base_shows_counts_with_denominator_and_no_percentages(self):
         resp, panel = self._panel({'MyD: import': (1, 1), 'MyD: reconcile': (1, 1),

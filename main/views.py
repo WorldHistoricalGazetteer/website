@@ -1462,6 +1462,38 @@ def _svg_donut(rows):
     return {'r': r, 'circ': round(circ, 2), 'segs': segs, 'total': total}
 
 
+API_ORIGIN_LABELS = {
+    'plato-tools': 'PLATO Tools (plato.pelagios.org)', 'pelagios': 'pelagios.org', 'whg-site': "WHG's own pages",
+    'whg-docs': 'WHG documentation', 'other-web': 'Another website', 'none': 'No Origin header (script, OpenRefine, curl ...)',
+}
+API_CLIENT_LABELS = {
+    'whg-mcp': 'WHG MCP server', 'openrefine': 'OpenRefine', 'python': 'Python script', 'curl': 'curl', 'postman': 'Postman',
+    'browser': 'Web browser', 'other': 'Other software', 'none': 'No User-Agent',
+}
+
+
+def _api_origin_panel(rows_of, results, period):
+    """API_Call events by `origin` and by `client`, with the denominator: ALL API_Call events in the period.
+    Events sent before the props were added (2026-11-18 deploy) carry neither and appear as 'before tracking'.
+    Self-reported headers: indicative, not authoritative."""
+    total = 0
+    for r in rows_of(('events', PLAUSIBLE_MAIN)):
+        if r.get('name') == 'API_Call':
+            total = r.get('events', 0) or 0
+    def table(prop, labels):
+        rows = [r for r in rows_of(('api_' + prop, PLAUSIBLE_MAIN)) if r.get(f'event:props:{prop}') not in (None, '(none)', '')]
+        tagged = sum(r.get('events', 0) or 0 for r in rows)
+        out = [{'key': r[f'event:props:{prop}'], 'label': labels.get(r[f'event:props:{prop}'], r[f'event:props:{prop}']),
+                'events': r.get('events', 0) or 0, 'visitors': r.get('visitors', 0) or 0,
+                'pct': round(100 * (r.get('events', 0) or 0) / total, 1) if total else None} for r in rows]
+        out.sort(key=lambda x: -x['events'])
+        return out, tagged
+    origins, tagged = table('origin', API_ORIGIN_LABELS)
+    clients, _ = table('client', API_CLIENT_LABELS)
+    return {'total': total, 'tagged': tagged, 'untagged': max(total - tagged, 0), 'origins': origins, 'clients': clients,
+            'has_data': bool(origins or clients)}
+
+
 @login_required
 def plausible_analyser_view(request):
     if not request.user.is_staff:
@@ -1492,6 +1524,12 @@ def plausible_analyser_view(request):
             'metrics': 'visitors', 'limit': 10}, site)
     tasks[('events', PLAUSIBLE_MAIN)] = ('breakdown', {'period': period, 'property': 'event:name',
         'metrics': 'visitors,events', 'limit': 200}, PLAUSIBLE_MAIN)
+    # API calls by origin / client (api/middleware.py adds the `origin` and `client` props to API_Call; they must
+    # be allow-listed in the Plausible site settings, done 2026-11-18). Not counted in the page's error banner:
+    # an empty answer is the normal state until events carrying the props have arrived.
+    for prop in ('origin', 'client'):
+        tasks[('api_' + prop, PLAUSIBLE_MAIN)] = ('breakdown', {'period': period, 'property': 'event:props:' + prop,
+            'metrics': 'events,visitors', 'filters': 'event:name==API_Call', 'limit': 30}, PLAUSIBLE_MAIN)
 
     from concurrent.futures import ThreadPoolExecutor
     results, errors = {}, []
@@ -1503,8 +1541,8 @@ def plausible_analyser_view(request):
                 results[key] = fut.result()
             except Exception as e:  # noqa: BLE001 - surface any thread error
                 results[key] = (None, str(e))
-    for res in results.values():
-        if res[1]:
+    for key, res in results.items():
+        if res[1] and not (isinstance(key, tuple) and str(key[0]).startswith('api_')):
             errors.append(res[1])
 
     def rows_of(key):
@@ -1665,6 +1703,8 @@ def plausible_analyser_view(request):
     myd_beta_accounts = reg.filter(Q(is_staff=True) | Q(is_superuser=True)
                                    | Q(role__in=('beta_tester', 'superuser'))).count()
 
+    api_origin = _api_origin_panel(rows_of, results, period)
+
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
         'period_label': dict(PLAUSIBLE_PERIODS).get(period, period),
@@ -1678,7 +1718,7 @@ def plausible_analyser_view(request):
         'coverage': coverage,
         'funnel': funnel, 'others': others, 'base_v': base_v,
         'myd_show_pct': myd_show_pct, 'myd_pct_min_base': MYD_PCT_MIN_BASE,
-        'myd_beta_accounts': myd_beta_accounts,
+        'myd_beta_accounts': myd_beta_accounts, 'api_origin': api_origin,
         'plato_tools_url': PLATO_TOOLS_URL, 'plato_tools_guide_url': PLATO_TOOLS_GUIDE_URL,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
