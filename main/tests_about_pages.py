@@ -48,6 +48,8 @@ class AboutPagesTests(TestCase):
         html = self.client.get("/about/").content.decode()
         self.assertIn('id="funding"', html)
         self.assertIn("Funding and awards", html)
+        # The SVG logo has no intrinsic size, so without a cap it fills its whole column.
+        self.assertRegex(html, r'whg_logo\.svg[^>]*style="max-width: 120px;"')
         self.assertIn("PW‑253719‑17", html)
         self.assertIn("Digital Humanities Advancement Grant", html)
         self.assertIn("Best DH Tool or Suite of Tools Award", html)
