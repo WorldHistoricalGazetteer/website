@@ -77,7 +77,8 @@
         <li><a href="{% url 'credits' %}">People &amp; credits</a>: the project team, former members, advisory board and acknowledgements</li>
         <li><a href="{% url 'publications' %}">Publications &amp; press</a></li>
         <li><a href="{% url 'licenses' %}">Data licences</a> and <a href="{% url 'software-licenses' %}">software licences</a>; WHG's own <a data-whg-modal="/license/" href="#">licensing policy</a></li>
-        <li><a href="{% url 'terms_of_use' %}">Terms of use</a> and <a href="{% url 'privacy_policy' %}">privacy policy</a></li>
+        {# terms/privacy/licence are unstyled fragments: open them as modals, as the footer does #}
+        <li><a data-whg-modal="{% url 'terms_of_use' %}" href="#">Terms of use</a> and <a data-whg-modal="{% url 'privacy_policy' %}" href="#">privacy policy</a></li>
         <li><a href="https://github.com/WorldHistoricalGazetteer/whg3" target="_blank" rel="noopener">Source code</a> and
           <a href="https://github.com/WorldHistoricalGazetteer/website/releases" target="_blank" rel="noopener">release notes</a></li>
       </ul>

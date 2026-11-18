@@ -53,8 +53,12 @@ class AboutPagesTests(TestCase):
         self.assertIn("Best DH Tool or Suite of Tools Award", html)
         self.assertIn("Our mission", html)
         self.assertNotIn("2019", html)  # the stale "Version 1 beta launched in October, 2019" text
-        for name in ("credits", "publications", "licenses", "software-licenses", "terms_of_use"):
+        for name in ("credits", "publications", "licenses", "software-licenses"):
             self.assertIn(f'href="{reverse(name)}"', html, name)
+        # Fragments (no base template) open as modals, never as bare pages.
+        for name in ("terms_of_use", "privacy_policy", "license"):
+            self.assertIn(f'data-whg-modal="{reverse(name)}"', html, name)
+            self.assertNotIn(f'href="{reverse(name)}"', html, name)
         self.assertIn('href="https://docs.whgazetteer.org/"', html)
 
     def test_people_overview_points_to_moved_funding(self):
