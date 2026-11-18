@@ -43,3 +43,23 @@ class TaskProgressAccessTests(TestCase):
         self.assertEqual(r['Content-Type'], 'application/json')
         self.assertNotIn('PROGRESS', r.content.decode())
         ar.assert_not_called()
+
+
+class CeleryProgressNotRoutedTests(TestCase):
+    """django-celery-progress is in INSTALLED_APPS but its urls ('/celery-progress/<id>/', which
+    answers anyone with any task's state and result) have not been mounted since 1f44c336e
+    (2024-02-12). Pin that, so re-adding the include fails here rather than reopening an
+    unauthenticated task-result endpoint. The presence half (task_progress resolves) proves the
+    resolver is the real one, not one that resolves nothing."""
+
+    def test_celery_progress_is_not_routed_but_task_progress_is(self):
+        from django.urls import Resolver404, resolve
+        self.assertEqual(resolve(f'/task_progress/{TASK}/').url_name, 'task-progress')
+        with self.assertRaises(Resolver404):
+            resolve(f'/celery-progress/{TASK}/')
+
+    @mock.patch('celery.result.AsyncResult')
+    def test_anonymous_celery_progress_gets_404_without_touching_celery(self, ar):
+        r = self.client.get(f'/celery-progress/{TASK}/')
+        self.assertEqual(r.status_code, 404)
+        ar.assert_not_called()
