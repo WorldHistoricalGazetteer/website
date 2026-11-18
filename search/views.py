@@ -1266,13 +1266,17 @@ def suggester(q, indices, qstr=None):
     # first; ties keep Elasticsearch's relevance order (sorted() is stable).
     target = _fold(qstr)
 
-    def _exact(sug):
+    def _tier(sug):
+        # 0 = the title IS the query; 1 = a variant name is ("Rome" for Roman Empire,
+        # "Sydney" for Sidney); 2 = fuzzy/partial only (Sydney Opera House for "sydney").
         if not target:
-            return False
+            return 2
         h = sug['hit']
-        return target in {_fold(n) for n in [h.get('title'), *(h.get('searchy') or [])]}
+        if _fold(h.get('title')) == target:
+            return 0
+        return 1 if target in {_fold(n) for n in (h.get('searchy') or [])} else 2
 
-    sortedsugs = sorted(suggestions, key=lambda x: (not _exact(x), -x['linkcount']))
+    sortedsugs = sorted(suggestions, key=lambda x: (_tier(x), -x['linkcount']))
     # TODO: there may be parents and children
     return sortedsugs
 
@@ -1332,6 +1336,12 @@ class SearchViewV3(View):
         # Lexical search component (affects score)
         search_query = {"multi_match": {"query": qstr, "fields": fields, "fuzziness": "AUTO"}}
 
+        # place#354: fuzzy matching alone let near-misses crowd the true match out of the
+        # 100 hits returned. An un-fuzzy phrase match on the analysed name field is a
+        # scoring-only `should` (it never excludes anything), so exact names are both
+        # retrieved and ranked above their fuzzy neighbours.
+        exact_boost = {"match_phrase": {"names.toponym.text": {"query": qstr, "boost": 10}}}
+
         # Initialize the query with the lexical search in the 'must' clause
         q = {
             "size": 100,
@@ -1340,6 +1350,7 @@ class SearchViewV3(View):
                     "must": [
                         search_query
                     ],
+                    "should": [exact_boost],
                     "filter": [
                         # Required for all records
                         {"exists": {"field": "whg_id"}}
