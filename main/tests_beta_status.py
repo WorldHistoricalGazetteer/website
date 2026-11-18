@@ -70,3 +70,11 @@ class BetaStatusPageTests(TestCase):
                     for link in it.get("links", []):
                         self.assertEqual(set(link), {"url", "label"})
                         self.assertTrue(link["url"].startswith(("https://", "/")), link["url"])
+
+    def test_location_adoption_is_listed_as_in_development(self):
+        """place#350 (adopt or place a location) must be on the page, as in development, not live."""
+        from main.views import BETA_STATUS_SECTIONS
+        items = [i for sec in BETA_STATUS_SECTIONS for i in sec["items"] if "Locations for records" in i["name"]]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["stage"], "dev")
+        self.assertIn("not yet available", items[0]["body"])

@@ -958,6 +958,19 @@ BETA_STATUS_SECTIONS = [
         "heading": "In development",
         "note": "Being built; parts may already be visible.",
         "items": [
+            {"name": "Locations for records that have none", "stage": "dev", "version": "4.0",
+             "body": "Many historical datasets arrive with names but no coordinates. We are adding two "
+                     "optional steps to Match your places for a record that has no location of its own, "
+                     "open only to the dataset's owner, and not yet available to anyone. After answering "
+                     "Same place, the owner can adopt the matched place's location when it comes from a "
+                     "source whose terms allow that (public-domain or attribution-only sources, such as "
+                     "GeoNames or Wikidata). It is stored as a separate location labelled as coming from "
+                     "that source, never as the owner's own, and it can be undone. Or the owner can place "
+                     "the location themselves by clicking on the map. Suggestions from sources whose terms "
+                     "do not allow their coordinates to be copied are still shown as hints, but nothing "
+                     "snaps to them, and the position you click is rounded to what the zoom level supports "
+                     "and marked approximate. Locations are single points to begin with; nothing is adopted "
+                     "automatically or in bulk, and adopting a location never changes your match."},
             {"name": "Citations and contributor credit (CRediT)", "stage": "dev", "version": "4.0",
              "body": "The first part is live: on a dataset's metadata page, the people who worked on it can "
                      "be credited by the role they played, using the CRediT roles, and those credits are "
