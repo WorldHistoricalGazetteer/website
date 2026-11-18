@@ -4,6 +4,7 @@ from django.urls import path, re_path
 from rest_framework.urlpatterns import format_suffix_patterns
 
 from . import views
+from .deprecation import deprecated_endpoint
 
 # app_name = 'api'
 # naming this app BREAKS DATATABLES IN DATASET BROWSE
@@ -13,12 +14,14 @@ urlpatterns = [
     path('attribution/', views.AttributionView.as_view(), name='api-attribution'),
     # source gazetteers (authority namespaces) available for reconciliation — from the registry
     path('sources/', views.SourceGazetteersView.as_view(), name='api-sources'),
-    # database places to be DEPRECATED
-    path('db/', views.SearchAPIView.as_view(), name='api-search'),
+    # Legacy v3 endpoints, DEPRECATED (SG 2026-11-17; retired at the v4 switch): every
+    # response carries the notice and headers of api.deprecation.
+    # database places
+    path('db/', deprecated_endpoint('db')(views.SearchAPIView.as_view()), name='api-search'),
     # index docs
-    path('index/', views.IndexAPIView.as_view(), name='api-index-search'),
+    path('index/', deprecated_endpoint('index')(views.IndexAPIView.as_view()), name='api-index-search'),
     # spatial (nearby or bbox)
-    path('spatial/', views.SpatialAPIView.as_view(), name='api-spatial'),
+    path('spatial/', deprecated_endpoint('spatial')(views.SpatialAPIView.as_view()), name='api-spatial'),
 
     # *** DATASETS ***
 
@@ -37,22 +40,24 @@ urlpatterns = [
 
     # 1. STRICT: Valid Single ID (e.g., "place/1234/")
     # Matches only if the argument is pure digits
-    re_path(r'^place/(?P<pk>\d+)/$', views.PlacesDetailAPIView.as_view(), name='place-detail'),
+    re_path(r'^place/(?P<pk>\d+)/$', deprecated_endpoint('place')(views.PlacesDetailAPIView.as_view()),
+            name='place-detail'),
 
     # 2. STRICT: Valid ID List (e.g., "place/1234-5678/")
     # Matches digits separated by dashes.
-    re_path(r'^place/(?P<pk_list>\d+(?:-\d+)+)/$', views.PlacesDetailAPIView.as_view(), name='places-detail'),
+    re_path(r'^place/(?P<pk_list>\d+(?:-\d+)+)/$', deprecated_endpoint('place')(views.PlacesDetailAPIView.as_view()),
+            name='places-detail'),
 
     # 3. A contributor's OWN identifier: place/<dataset label>/<src_id>/
     # Must precede the sinkhole below, which would otherwise swallow it — as it
     # did until 2026-09-10, making this route dead for as long as it has existed.
-    path('place/<str:dslabel>/<str:src_id>/', views.PlaceDetailSourceAPIView.as_view(),
+    path('place/<str:dslabel>/<str:src_id>/', deprecated_endpoint('place_src')(views.PlaceDetailSourceAPIView.as_view()),
          name='place-detail-src'),
 
     # 4. THE SINKHOLE: Catches EVERYTHING else under "place/"
     # This regex matches "place/" followed by literally anything (.+).
     # Keep it LAST of the place/ routes: it matches greedily and by design.
-    re_path(r'^place/.+/$', views.bad_request_trap, name='place-trap'),
+    re_path(r'^place/.+/$', deprecated_endpoint('place')(views.bad_request_trap), name='place-trap'),
 
     # single place for record comparison in ds_update
     path('place_compare/<int:pk>/', views.PlaceCompareAPIView.as_view(), name='place-compare'),
@@ -70,7 +75,7 @@ urlpatterns = [
     # use: map in ds_browse, ds_places, collection_places :: PlaceGeomSerializer
     path('geoms/', views.GeomViewSet.as_view({'get': 'list'}), name='geom-list'),
     # use: heatmap sources for collection_places.html
-    path('geojson/', views.GeoJSONAPIView.as_view(), name='geojson'),
+    path('geojson/', deprecated_endpoint('geojson')(views.GeoJSONAPIView.as_view()), name='geojson'),
     path('featureCollection/', views.featureCollectionAPIView.as_view(), name='feature-collection'),
     path('country-features/', views.CountryFeaturesAPIView.as_view(), name='country-features'),
 

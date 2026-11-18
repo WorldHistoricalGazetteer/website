@@ -699,7 +699,10 @@ function nearbyPlaces() {
         const lat = center.lat;
         $('#update_nearby').show();
 
-        fetch(`/api/spatial/?type=nearby&lon=${lon}&lat=${lat}&km=${radius}`)
+        // geometry=full: the map draws each place's own shapes. The default match=within
+        // keeps out polygons that merely contain the centre (e.g. empires), which were
+        // what made this response ~100 MB.
+        fetch(`/api/spatial/?type=nearby&lon=${lon}&lat=${lat}&km=${radius}&geometry=full`)
             .then((response) => {
                 if (!response.ok) {
                     throw new Error('Failed to fetch nearby places.');
