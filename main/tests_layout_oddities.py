@@ -40,7 +40,7 @@ from html.parser import HTMLParser
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase, TestCase
-from utils.livetest import drain_live_server_threads, stub_type_vocab
+from utils.livetest import StaticRootThenFinders, drain_live_server_threads, stub_type_vocab
 from django.urls import reverse
 
 from main import tests_navbar_overflow as navtests
@@ -190,6 +190,9 @@ class NavMarkupTests(TestCase):
 
 class _BrowserBase(LiveServerTestCase):
     maxDiff = None  # show every failing width, not the first
+    # The People overview's logos are source files (main/static/images/); without this they
+    # 404 wherever collectstatic has not run, and "logo not drawn" says nothing about the page.
+    static_handler = StaticRootThenFinders
 
     @classmethod
     def setUpClass(cls):

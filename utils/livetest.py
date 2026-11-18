@@ -30,11 +30,16 @@ types under new ids, so the NEXT serialized class fails in ``setUpClass`` with a
 wrappers, so a browser test sees exactly the database a plain one does.
 """
 import gc
+import os
+import posixpath
 import threading
 import time
 from unittest.mock import patch
+from urllib.parse import unquote
 
 from django.db import connections
+from django.test.testcases import _StaticFilesHandler
+from django.views.static import serve as static_serve
 
 REQUEST_THREAD_MARKER = "process_request_thread"
 
@@ -70,6 +75,28 @@ def start_sync_playwright():
         if connections[alias] is not wrapper:
             connections[alias] = wrapper
     return pw
+
+
+class StaticRootThenFinders(_StaticFilesHandler):
+    """A live-server static handler that serves ``STATIC_ROOT`` first (the webpack bundles live
+    there and nowhere else) and falls back to the staticfiles finders (``STATICFILES_DIRS`` and the
+    apps' ``static/``) for a file ``collectstatic`` has not copied there.
+
+    ``LiveServerTestCase`` serves ``STATIC_ROOT`` only, so in a fresh checkout or worktree, where
+    ``collectstatic`` never ran, every source image (``main/static/images/...``) is a 404 and a test
+    that asserts an image loaded fails for a reason that has nothing to do with the page.
+    ``StaticLiveServerTestCase`` goes the other way (finders only) and loses the bundles. Use it as
+    ``static_handler = StaticRootThenFinders`` on the test class."""
+
+    def serve(self, request):
+        rel = posixpath.normpath(unquote(self.file_path(request.path))).replace("\\", "/").lstrip("/")
+        root = self.get_base_dir()
+        if not (root and os.path.isfile(os.path.join(root, rel))):
+            from django.contrib.staticfiles import finders
+            found = finders.find(rel)
+            if found and found.replace("\\", "/").endswith(rel):
+                return static_serve(request, rel, document_root=found[: -len(rel)])
+        return super().serve(request)
 
 
 def stub_type_vocab(testcase, vocab=None):

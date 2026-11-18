@@ -496,7 +496,10 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
                     nav: Array.from(document.querySelectorAll('.atlas-record-tabs a')).map(a => a.getAttribute('href'))}; }""")
         self.assertLess(d["record"]["top"], d["gloss"]["top"])
         self.assertLess(d["gloss"]["top"], d["conc"]["top"])
-        self.assertEqual(d["nav"], ["#record", "#record_gloss", "#concordance", "#record_environment"])
+        # Links (#record_public_links, place#343) shows for a beta viewer even with the
+        # release switch off, as places.tests_record_layout.test_nav_names_what_exists.
+        self.assertEqual(d["nav"], ["#record", "#record_gloss", "#concordance", "#record_public_links",
+                                    "#record_environment"])
         for k in ("record", "gloss", "conc"):
             self.assertEqual((d[k]["border"], d[k]["width"]), ("solid", 1.0), k)
             self.assertGreaterEqual(d[k]["gap"], 12, k)                        # room between rule and heading
@@ -553,7 +556,8 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
                           d["flags"]["outbound"]["truncated"]), (True, True, False))
         self.assertNotIn("+", f["outbound"]["head"])                          # presence beside: not capped
         page.click("#concordance_tier2 > summary")
-        self.assertIn("More records attest this than are listed here.", page.inner_text("#concordance_tier2"))
+        # Q9 vocabulary (place#343): the visible verb is "link", never "attest".
+        self.assertIn("More records link to this one than are listed here.", page.inner_text("#concordance_tier2"))
 
     def test_one_explore_button(self):
         page = self.new_page(1280)

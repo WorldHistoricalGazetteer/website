@@ -5,8 +5,15 @@ answered in LPF form and the renderer reads the flat popup shape. It now gets
 the flat shape (``api.views_entity._contributed_popup_payload``), so the popup
 shows country chips, type chip, "Also known as", the dates ("Active"), the
 dated geometry, relations, description, depiction, the Source & licence footer
-and the Attest footer. And the owner of a PRIVATE dataset now gets the popup for
+and (for a viewer linking is open to) the Link control. And the owner of a PRIVATE dataset now gets the popup for
 their own record (it used to be a 404 behind the CSRF header: place#330).
+
+The Link control (``.whg-attest-btn``, formerly "Attest") is rendered only when the
+page carries ``<meta name="whg-link-enabled">``, i.e. for a viewer
+``places.v4_landing.linking_open_to`` admits (place#337, place#343): never anonymous;
+signed-in users only with beta access or with ``V4_LANDING_ENABLED`` on. The release
+switch is pinned OFF here, so a beta tester sees the control and the ordinary
+signed-in viewers and the anonymous one do not; both directions are asserted.
 
 Headless Playwright (bundled chromium, throwaway profile, no window) against a
 Django live server with the CRC gateway faked in-process, as
@@ -84,7 +91,7 @@ def _old_popup_payload(place, place_id):
 
 @unittest.skipUnless(HAVE_PLAYWRIGHT, "playwright is not importable here")
 @unittest.skipUnless(os.environ.get("WHG_BROWSER_TESTS") == "1", "set WHG_BROWSER_TESTS=1 to run browser tests")
-@override_settings(CRC_GATEWAY_URL=GATEWAY, CRC_GATEWAY_TIMEOUT=2)
+@override_settings(CRC_GATEWAY_URL=GATEWAY, CRC_GATEWAY_TIMEOUT=2, V4_LANDING_ENABLED=False)
 class ContributedPopupBrowserTests(LiveServerTestCase):
     @classmethod
     def setUpClass(cls):
@@ -120,6 +127,9 @@ class ContributedPopupBrowserTests(LiveServerTestCase):
         self.other = User.objects.create_user(
             username="cpb_other", email="cpbx@example.org", password="pw",
             given_name="Otto", surname="Other", role="normal")
+        self.beta = User.objects.create_user(
+            username="cpb_beta", email="cpbb@example.org", password="pw",
+            given_name="Bea", surname="Beta", role="beta_tester")
         # The live-server DB is flushed between tests, migration seeds and all.
         License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults=dict(
             label="Creative Commons Attribution 4.0", url="https://creativecommons.org/licenses/by/4.0/",
@@ -185,7 +195,7 @@ class ContributedPopupBrowserTests(LiveServerTestCase):
         self.assertEqual(errors, [], shot)
         return data
 
-    def _assert_full(self, d, pid, label):
+    def _assert_full(self, d, pid, label, link=False):
         self.assertIsNotNone(d, label)
         self.assertEqual(d["title"], "Isfahan", label)
         self.assertEqual(d["id"], pid, label)
@@ -204,13 +214,15 @@ class ContributedPopupBrowserTests(LiveServerTestCase):
         self.assertIn("Source & licence", d["footer"] or "", label)
         self.assertIn("Persian towns", d["footer"] or "", label)
         self.assertEqual(d["licence"], "CC-BY-4.0", label)
-        self.assertTrue(d["attest"], label)
+        # The Link control follows linking_open_to (see the module docstring).
+        self.assertEqual(d["attest"], link, f"{label}: Link control shown={d['attest']}, expected {link}")
         self.assertEqual(d["titleAttrs"], 0, label)   # tooltips via data-bs-title only
 
     def test_contributed_popup_is_full_for_every_viewer(self):
-        for label, user in (("anonymous", None), ("other", self.other), ("owner", self.owner)):
+        for label, user, link in (("anonymous", None, False), ("other", self.other, False),
+                                  ("owner", self.owner, False), ("beta", self.beta, True)):
             with self.subTest(viewer=label):
-                self._assert_full(self._popup(user, self.pid, f"public-{label}"), self.pid, label)
+                self._assert_full(self._popup(user, self.pid, f"public-{label}"), self.pid, label, link)
         # Phone width, screenshot read by eye (layout), same content.
         self._assert_full(self._popup(None, self.pid, "public-anonymous-390", 390, 844), self.pid, "390")
 

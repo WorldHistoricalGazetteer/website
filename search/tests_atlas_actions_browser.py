@@ -406,7 +406,14 @@ class AtlasRecordActionsTests(LiveServerTestCase):
         self.assertEqual(page.get_attribute(f"{whg} .pl-rec-record", "href"), f"/atlas/place/{self.place.id}/")
         self.assertEqual(self._count(page, f"{bad} .pl-rec-cluster"), 0)       # recipe refuses a control character
         self.assertEqual(self._count(page, f"{bad} .pl-rec-similar"), 1)
-        self.assertEqual(self._count(page, f"{blank} .pl-rec-actions"), 0)     # blank title: nothing to search for
+        # Blank title: nothing to search for or to name a cluster by, so no Similar / Cluster /
+        # Record. The Link control (place#337) needs only the id and rides along for every
+        # viewer linking is open to (this beta tester), so it is the row's only action.
+        self.assertEqual(self._count(page, f"{blank} .pl-rec-similar"), 0)
+        self.assertEqual(self._count(page, f"{blank} .pl-rec-cluster"), 0)
+        self.assertEqual(self._count(page, f"{blank} .pl-rec-record"), 0)
+        self.assertEqual(self._count(page, f"{blank} .pl-rec-actions .pl-rec-act"), 1)
+        self.assertEqual(page.get_attribute(f"{blank} .pl-rec-link", "data-link-target"), BLANK["place_id"])
         # Layout: the actions sit inside the row, clear of the title and meta text.
         geo = page.evaluate(f"""(() => {{
             const r = document.querySelector('{whg}');
