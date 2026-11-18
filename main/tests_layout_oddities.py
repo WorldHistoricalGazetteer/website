@@ -26,9 +26,10 @@
    wider than its column. Since 2026-11-18 the funders' seven logos live on
    /about/ under "Funding and awards" (``AboutFunderLogosTests``: all seven
    loaded and drawn, none wider than the content column or than the size it
-   had on /people_overview/, no sideways scroll); /people_overview/ keeps only
-   the Pelagios partner logo, and the same test asserts that it is the one
-   logo there.
+   had on /people_overview/, no sideways scroll), and the Pelagios partner logo
+   floats right in /about/'s #vision_mission with the text wrapping round it
+   (``AboutPartnerLogoTests``); /people_overview/ has no logo, and the same
+   test asserts that.
 
 Browser tests: headless Playwright (its own chromium, throwaway contexts;
 never the user's Chrome) against a Django live server, as in
@@ -318,8 +319,8 @@ PEOPLE = """() => {
   return {inner: innerWidth, scroll: document.documentElement.scrollWidth,
           heading: !![...document.querySelectorAll('h3')].find(h => /People & credits/.test(h.textContent)),
           colW: cr ? cr.width : 0,
-          // Every image in the page's two columns (not the header/footer), to catch a logo outside #credits_right.
-          allSrcs: [...document.querySelectorAll('#credits_left img, #credits_right img')].map(i => i.src.split('/').pop()),
+          // Every image in the page's column (not the header/footer): there are none since the logos moved to /about/.
+          allSrcs: [...document.querySelectorAll('#credits_left img')].map(i => i.src.split('/').pop()),
           imgs: imgs.map(i => ({src: i.src.split('/').pop(), loaded: i.complete && i.naturalWidth > 0,
                                 w: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height,
                                 right: i.getBoundingClientRect().right, colRight: cr.right}))};
@@ -338,18 +339,15 @@ class PeopleOverviewTests(_BrowserBase):
         try:
             page = ctx.new_page()
             self._load(page, "/people_overview/")
-            page.wait_for_function("[...document.querySelectorAll('#credits_right img')].every(i => i.complete)",
-                                   timeout=15000)
             for w in self.WIDTHS:
                 page.set_viewport_size({"width": w, "height": 900})
                 page.wait_for_timeout(150)
                 m = page.evaluate(PEOPLE)
-                # Presence, in the same call: the page and its one remaining (partner) logo, loaded
-                # and drawn; the funders' logos are on /about/ now (AboutFunderLogosTests).
+                # Presence, in the same call: the page itself, and no logo on it (the funders' logos and
+                # the Pelagios partner logo are on /about/ now: AboutFunderLogosTests, AboutPartnerLogoTests).
                 self.assertEqual(m["inner"], w)
                 self.assertTrue(m["heading"], f"@{w}: not the people overview page: {m}")
-                self.assertEqual([i["src"] for i in m["imgs"]], ["pelagioslogo_partner.svg"], f"@{w}: {m}")
-                self.assertEqual(m["allSrcs"], ["pelagioslogo_partner.svg"], f"@{w}: a logo elsewhere on the page: {m}")
+                self.assertEqual(m["allSrcs"], [], f"@{w}: a logo is still on the page: {m}")
                 for i in m["imgs"]:
                     self.assertTrue(i["loaded"] and i["w"] > 20 and i["h"] > 20, f"@{w}: logo not drawn: {i}")
                     if i["right"] > i["colRight"] + 0.5:
@@ -420,3 +418,63 @@ class AboutFunderLogosTests(_BrowserBase):
         finally:
             ctx.close()
         self.assertEqual(failures, [], "/about/ funder logos overflow, oversize, or the page scrolls sideways")
+
+
+ABOUT_PARTNER = """() => {
+  const box = document.getElementById('vision_mission');
+  const img = box && box.querySelector('img');
+  const paras = box ? [...box.querySelectorAll('p')] : [];
+  const cr = (document.getElementById('about_content') || document.body).getBoundingClientRect();
+  const r = img ? img.getBoundingClientRect() : null;
+  // Where each line of the first paragraph starts/ends: with a float the lines beside it are shorter.
+  const range = document.createRange();
+  const p = paras[1] || paras[0];
+  let lineRights = [];
+  if (p) { range.selectNodeContents(p); lineRights = [...range.getClientRects()].map(x => Math.round(x.right)); }
+  return {inner: innerWidth, scroll: document.documentElement.scrollWidth,
+          have: !!img, src: img ? img.src.split('/').pop() : null,
+          loaded: !!img && img.complete && img.naturalWidth > 0,
+          w: r ? r.width : 0, left: r ? r.left : 0, right: r ? r.right : 0, top: r ? r.top : 0,
+          float: img ? getComputedStyle(img).float : null,
+          colLeft: cr.left, colRight: cr.right,
+          pLeft: p ? p.getBoundingClientRect().left : 0, pRight: p ? p.getBoundingClientRect().right : 0,
+          lineRights};
+}"""
+
+
+@unittest.skipUnless(HAVE_PLAYWRIGHT, "playwright is not importable here")
+@unittest.skipUnless(os.environ.get("WHG_BROWSER_TESTS") == "1", "set WHG_BROWSER_TESTS=1 to run browser tests")
+class AboutPartnerLogoTests(_BrowserBase):
+    """The Pelagios partner logo floats right in #vision_mission and the mission text wraps round it (no
+    reserved column): the logo is drawn, on the right, and some text lines end short of the column's right
+    edge to make room for it (a reserved-column layout would end every line at a fixed 3/4 width)."""
+    WIDTHS = [375, 768, 1024, 1440]
+
+    def test_partner_logo_floats_right_and_text_wraps(self):
+        failures = []
+        ctx = self._context(None, self.WIDTHS[0])
+        try:
+            page = ctx.new_page()
+            self._load(page, "/about/")
+            page.wait_for_function("document.querySelector('#vision_mission img').complete", timeout=15000)
+            for w in self.WIDTHS:
+                page.set_viewport_size({"width": w, "height": 900})
+                page.wait_for_timeout(150)
+                m = page.evaluate(ABOUT_PARTNER)
+                self.assertEqual(m["inner"], w)
+                self.assertTrue(m["have"] and m["loaded"] and m["w"] > 20, f"@{w}: partner logo not drawn: {m}")
+                self.assertEqual(m["src"], "pelagioslogo_partner.svg")
+                self.assertEqual(m["float"], "right", f"@{w}: not floated right: {m}")
+                if m["right"] > m["colRight"] + 0.5:
+                    failures.append(f"@{w}: logo ends at {m['right']:.0f}, past its column at {m['colRight']:.0f}")
+                if m["scroll"] > m["inner"]:
+                    failures.append(f"@{w}: scrollWidth {m['scroll']} > innerWidth {m['inner']}")
+                if w >= 768:
+                    # Wrapping: the text beside the logo stops short of the column edge; text below it runs full width.
+                    rights = sorted(set(m["lineRights"]))
+                    if not (rights and rights[0] < m["colRight"] - 100 and rights[-1] >= m["colRight"] - 20):
+                        failures.append(f"@{w}: text does not wrap round the logo: line ends {rights}, column "
+                                        f"right {m['colRight']:.0f}")
+        finally:
+            ctx.close()
+        self.assertEqual(failures, [], "the partner logo is not a floated, wrapped logo in #vision_mission")

@@ -87,7 +87,10 @@ class AboutPagesTests(TestCase):
             self.assertRegex(i, r'width="\d+"', i)
             self.assertLessEqual(int(re.search(r'width="(\d+)"', i).group(1)), 250, i)
         self.assertIn("#funder_logos img", html)  # the max-width/height:auto rule
-        self.assertNotIn("pelagioslogo_partner.svg", html)  # a partner, not a funder
+        # The partner logo is not a funder: it floats in #vision_mission, above the funding text.
+        self.assertLess(html.index("pelagioslogo_partner.svg"), html.index('id="funding"'))
+        self.assertRegex(html, r'<img[^>]*pelagioslogo_partner\.svg[^>]*class="float-end[^"]*"')
+        self.assertNotIn('class="col-lg-9"', html)  # no reserved column for it
 
     def test_people_overview_points_to_moved_funding(self):
         html = self.client.get("/people_overview/").content.decode()
@@ -95,9 +98,9 @@ class AboutPagesTests(TestCase):
         self.assertIn('id="funding-pointer"', html)
         self.assertIn('href="/about/#funding"', html)
         self.assertNotIn("Digital Humanities Advancement Grant", html)
-        # The partner logo stays here; the funders' logos have moved to /about/.
-        self.assertIn('id="credits_right"', html)
-        self.assertIn("pelagioslogo_partner.svg", html)
+        # Every logo has moved to /about/ (the funders' under Funding, the partner in #vision_mission).
+        self.assertNotIn('id="credits_right"', html)
+        self.assertNotIn("pelagioslogo_partner.svg", html)
         for logo in FUNDER_LOGOS:
             self.assertNotIn(logo, html, logo)
         # The Getty and Flaticon credits stay.

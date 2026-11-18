@@ -19,17 +19,18 @@
       <h1 class="h3">About the World Historical Gazetteer</h1>
     </div>
     <div id="about_content" class="mb-5">
-      <div id="vision_mission" class="row">
-        <div class="col-lg-9">
-          <h2 class="h5">Our vision</h2>
-          <p>Empowering discovery by connecting place names across time and language.</p>
-          <h2 class="h5">Our mission</h2>
-          <p>The mission of the World Historical Gazetteer is to build a platform for open linked historical place data in order to foster deeper understanding of place history and to improve discovery of places that have had many names over time. The WHG place index is accessible through tools and services that permit users to search and browse information about places, augment and contribute their own place records, assemble and publish information about places, and use information about places in teaching and communication.
-          </p>
-          {% if PRINCIPLES_PAGE_ENABLED %}
-          <p>The <a href="{% url 'principles' %}">principles</a> behind this work set out what WHG is, how it models places, and what it values.</p>
-          {% endif %}
-        </div>
+      <div id="vision_mission" class="clearfix">
+        {# The Pelagios partner logo takes the space on the right and the text wraps round it (a float, not a reserved column). #}
+        <img src="{% static 'images/pelagioslogo_partner.svg' %}" width="213" class="float-end ms-4 mb-2 mt-1"
+             style="max-width: 40%; height: auto;" alt="Pelagios Network partner"/>
+        <h2 class="h5">Our vision</h2>
+        <p>Empowering discovery by connecting place names across time and language.</p>
+        <h2 class="h5">Our mission</h2>
+        <p>The mission of the World Historical Gazetteer is to build a platform for open linked historical place data in order to foster deeper understanding of place history and to improve discovery of places that have had many names over time. The WHG place index is accessible through tools and services that permit users to search and browse information about places, augment and contribute their own place records, assemble and publish information about places, and use information about places in teaching and communication.
+        </p>
+        {% if PRINCIPLES_PAGE_ENABLED %}
+        <p>The <a href="{% url 'principles' %}">principles</a> behind this work set out what WHG is, how it models places, and what it values.</p>
+        {% endif %}
       </div>
 
       <h2 id="status" class="h5">Current status</h2>
@@ -73,11 +74,11 @@
           World Historical Gazetteer received the 2021 "<b>Best DH Tool or Suite of Tools Award</b>" from
           <a href="http://dhawards.org/dhawards2021/results/" target="_blank" rel="noopener">Digital Humanities Awards</a>.
         </p>
-        {# The funders' logos, moved here from /people_overview/ (the Pelagios partner logo stays there). #}
+        {# The funders' logos, moved here from /people_overview/ (the Pelagios partner logo is in #vision_mission above). #}
         <div id="funder_logos" class="d-flex flex-wrap align-items-center gap-4 mt-3 mb-4">
           <img src="{% static 'images/neh_logo_horizontal_rgb.jpg' %}" width="220" height="54"
                alt="National Endowment for the Humanities">
-          <img src="{% static 'images/ishi.png' %}" width="200" height="122"
+          <img src="{% static 'images/ishi.png' %}" width="140" height="85"
                alt="University of Pittsburgh, Kenneth P. Dietrich School of Arts and Sciences, Institute for Spatial History Innovation">
           <img src="{% static 'images/whc_logo250.png' %}" width="160" height="80"
                alt="Pitt World History Center">
