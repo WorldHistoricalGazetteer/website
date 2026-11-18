@@ -326,18 +326,29 @@ class PlaceSerializer(serializers.ModelSerializer):
     names = PlaceNameSerializer(many=True, read_only=True)
     types = PlaceTypeSerializer(many=True, read_only=True)
     geoms = PlaceGeomSerializer(many=True, read_only=True)
-    extent = serializers.ReadOnlyField()
+    extent = serializers.SerializerMethodField()
     links = PlaceLinkSerializer(many=True, read_only=True)
     related = PlaceRelatedSerializer(many=True, read_only=True)
     whens = PlaceWhenSerializer(many=True, read_only=True)
     descriptions = PlaceDescriptionSerializer(many=True, read_only=True)
     depictions = PlaceDepictionSerializer(many=True, read_only=True)
 
+    def get_extent(self, place):
+        # ``extents`` in the context: every place's extent from one grouped query
+        # (prefetch_place_detail); otherwise Place.extent, one aggregate per place.
+        extents = self.context.get("extents")
+        if extents is not None:
+            return extents.get(place.id)
+        return place.extent
+
     # cid param passed only from place collection browse screen
     traces = serializers.SerializerMethodField('trace_anno')
 
     def trace_anno(self, place):
         cid = self.context.get("cid")
+        traces = self.context.get("traces")
+        if cid is not None and traces is not None:
+            return traces.get(place.id, [])
         if cid is not None:
             return json.loads(
                 coreserializers.serialize("json", TraceAnnotation.objects.filter(
@@ -561,6 +572,49 @@ def prefetch_lpf(places, geometries=True):
     lookups = LPF_CHILD_RELATIONS + (('geoms',) if geometries else ())
     prefetch_related_objects(list(places), *lookups)
     return places
+
+
+PLACE_DETAIL_RELATIONS = ('dataset', 'names', 'types', 'geoms', 'links', 'related', 'whens',
+                          'descriptions', 'depictions')
+
+
+def prefetch_place_detail(places, cid=None):
+    """Batch what ``PlaceSerializer`` reads for a list of Places (already fetched), for
+    ``PlacesDetailAPIView`` (/places/<ids>/panel/, /api/place/<ids>/). Before
+    (2026-11-18) each place cost ~12 queries (8 child relations, its dataset, the
+    geometries a second time plus an ``Extent`` aggregate for ``extent``, a COUNT for
+    ``geo``) and one more for its traces under ``cid``: 50 ids ran ~600-650 queries.
+
+    Fills the prefetch cache (so ``geoms.count()`` and ``PlaceGeomSerializer.get_ds`` cost
+    nothing) and returns the extra serializer context: ``extents`` (place id -> the same
+    ST_Extent tuple Place.extent returns, from ONE grouped query, so the floats are the
+    database's, not recomputed) and, when ``cid`` is given, ``traces`` (place id -> the
+    serialized TraceAnnotations, one query). If the trace query fails (a non-integer
+    ``cid``), ``traces`` is left out and each place falls back to its own query, which
+    fails per place exactly as before. Row order within a place is unordered in both the
+    old and the batched queries (no Meta.ordering on these models).
+    """
+    from django.contrib.gis.db.models import Extent
+    from django.db.models import prefetch_related_objects
+    prefetch_related_objects(places, *PLACE_DETAIL_RELATIONS)
+    pks = [p.id for p in places]
+    context = {"extents": {
+        row["place_id"]: row["extent"]
+        for row in PlaceGeom.objects.filter(place_id__in=pks).order_by()
+        .values("place_id").annotate(extent=Extent("geom"))
+    }}
+    if cid is not None:
+        try:
+            rows = json.loads(coreserializers.serialize("json", TraceAnnotation.objects.filter(
+                place__in=pks, collection=cid, archived=False)))
+        except Exception:
+            rows = None
+        if rows is not None:
+            traces = {}
+            for row in rows:
+                traces.setdefault(row["fields"]["place"], []).append(row)
+            context["traces"] = traces
+    return context
 
 
 class LPFSerializer(serializers.Serializer):
