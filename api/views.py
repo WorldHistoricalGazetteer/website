@@ -41,7 +41,7 @@ from api.serializers import (
     UserSerializer, DatasetSerializer, PlaceSerializer,
     PlaceTableSerializer, PlaceGeomSerializer, AreaSerializer,
     FeatureSerializer, LPFSerializer, LPFSummarySerializer, PlaceCompareSerializer, ErrorResponseSerializer,
-    GallerySerializer, prefetch_lpf)
+    GallerySerializer, prefetch_lpf, prefetch_place_detail)
 from api import spatial as spatial_api
 from api.schemas import spatial_schema
 from areas.models import Area
@@ -1324,10 +1324,10 @@ class PlacesDetailAPIView(View):
 
         # place#310: places of datasets outside the requester's circle are left out,
         # and a request made only of those is "no places found".
-        places = Place.objects.filter(id__in=ids).filter(visible_places_q(request.user))
+        places = list(Place.objects.filter(id__in=ids).filter(visible_places_q(request.user)))
 
         # Check if any places were found
-        if not places.exists():
+        if not places:
             return JsonResponse(
                 {
                     "error": "No places found",
@@ -1382,11 +1382,14 @@ class PlacesDetailAPIView(View):
         # --- TRAP 3: SERIALIZATION SAFETY ---
         serialized_places = []
         attestation_years = set()
+        # One query per relation for the whole id list, one for every extent, one for the
+        # traces, instead of ~12-13 per place (2026-11-18: 50 ids ran ~600 queries).
+        batched = prefetch_place_detail(places, cid)
 
         for place in places:
             try:
                 # Pass the request in the serializer context
-                serializer = PlaceSerializer(place, context={'cid': cid, 'request': request})
+                serializer = PlaceSerializer(place, context={'cid': cid, 'request': request, **batched})
                 serialized_places.append(serializer.data)
                 if place.attestation_year:
                     attestation_years.add(place.attestation_year)
