@@ -96,6 +96,15 @@
   width: 26px; height: 26px; z-index: 3; }
 @media (max-width: 1199.98px) { .mf-map-panel { position: static; } .mf-map, .mf-map-empty { height: 240px; } }
 
+/* place#350: placing a location by hand. Markers stay visible as hints but take no clicks, so a
+   click on top of one reaches the map and is stored where it was made: nothing snaps to a marker. */
+.mf-map--placing .maplibregl-canvas { cursor: crosshair; }
+.mf-map--placing .maplibregl-marker:not(.mf-map-pending) { pointer-events: none; }
+.mf-map-pending { --pin: #0d6efd; pointer-events: none; }
+.mf-map-pending .mf-map-marker { border-radius: 50%; background: #fff; color: #0d6efd; border-color: #0d6efd; }
+.mf-location { border: 1px solid #dee2e6; border-radius: .375rem; padding: .5rem .75rem; margin-top: .75rem; }
+.mf-location-ref { color: #495057; }
+
 /* Key hints on buttons are clutter until the person turns the keyboard shortcuts on. */
 .mf-page:not(.mf-keys-on) .mf-bar kbd,
 .mf-page:not(.mf-keys-on) #mf_search kbd { display: none; }

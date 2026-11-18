@@ -74,7 +74,7 @@ class ChecksTests(QcBase):
         self.assertEqual({k: c["status"] for k, c in checks.items()}, {
             "records": "ok", "licence": "ok", "placeholders": "ok", "duplicates": "ok",
             "geometry": "ok", "temporal": "ok", "attribution": "ok", "sensitivity": "ok",
-            "link_resolution": "not_checked"})
+            "link_resolution": "not_checked", "locations_added": "ok"})   # place#350: information only
 
     def test_faulty_dataset_is_found_and_named(self):
         report = qc.qc_report(self.bad)

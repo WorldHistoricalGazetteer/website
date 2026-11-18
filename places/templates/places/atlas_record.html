@@ -131,7 +131,10 @@
       {% endif %}
       <dt class="col-sm-3">Geometry</dt>
       <dd class="col-sm-9">
-        {% if record.geom %}{{ record.geom|length }} geometr{{ record.geom|length|pluralize:"y,ies" }}{% else %}<span class="text-muted">none in this record</span>{% endif %}
+        {% if own_geom_count %}{{ own_geom_count }} geometr{{ own_geom_count|pluralize:"y,ies" }}{% elif not added_locations %}<span class="text-muted">none in this record</span>{% else %}<span class="text-muted">none in the contributed record</span>{% endif %}
+        {% for loc in added_locations %}
+          <div class="small" id="record_added_location">{% if loc.adopted %}Location from {{ loc.source_label }}, adopted {{ loc.date|date:"j M Y" }} by {{ loc.by }}{% if loc.terms %} ({{ loc.terms }}){% endif %}{% else %}Location placed on the map {{ loc.date|date:"j M Y" }} by {{ loc.by }} (approximate){% endif %}</div>
+        {% endfor %}
       </dd>
     </dl>
 

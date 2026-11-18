@@ -433,6 +433,13 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None, vie
                                     geowkt = ''
 
                         geo_source = primary_geom.get('src', '')
+                        # place#350: a location adopted from a matched place states its source and
+                        # terms; one placed on the map by the owner says so.
+                        prov = (geom_data or {}).get('provenance') if isinstance(geom_data, dict) else None
+                        if isinstance(prov, dict) and prov.get('kind') == 'adopted':
+                            geo_source = f"{prov.get('source_label') or prov.get('source')} ({prov.get('terms')}), adopted"
+                        elif isinstance(prov, dict) and prov.get('kind') == 'placed':
+                            geo_source = 'placed on the map by the dataset owner (approximate)'
                         if primary_geom.get('citation'):
                             citation_data = primary_geom['citation']
                             if isinstance(citation_data, dict):

@@ -162,8 +162,10 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     el.dataset.i = String(p.i);
     el.dataset.lng = String(p.location[0]);
     el.dataset.lat = String(p.location[1]);
-    el.setAttribute('aria-label', `Suggestion ${p.i + 1}: ${p.title}. Show its row.`);
-    el.title = `${p.i + 1}. ${p.title}`;
+    // place#350: a suggestion whose location may not be adopted is labelled a hint, on the marker.
+    el.setAttribute('aria-label', `Suggestion ${p.i + 1}: ${p.title}${p.hint ? ` (${p.hint})` : ''}. Show its row.`);
+    el.title = `${p.i + 1}. ${p.title}${p.hint ? ` (${p.hint})` : ''}`;
+    if (p.hint) el.dataset.hint = p.hint;
     el.addEventListener('click', (e) => { e.stopPropagation(); if (onPick) onPick(p.i); });
     const mk = new M.Marker({ element: el, anchor: 'bottom' }).setLngLat(p.location).addTo(map);
     pins.push({ ...p, el, mk });
@@ -318,7 +320,9 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     map.resize();
     if (opts.refit !== false) {
       const focusHand = (next.hand || []).find((h) => h.focus);
-      fitNear(focusHand ? [focusHand.location] : []);
+      if (!next.points.length && !(next.record && next.record.location) && !(next.hand || []).length) {
+        jump({ center: [0, 20], zoom: 1 });      // nothing to show yet: the whole world, to place on
+      } else fitNear(focusHand ? [focusHand.location] : []);
     }
     relayout();
   }
@@ -334,6 +338,38 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     });
   }
 
+  // ── Placing a location by hand (place#350) ──────────────────────────────────────────────────
+  // The control starts empty: no point until the person clicks. A click gives the map position
+  // under the pointer (e.lngLat), never a marker's position; markers take no clicks meanwhile
+  // (CSS), are not draggable, and there is no "place at this marker" anywhere.
+  let placing = null;        // the onClick callback while placing, else null
+  let pending = null;        // the marker for the clicked, not yet saved, point
+  map.on('click', (e) => {
+    if (!placing || !e || !e.lngLat) return;
+    placing([e.lngLat.lng, e.lngLat.lat], map.getZoom(), e.point ? [e.point.x, e.point.y] : null);
+  });
+  function setPlacing(onClick) {
+    placing = typeof onClick === 'function' ? onClick : null;
+    container.classList.toggle('mf-map--placing', !!placing);
+    if (!placing) setPending(null);
+  }
+  function setPending(loc) {
+    if (pending) { pending.remove(); pending = null; }
+    if (!Array.isArray(loc)) return;
+    const el = document.createElement('div');
+    el.className = 'mf-map-pin mf-map-pending';
+    const dot = document.createElement('span');
+    dot.className = 'mf-map-marker';
+    dot.textContent = '+';
+    el.appendChild(dot);
+    el.dataset.role = 'pending';
+    el.dataset.lng = String(loc[0]);
+    el.dataset.lat = String(loc[1]);
+    el.setAttribute('role', 'img');
+    el.setAttribute('aria-label', 'The location you clicked (not saved yet)');
+    pending = new M.Marker({ element: el, anchor: 'center', draggable: false }).setLngLat(loc).addTo(map);
+  }
+
   map.on('zoomend', relayout);
   map.on('moveend', layoutChips);
 
@@ -342,5 +378,5 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     ro.observe(container);
   }
 
-  return { map, update, highlight, fitAll, fitNear, resize: () => map.resize() };
+  return { map, update, highlight, fitAll, fitNear, setPlacing, setPending, resize: () => map.resize() };
 }

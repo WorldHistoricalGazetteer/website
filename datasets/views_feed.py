@@ -35,7 +35,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from datasets import candidates
+from datasets import candidates, location_adoption
 from datasets.models import Dataset
 from datasets.models_matching import CandidateGeneration, MatchCandidate, RecordReviewState
 from places.v4_landing import linking_open_to
@@ -245,30 +245,48 @@ def _record_details(p):
     return {"names": names[:8], "types": types[:4], "ccodes": list(p.ccodes or [])[:4]}
 
 
-def _candidate_json(c, visible_pks=frozenset()):
+def _candidate_json(c, visible_pks=frozenset(), loc=None, record_info=None):
     sig = c.signals or {}
     location, withheld = candidate_location(c, visible_pks)
     card = dict(c.card or {})
     if withheld:
         card.pop("repr_point", None)
-    return {"id": c.id, "candidate_id": c.candidate_id, "title": c.candidate_title, "namespace": c.namespace,
-            "tier": c.tier, "rank": c.rank, "status": c.status, "confidence": c.gateway_confidence,
-            "km": sig.get("km"), "composite": sig.get("composite"),
-            "demoted": str(sig.get("type_sanity", "ok")) != "ok",
-            "location": location, "location_withheld": withheld,
-            "explanation": c.explanation or {}, "card": card}
+    out = {"id": c.id, "candidate_id": c.candidate_id, "title": c.candidate_title, "namespace": c.namespace,
+           "tier": c.tier, "rank": c.rank, "status": c.status, "confidence": c.gateway_confidence,
+           "km": sig.get("km"), "composite": sig.get("composite"),
+           "demoted": str(sig.get("type_sanity", "ok")) != "ok",
+           "location": location, "location_withheld": withheld,
+           "explanation": c.explanation or {}, "card": card}
+    if loc is not None:
+        # place#350: whether this place's location may be adopted (owner only), else a reference.
+        out["adopt"] = location_adoption.adopt_info(
+            c, location, withheld, loc["entries"].get(c.namespace), loc["ds"], loc["user"], record_info,
+            loc["hidden"])
+    return out
 
 
-def _record_json(st, cands, visible_pks=frozenset()):
+def location_context(ds, user, cands):
+    """What ``_record_json`` needs to say, per suggestion, whether its location can be adopted:
+    the registry rows of the sources in view, and the namespaces under an embargo for ``user``."""
+    from api.models import GazetteerRegistryEntry
+    return {"ds": ds, "user": user,
+            "entries": location_adoption.registry_entries({c.namespace for c in cands}),
+            "hidden": GazetteerRegistryEntry.objects.hidden_namespaces_for(user)}
+
+
+def _record_json(st, cands, visible_pks=frozenset(), loc=None):
     p = st.place
+    info = location_adoption.location_info(p)
+    can_place = bool(loc and info is None and location_adoption.is_owner(loc["user"], loc["ds"])
+                     and not location_adoption.is_sensitive(loc["ds"]))
     return {"place": p.pk, "title": p.title, "src_id": p.src_id, "subject_id": f"whg:{p.pk}",
             "tier": st.tier, "state": st.state, "has_geometry": st.has_geometry,
-            "location": record_location(p),
+            "location": record_location(p), "location_info": info, "can_place": can_place,
             "minmax": p.minmax, "note": st.note, "last_failure": st.last_failure,
             "decided_at": st.decided_at.isoformat() if st.decided_at else None,
             **_record_details(p),
             # Ranks are renumbered over what is shown, so a hidden suggestion leaves no gap.
-            "candidates": group_candidates([{**_candidate_json(c, visible_pks), "rank": n}
+            "candidates": group_candidates([{**_candidate_json(c, visible_pks, loc, info), "rank": n}
                                             for n, c in enumerate(cands, start=1)])}
 
 
@@ -299,7 +317,7 @@ def feed_candidates(request, id):
     order = {"confident": ("has_geometry", "-shared_count", "place_id"),
              "ambiguous": ("-shared_count", "place_id")}.get(tab, ("place_id",))
     qs = (RecordReviewState.objects.filter(dataset=ds).filter(_tab_q(tab))
-          .select_related("place").prefetch_related("place__geoms", "place__names", "place__types")
+          .select_related("place").prefetch_related("place__geoms__reviewer", "place__names", "place__types")
           .order_by(*order))
     total = qs.count()
     page = list(qs[offset:offset + PAGE_SIZE])
@@ -308,10 +326,12 @@ def feed_candidates(request, id):
               .exclude(status="stale").order_by("place_id", "rank")):
         cands.setdefault(c.place_id, []).append(c)
     # One visibility query per load; hidden suggestions are dropped before anything is serialised.
-    visible_pks = visible_contributed_pks(request.user, [c for cs in cands.values() for c in cs])
+    every = [c for cs in cands.values() for c in cs]
+    visible_pks = visible_contributed_pks(request.user, every)
+    loc = location_context(ds, request.user, every)
     records = [_record_json(s, [c for c in cands.get(s.place_id, [])
                                 if c.generation_id == s.generation_id and candidate_visible(c, visible_pks)],
-                            visible_pks)
+                            visible_pks, loc)
                for s in page]
     return JsonResponse({"tier": tab, "offset": offset, "total": total, "records": records,
                          "next": offset + PAGE_SIZE if offset + PAGE_SIZE < total else None,
@@ -493,6 +513,23 @@ def feed_review(request, id):
     elif action == "later":
         st.state = "later"
     elif action == "reopen":
+        # place#350: a location adopted from one of this record's matches goes with the match
+        # only if the owner says so; it is never silently kept. Asked first, nothing undone yet.
+        adopted = location_adoption.adopted_rows(st.place)
+        choice = body.get("adopted_location")
+        if adopted:
+            if not location_adoption.is_owner(request.user, ds):
+                return JsonResponse({"error": "The dataset owner adopted this place's location from the match; "
+                                              "only they can undo it.", "reason": "owner_only"}, status=409)
+            if choice not in ("remove", "keep"):
+                return JsonResponse({
+                    "error": "This record's location was adopted from the match. Remove it too, or keep it?",
+                    "reason": "adopted_location",
+                    "adopted": [{"geom": g.pk, **location_adoption.location_info(st.place, [g])} for g in adopted]},
+                    status=409)
+            if choice == "remove":
+                for g in adopted:
+                    location_adoption.remove(request.user, ds, st.place_id, g.pk)
         # Undo: take back the Links this person made from this record's suggestions, and put
         # the record back in its tab. Rows are withdrawn, never deleted.
         # That includes hand-search Links (no candidate), found by the feed marker that
@@ -620,3 +657,50 @@ def feed_regenerate(request, id):
     except candidates.GenerationRefused as exc:
         return JsonResponse({"error": str(exc)}, status=409)
     return JsonResponse({"generation": gen.id, "status": gen.status}, status=202)
+
+
+@login_required
+@require_POST
+def feed_location(request, id):
+    """place#350: ``adopt`` a matched place's location, ``place`` one by hand, or ``remove``
+    either (``datasets.location_adoption`` holds every rule). Dataset owner only."""
+    ds = _dataset_for(request, id)
+    try:
+        body = json.loads(request.body or b"{}")
+    except ValueError:
+        return JsonResponse({"error": "body must be JSON"}, status=400)
+    if not isinstance(body, dict):
+        return JsonResponse({"error": "body must be a JSON object"}, status=400)
+    action = body.get("action")
+    try:
+        place_pk = int(body.get("place"))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "not found"}, status=404)
+    LA = location_adoption
+    try:
+        if action == "adopt":
+            try:
+                cand = int(body.get("candidate"))
+            except (TypeError, ValueError):
+                return JsonResponse({"error": "not found"}, status=404)
+            g = LA.adopt(request.user, ds, place_pk, cand)
+        elif action == "place":
+            g = LA.place_by_hand(request.user, ds, place_pk, body)
+        elif action == "remove":
+            try:
+                geom = int(body.get("geom"))
+            except (TypeError, ValueError):
+                return JsonResponse({"error": "not found"}, status=404)
+            LA.remove(request.user, ds, place_pk, geom)
+            g = None
+        else:
+            return JsonResponse({"error": "action must be adopt, place or remove"}, status=400)
+    except LA.LocationRefused as exc:
+        return JsonResponse({"error": exc.message, "reason": exc.reason}, status=exc.status)
+    from places.models import Place
+    place = Place.objects.prefetch_related("geoms__reviewer").get(pk=place_pk)
+    return JsonResponse({"place": place_pk, "location": record_location(place),
+                         "location_info": LA.location_info(place),
+                         "can_place": (LA.location_info(place) is None and LA.is_owner(request.user, ds)
+                                       and not LA.is_sensitive(ds))},
+                        status=201 if g is not None else 200)
