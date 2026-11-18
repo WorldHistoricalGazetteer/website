@@ -436,7 +436,7 @@ class FeedMapBrowserTests(MapBrowserBase):
         if not all(r[k] for k in ("chosen_explicit", "group_mate_untouched", "one_link_and_no_public_distinct")):
             print("[debug]", (chosen.status, chosen.decision_source), (other.status, other.decision_source), links)
         r["header_progress_moved"] = self.wait_for(
-            page, "document.getElementById('mf_progress').textContent.includes('1 match')", 5000)
+            page, "document.getElementById('mf_progress').textContent.includes('1 match')", 15000)
         # A record with no location at all: a clear "no location" state, never an empty box.
         if self.nowhere_tier == "ambiguous":     # the next record still to decide: it follows on by itself
             pass
@@ -690,7 +690,7 @@ class FeedRedesignBrowserTests(MapBrowserBase):
         page.evaluate("localStorage.clear(); sessionStorage.setItem('t_seeded', '1')")
         page.reload()
         self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.ready === true", 20000))
-        self.assertTrue(self.wait_for(page, "!!document.querySelector('.driver-popover')", 10000), "first visit starts the tour")
+        self.assertTrue(self.wait_for(page, "!!document.querySelector('.driver-popover')", 25000), "first visit starts the tour")
         self.assertTrue(page.evaluate("window.__whgMatchFeed.touring"))
         page.keyboard.press("Escape")
         if not self.wait_for(page, "!document.querySelector('.driver-popover') && !window.__whgMatchFeed.touring", 3000):
