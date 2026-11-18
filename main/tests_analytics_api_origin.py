@@ -52,10 +52,10 @@ class ApiOriginPanelTests(TestCase):
 
     def test_rows_percentages_use_all_api_call_events_as_denominator(self):
         _, panel = self._panel(total=200, origin_rows=[
-            {'event:props:origin': 'plato-tools', 'events': 50, 'visitors': 3},
-            {'event:props:origin': 'none', 'events': 30, 'visitors': 2},
-            {'event:props:origin': '(none)', 'events': 120, 'visitors': 9}],      # events without the prop
-            client_rows=[{'event:props:client': 'openrefine', 'events': 30, 'visitors': 2}])
+            {'origin': 'plato-tools', 'events': 50, 'visitors': 3},
+            {'origin': 'none', 'events': 30, 'visitors': 2},
+            {'origin': '(none)', 'events': 120, 'visitors': 9}],      # events without the prop
+            client_rows=[{'client': 'openrefine', 'events': 30, 'visitors': 2}])
         self.assertIn('PLATO Tools (plato.pelagios.org)', panel)
         self.assertIn('25.0%', panel)                        # 50 / 200 of ALL API_Call events
         self.assertIn('15.0%', panel)                        # 30 / 200
@@ -65,7 +65,7 @@ class ApiOriginPanelTests(TestCase):
         self.assertNotIn('id="an-api-origin-empty"', panel)
 
     def test_unknown_label_is_shown_as_given_not_invented(self):
-        _, panel = self._panel(total=10, origin_rows=[{'event:props:origin': 'zzz-new', 'events': 4, 'visitors': 1}])
+        _, panel = self._panel(total=10, origin_rows=[{'origin': 'zzz-new', 'events': 4, 'visitors': 1}])
         self.assertIn('zzz-new', panel)
 
     def test_props_error_does_not_trigger_page_error_banner(self):

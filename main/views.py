@@ -1481,9 +1481,9 @@ def _api_origin_panel(rows_of, results, period):
         if r.get('name') == 'API_Call':
             total = r.get('events', 0) or 0
     def table(prop, labels):
-        rows = [r for r in rows_of(('api_' + prop, PLAUSIBLE_MAIN)) if r.get(f'event:props:{prop}') not in (None, '(none)', '')]
+        rows = [r for r in rows_of(('api_' + prop, PLAUSIBLE_MAIN)) if r.get(prop) not in (None, '(none)', '')]  # Plausible keys the row by the bare prop name
         tagged = sum(r.get('events', 0) or 0 for r in rows)
-        out = [{'key': r[f'event:props:{prop}'], 'label': labels.get(r[f'event:props:{prop}'], r[f'event:props:{prop}']),
+        out = [{'key': r[prop], 'label': labels.get(r[prop], r[prop]),
                 'events': r.get('events', 0) or 0, 'visitors': r.get('visitors', 0) or 0,
                 'pct': round(100 * (r.get('events', 0) or 0) / total, 1) if total else None} for r in rows]
         out.sort(key=lambda x: -x['events'])
