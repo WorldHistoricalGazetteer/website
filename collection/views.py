@@ -1272,7 +1272,7 @@ class CollectionGroupCreateView(LoginRequiredMixin, CreateView):
         return context
 
 
-class CollectionGroupDetailView(DetailView):
+class CollectionGroupDetailView(LoginRequiredMixin, DetailView):
     model = CollectionGroup
     template_name = 'collection/collection_group_detail.html'
 
@@ -1283,7 +1283,11 @@ class CollectionGroupDetailView(DetailView):
 
     def get_object(self):
         id_ = self.kwargs.get("id")
-        return get_object_or_404(CollectionGroup, id=id_)
+        cg = get_object_or_404(CollectionGroup, id=id_)
+        # leader, members, staff/admins only; anyone else gets the same 404 as a missing group
+        if not cg.user_can_view(self.request.user):
+            raise Http404("No CollectionGroup matches the given query.")
+        return cg
 
     def get_context_data(self, *args, **kwargs):
         context = super(CollectionGroupDetailView, self).get_context_data(*args, **kwargs)
