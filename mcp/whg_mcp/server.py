@@ -11,7 +11,7 @@ import json
 import os
 import re
 import math
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -174,7 +174,7 @@ async def search_places(
 
 @mcp.tool()
 async def get_place(
-        place_ids: Annotated[list[str], Field(
+        place_ids: Annotated[list[Union[str, int]], Field(
             description=f"WHG place ids (max {MAX_PLACE_IDS}): a WHG number such as '169687', or an id as "
                         f"search results give it, such as 'place:gn:745044'",
             min_length=1, max_length=MAX_PLACE_IDS)],

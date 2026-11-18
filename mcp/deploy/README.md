@@ -91,7 +91,7 @@ refused, so rename the zone when its key changes.
 
 ## DNS and certificate (one-off, needs DO DNS access)
 
-1. DigitalOcean DNS, zone `whgazetteer.org`: add `A mcp -> 168.144.13.214` (the reserved IP, the same
+1. (DONE 2026-11-18, A record added in the DigitalOcean console, TTL 3600; certificate issued, expires 2027-02-16, nginx now uses it.) DigitalOcean DNS, zone `whgazetteer.org`: add `A mcp -> 168.144.13.214` (the reserved IP, the same
    target as every other name) with TTL 3600. Add no AAAA, because the droplet has no public IPv6.
 2. When `dig +short mcp.whgazetteer.org @ns1.digitalocean.com` returns that address, run as root on the
    droplet:

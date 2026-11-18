@@ -341,3 +341,9 @@ async def test_daily_budget_exhausts_and_resets():
     now[0] += 86400
     await c.get("/api/sources/")                # new UTC day, allowance restored
     assert len(SEEN) == 3
+
+
+async def test_get_place_accepts_plain_numbers_as_well_as_strings():
+    """Models send a bare number for an id (found live 2026-11-18: an int was rejected)."""
+    out = await server.get_place([169687, "place:gn:745044"])
+    assert [p["@id"] for p in out["places"]] == ["/entity/place:169687/api", "/entity/place:gn:745044/api"]

@@ -27,8 +27,8 @@ server {
     server_name mcp.whgazetteer.org;
 
     # TEMPORARY self-signed certificate until DNS exists and Let's Encrypt can issue (see mcp/deploy/README.md).
-    ssl_certificate     /etc/nginx/ssl/mcp.whgazetteer.org-selfsigned.crt;
-    ssl_certificate_key /etc/nginx/ssl/mcp.whgazetteer.org-selfsigned.key;
+    ssl_certificate     /etc/letsencrypt/live/mcp.whgazetteer.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/mcp.whgazetteer.org/privkey.pem;
     # After `certbot certonly --nginx -d mcp.whgazetteer.org --account bc752e357f22755a54d4a2291bb3bde9`:
     # ssl_certificate     /etc/letsencrypt/live/mcp.whgazetteer.org/fullchain.pem;
     # ssl_certificate_key /etc/letsencrypt/live/mcp.whgazetteer.org/privkey.pem;
