@@ -47,7 +47,9 @@ To rotate the token: write the new value, then `docker compose up -d --force-rec
 - The server's in-process daily budget is `WHG_MCP_DAILY_BUDGET=2000` upstream calls per UTC day, shared by
   all clients. When it is spent, tools return an error until midnight UTC. The counter resets whenever the
   container restarts.
-- In the server code: bbox at most 10 x 10 degrees, radius at most 100 km, at most 50 results, responses
+- In the server code: bbox at most 10 x 10 degrees, radius at most 100 km (WHG's own limit for a circle is
+  500 km), at most 50 results (`places_near` asks WHG for up to 500 places in the circle, the most WHG serves
+  per query, and returns the nearest `limit` of them; about 500 bytes each, so well under the cap), responses
   capped at 1.5 MB, exact (method, path) allowlist: `GET /api/sources/`, `GET /api/attribution/`,
   `GET /entity/place:<id>/api`, `POST /reconcile`.
 - Container: uid 1000 (non-root), `read_only`, `cap_drop: ALL`, `no-new-privileges`, 256 MB memory,

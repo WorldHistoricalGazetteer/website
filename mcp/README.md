@@ -42,10 +42,15 @@ Deployment (compose project, nginx block with per-IP limits, token env file, rol
 Not yet done: `place_at_date`, a field whitelist. Open decisions are listed in the project memory note.
 
 ## Notes from the first live run (2026-11-18)
-- A spatial-only `/reconcile` query (no text) must name the entity type (`type: ...#Place`), or WHG treats it as
-  an OpenRefine type-guessing probe and returns placeholder "Guessing Result" candidates.
-- The circle-only form (`lat`/`lng`/`radius`) returned no results in production even for London and Paris, so
-  `places_near` queries the bounding box around the circle and filters by exact distance on `repr_point`
-  (results carry `distance_km`; at most 50 candidates per query, with a note when that cap is reached).
+- A spatial-only `/reconcile` query (no text) had to name the entity type (`type: ...#Place`), or WHG treated it
+  as an OpenRefine type-guessing probe and returned placeholder "Guessing Result" candidates. Fixed on WHG
+  2026-11-18 (a circle or bounds now stands on its own); the server still sends `type`, which is accepted.
+- The circle-only form (`lat`/`lng`/`radius`) returned no results in production, so up to 0.2.4 `places_near`
+  queried the bounding box around the circle. Fixed on WHG 2026-11-18; since 0.2.5 `places_near` sends the
+  circle (`relation: within`, `limit` 500). WHG's answer is unranked, capped at 500 and drawn from an H3 disc
+  reaching up to ~1.3x the radius, so the server still filters on exact distance to `repr_point` and sorts
+  nearest first (`distance_km`). When all 500 come back it sets `may_be_incomplete` and a `note`: the nearest
+  places may be among those WHG did not send. A per-query `error` (e.g. a radius over WHG's 500 km) is a
+  tool error, not an empty answer, for every tool.
 - The production service account is `whg-mcp-service` (non-staff, no groups, unusable password, unverified email,
   daily limit 2000). Its token lives only in `~/stacks/mcp/mcp.env` on the droplet.

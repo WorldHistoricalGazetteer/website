@@ -1,6 +1,6 @@
 [project]
 name = "whg-mcp"
-version = "0.2.4"
+version = "0.2.5"
 description = "Read-only MCP server over the World Historical Gazetteer API (service-token authenticated)"
 requires-python = ">=3.10"
 dependencies = ["mcp>=1.30,<1.31", "httpx>=0.27,<1"]

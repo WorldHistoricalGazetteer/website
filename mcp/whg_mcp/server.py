@@ -22,11 +22,14 @@ from .client import PLACE_ID, DailyBudget, WHGClient, WHGError
 
 BASE_URL = os.environ.get("WHG_BASE_URL", "https://whgazetteer.org")
 MAX_LIMIT = 50
-# A spatial-only query has no text and would be taken for an OpenRefine type-guessing probe (api/reconcile.py:
-# no `type` + no `query` -> placeholder "Guessing Result" candidates). Naming the entity type avoids that.
+# Before 2026-11-18 a spatial-only query (no text) with no `type` was taken for an OpenRefine type-guessing
+# probe (placeholder "Guessing Result" candidates). WHG now treats a circle or bounds as enough on its own, so
+# `type` is no longer needed. It is still sent (documented as accepted): it states what is asked for, and a
+# WHG without that fix then answers with no places instead of placeholders.
 PLACE_TYPE = "https://whgazetteer.org/static/whg_schema.jsonld#Place"
 MAX_BBOX_DEG = 10.0     # cap the area an anonymous caller can request
-MAX_KM = 100.0
+MAX_KM = 100.0          # WHG itself refuses a nameless circle over 500 km (a per-query `error`)
+CIRCLE_MAX_CANDIDATES = 500   # the most places WHG returns for one query, whatever `limit` asks
 MAX_PLACE_IDS = 10      # get_place: one upstream call per id, sequential
 MAX_STR = 2000          # truncate long contributed strings returned to the model
 MAX_GEOMETRY_BYTES = 20_000   # a place's geometry larger than this is replaced by its type + bbox
@@ -114,6 +117,8 @@ async def _reconcile(query: dict) -> dict:
     if not isinstance(resp, dict):
         raise WHGError("WHG returned an unexpected answer.")
     q0 = resp.get("q0") or {}
+    if q0.get("error"):     # this query was refused (e.g. a nameless circle over 500 km): not "nothing found"
+        raise WHGError("WHG refused the query: " + str(q0["error"])[:300])
     out = {
         "results": q0.get("result") or [],
         "namespaces_searched": q0.get("namespaces_searched"),
@@ -212,17 +217,18 @@ async def places_near(
         km: Annotated[float, Field(gt=0, le=MAX_KM, description=f"Radius in kilometres (max {MAX_KM:g})")] = 25,
         limit: Annotated[int, Field(description=f"Maximum results (1-{MAX_LIMIT})")] = 20,
 ) -> dict:
-    """Places whose representative point lies within a radius of a point, nearest first.
-    (Done as a bounding-box query around the circle, then an exact distance filter on each place's
-    representative point: WHG's circle-only query returns nothing at present.)"""
-    dlat = km / 111.32
-    dlon = min(180.0, km / (111.32 * max(math.cos(math.radians(lat)), 0.01)))
-    west, east = max(-180.0, lon - dlon), min(180.0, lon + dlon)
-    south, north = max(-90.0, lat - dlat), min(90.0, lat + dlat)
+    """Places whose representative point lies within a radius of a point, nearest first, each with
+    distance_km. WHG answers a circle with up to 500 places in no particular order; this tool keeps those
+    within the radius and sorts them by distance. If WHG's 500 are used up (a dense area), the nearest
+    places may be missing: the answer then says so (may_be_incomplete) and a smaller km will find them."""
+    if not 0 < km <= MAX_KM:
+        raise WHGError(f"The radius must be more than 0 and at most {MAX_KM:g} km.")
+    # A circle with no `query` returns the places in it (fixed on WHG 2026-11-18): unranked (score 0),
+    # not nearest-first, at most CIRCLE_MAX_CANDIDATES, and matched as an H3 disc reaching up to ~1.3x
+    # the radius. So ask for the most WHG will give, then filter and sort on distance here.
     out = await _reconcile({
-        "bounds": {"type": "Polygon", "coordinates": [[[west, south], [east, south], [east, north],
-                                                        [west, north], [west, south]]]},
-        "containment": "exact", "relation": "within", "limit": MAX_LIMIT, "type": PLACE_TYPE})
+        "lat": lat, "lng": lon, "radius": km, "relation": "within",
+        "limit": CIRCLE_MAX_CANDIDATES, "type": PLACE_TYPE})
     found = out.get("results", [])
     kept = []
     for r in found:
@@ -233,9 +239,12 @@ async def places_near(
                 kept.append({**r, "distance_km": round(d, 3)})
     kept.sort(key=lambda r: r["distance_km"])
     out["results"] = kept[:_limit(limit)]
-    if len(found) >= MAX_LIMIT:
-        out["note"] = (f"WHG returned its maximum of {MAX_LIMIT} candidates for the box around this circle, so "
-                       "there may be more places within the radius: narrow `km` to see them.")
+    if len(found) >= CIRCLE_MAX_CANDIDATES:
+        out["may_be_incomplete"] = True
+        note = (f"WHG returned its maximum of {CIRCLE_MAX_CANDIDATES} places for this circle, in no particular "
+                f"order, so places nearer the centre than these may be missing. Use a smaller `km` "
+                f"(for example {km / 4:g}) to be sure of the nearest.")
+        out["note"] = f"{out['note']} {note}" if out.get("note") else note
     return out
 
 

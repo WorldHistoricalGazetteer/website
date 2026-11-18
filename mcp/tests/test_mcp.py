@@ -16,6 +16,26 @@ def recon(result=None, **q0):
                                      "attribution": {"gn": {"licence": "CC-BY-4.0"}}})
 
 
+DENSE_LAT = -33.0      # a circle centred on this latitude is "dense": WHG's full 500 come back
+
+
+def circle(q):
+    """WHG's circle-only answer as documented (apis.md, 'Circle-only queries', 2026-11-18): a per-query
+    error over 500 km; otherwise at most 500 places, unranked (score 0) and NOT nearest-first, from an H3
+    disc that reaches past the radius."""
+    if q["radius"] > 500:
+        return httpx.Response(200, json={"q0": {"error": "A circle with no `query` may have a radius of at "
+                                                         "most 500 km (got 600).", "result": []}})
+    if q["lat"] == DENSE_LAT:
+        pts = [[151.0, DENSE_LAT + i * 1e-4] for i in range(600)][::-1]     # the nearest are NOT served first
+        return recon([{"id": f"place:d{i}", "score": 0, "repr_point": p} for i, p in enumerate(pts)][:500])
+    return recon([            # in no particular order; distances from (41.0, 28.95)
+        {"id": "place:out12", "score": 0, "repr_point": [28.95, 41.108]},   # ~12 km: in the disc, not the radius
+        {"id": "place:near5", "score": 0, "repr_point": [28.95, 41.045]},   # ~5 km
+        {"id": "place:nopoint", "score": 0, "repr_point": None},
+        {"id": "place:gn:745044", "name": "Istanbul", "score": 0, "repr_point": [28.95, 41.01]}])  # ~1.1 km
+
+
 def handler(request: httpx.Request) -> httpx.Response:
     SEEN.append(request)
     path = request.url.path
@@ -37,6 +57,8 @@ def handler(request: httpx.Request) -> httpx.Response:
                                              "q0": {"result": [{"name": "T" * 5000}]}})
         if name == "outage":
             return recon(gateway={"answered": False, "error": "timeout"})
+        if name is None and all(k in q for k in ("lat", "lng", "radius")):
+            return circle(q)
         return recon([{"id": "place:gn:745044", "name": "Istanbul", "repr_point": [28.95, 41.01]}])
     if path == "/entity/place:999/api":
         return httpx.Response(404, json={"detail": "nope"})
@@ -182,20 +204,48 @@ async def test_search_needs_a_name():
     assert SEEN == []
 
 
-async def test_places_near_is_a_bbox_query_then_distance_filtered():
+async def test_places_near_sends_a_circle_query_not_a_box():
+    await server.places_near(lon=28.95, lat=41.0, km=10, limit=5)
+    assert body() == {"lat": 41.0, "lng": 28.95, "radius": 10, "relation": "within",
+                      "limit": server.CIRCLE_MAX_CANDIDATES, "type": server.PLACE_TYPE}
+    assert server.CIRCLE_MAX_CANDIDATES == 500                     # ask for all WHG will give: they are unranked
+    assert (SEEN[0].method, SEEN[0].url.path) == ("POST", "/reconcile")
+
+
+async def test_places_near_filters_to_the_radius_and_sorts_nearest_first():
     out = await server.places_near(lon=28.95, lat=41.0, km=10, limit=5)
-    q = body()
-    ring = q["bounds"]["coordinates"][0]
-    assert q["type"] == server.PLACE_TYPE and q["relation"] == "within" and q["limit"] == server.MAX_LIMIT
-    assert "lat" not in q and "radius" not in q and "query" not in q      # circle-only queries return nothing
-    assert ring[0] == ring[-1] and min(p[0] for p in ring) < 28.95 < max(p[0] for p in ring)
-    assert [r["id"] for r in out["results"]] == ["place:gn:745044"]        # Istanbul is ~1.2 km away
-    assert 0 < out["results"][0]["distance_km"] < 2
+    assert [r["id"] for r in out["results"]] == ["place:gn:745044", "place:near5"]   # served 4th and 2nd
+    d = [r["distance_km"] for r in out["results"]]
+    assert d == sorted(d) and 1.0 < d[0] < 1.2 and 4.9 < d[1] < 5.1
+    assert "may_be_incomplete" not in out and "note" not in out    # control for the truncation test below
 
 
-async def test_places_near_drops_places_outside_the_circle_but_inside_the_box():
-    out = await server.places_near(lon=28.95, lat=41.0, km=0.5)           # box corner reaches, circle does not
+async def test_places_near_limit_is_applied_after_sorting():
+    out = await server.places_near(lon=28.95, lat=41.0, km=10, limit=1)
+    assert [r["id"] for r in out["results"]] == ["place:gn:745044"]
+
+
+async def test_places_near_drops_places_beyond_the_radius_that_whgs_disc_includes():
+    out = await server.places_near(lon=28.95, lat=41.0, km=0.5)    # WHG's disc overshoots; the filter does not
     assert out["results"] == []
+    out = await server.places_near(lon=28.95, lat=41.0, km=13)     # control: with a radius that reaches, kept
+    assert [r["id"] for r in out["results"]][-1] == "place:out12"
+
+
+async def test_places_near_says_when_whgs_500_may_have_missed_the_nearest():
+    out = await server.places_near(lon=151.0, lat=DENSE_LAT, km=10, limit=3)
+    assert out["may_be_incomplete"] is True
+    assert "may be missing" in out["note"] and "smaller `km`" in out["note"]
+    assert [r["id"] for r in out["results"]] == ["place:d499", "place:d498", "place:d497"]  # nearest of the 500
+
+
+async def test_circle_over_500_km_is_a_clean_tool_error_not_an_empty_answer():
+    with pytest.raises(WHGError, match="refused the query: A circle with no `query` may have a radius"):
+        await server._reconcile({"lat": 0, "lng": 0, "radius": 600})
+    assert len(SEEN) == 1
+    with pytest.raises(WHGError, match="at most 100 km"):         # the tool's own cap, checked before sending
+        await server.places_near(lon=0, lat=0, km=600)
+    assert len(SEEN) == 1
 
 
 async def test_places_in_bbox_body():

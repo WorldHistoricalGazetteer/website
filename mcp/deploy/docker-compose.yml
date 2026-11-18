@@ -5,7 +5,7 @@ name: mcp
 
 services:
   mcp:
-    image: worldhistoricalgazetteer/whg-mcp:0.2.4
+    image: worldhistoricalgazetteer/whg-mcp:0.2.5
     container_name: whg-mcp
     restart: unless-stopped
     user: "1000:999"                       # the image's non-root `mcp` user
