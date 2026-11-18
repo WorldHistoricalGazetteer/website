@@ -293,23 +293,39 @@ can init, whatever order their sections appear in.{% endcomment %}
     {% endfor %}
   </div>
 
-  <!-- Map your Data funnel (main-site workbench) -->
-  <div class="card mb-4"><div class="card-body">
-    <h5 class="card-title"><i class="fas fa-filter text-secondary me-1"></i>Map your Data — usage funnel
-      <span class="text-muted small fw-normal">(workbench, main site)</span></h5>
+  <!-- Map your Data funnel: WHG's built-in (beta) version only; Map your Data is moving to PLATO Tools -->
+  <div class="card mb-4" id="an-myd"><div class="card-body">
+    <h5 class="card-title"><i class="fas fa-filter text-secondary me-1"></i>Map your Data — in-WHG version
+      <span class="text-muted small fw-normal">(beta, being moved to PLATO Tools)</span></h5>
+    <p class="small text-muted mb-3">Map your Data is moving to
+      <a href="{{ plato_tools_url }}" target="_blank" rel="noopener">PLATO Tools</a>
+      (<a href="{{ plato_tools_guide_url }}" target="_blank" rel="noopener">guide</a>), which keeps users' files on
+      their own computer and looks places up in WHG with a beta account's API token. These figures count
+      only WHG's own built-in version at <code>/reconciliation/</code>, which stays open to beta testers for now;
+      {{ myd_beta_accounts }} active account{{ myd_beta_accounts|pluralize }} can open it (beta testers and staff).
+      Use of PLATO Tools is <strong>not</strong> measured here: it reports to no WHG tracker, and WHG's API
+      cannot yet tell its calls from any other client's.
+      "Visitors" are Plausible's anonymous visitors, re-counted each day, so over a period of more than a
+      day one person can appear several times; they are not accounts.</p>
     {% if base_v %}
+      {% if not myd_show_pct %}
+      <p class="small text-muted mb-2" id="an-myd-small-n">Fewer than {{ myd_pct_min_base }} visitors imported in
+        this period, so steps are shown as counts only: a percentage of {{ base_v }} says nothing about conversion.</p>
+      {% endif %}
       {% for step in funnel %}
       <div class="an-funnel-step">
         <div class="an-bar-label">
           <span>{{ step.label }} <span class="text-muted">· {{ step.name }}</span></span>
-          <span><strong>{{ step.visitors }}</strong> <span class="text-muted">/ {{ step.events }} ev · {{ step.pct }}%</span>
+          <span><strong>{{ step.visitors }}</strong> <span class="text-muted">of {{ base_v }} importing visitor{{ base_v|pluralize }} · {{ step.events }} ev{% if step.pct is not None %} · {{ step.pct }}%{% endif %}</span>
             {% if step.drop is not None %}<span class="an-drop">&darr;{{ step.drop }}%</span>{% endif %}</span>
         </div>
+        {% if step.pct is not None %}
         <div class="an-bar-track"><div class="an-bar-fill" style="width: {{ step.pct }}%;">{{ step.pct }}%</div></div>
+        {% endif %}
       </div>
       {% endfor %}
       <table class="table table-sm mt-3 mb-0">
-        <thead><tr><th>Other workbench actions</th><th class="text-end">Visitors</th><th class="text-end">Events</th></tr></thead>
+        <thead><tr><th>Other actions (in-WHG version)</th><th class="text-end">Visitors</th><th class="text-end">Events</th></tr></thead>
         <tbody>
           {% for row in others %}
           <tr><td>{{ row.label }} <span class="text-muted small">· {{ row.name }}</span></td>
@@ -318,8 +334,7 @@ can init, whatever order their sections appear in.{% endcomment %}
         </tbody>
       </table>
     {% else %}
-      <p class="text-muted mb-0">No <code>MyD: import</code> events in this period yet — the funnel appears
-        once the workbench is used.</p>
+      <p class="text-muted mb-0">No <code>MyD: import</code> events from the in-WHG version in this period.</p>
     {% endif %}
   </div></div>
 
