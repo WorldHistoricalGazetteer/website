@@ -810,6 +810,37 @@ from places.models import Place
 from .serializers import LPFSerializer
 import re
 
+# /api/db/ `count` is counted no further than this (SG 2026-11-18). An exact COUNT(*) of a
+# name search is a full scan of place_name (UPPER(toponym) LIKE '%X%' has no index): ~1.3 s on
+# prod and ~3.9 s on dev for ?name=York, on every request, to report a number nobody pages by
+# (the endpoint has no offset).
+LEGACY_DB_COUNT_CAP = 1000
+
+
+def bounded_search(qs, pagesize, cap=None):
+    """(page, count, capped) for ``qs`` from ONE bounded scan.
+
+    The matching row ids are read as ``SELECT places.id ... LIMIT cap+1``, which stops as soon
+    as ``cap + 1`` have been found; the page is the first ``pagesize`` of them, fetched by
+    primary key. ``count`` is exact unless ``capped``, when there were more than ``cap`` and
+    ``count`` is ``cap``: a lower bound, never a guess.
+
+    Before, a request ran the page query (LIMIT pagesize) and then an unbounded COUNT(*):
+    two full scans of place_name for a name with fewer than ``cap`` matches, and one full
+    scan (the count) for a common one. Now: one scan, which still runs to the end of the
+    table when fewer than ``cap + 1`` rows match, and stops early only for a common name.
+    Rows are join rows, as before: a place with two matching names appears, and is counted,
+    twice.
+    """
+    # max(): a page larger than the cap must still be filled (pagesize is at most 200 here).
+    cap = max(LEGACY_DB_COUNT_CAP if cap is None else cap, pagesize)
+    ids = list(qs.order_by().values_list('id', flat=True)[:cap + 1])
+    capped = len(ids) > cap
+    page_ids = ids[:pagesize]
+    by_id = Place.objects.in_bulk(set(page_ids))
+    page = [by_id[i] for i in page_ids if i in by_id]
+    return page, (cap if capped else len(ids)), capped
+
 
 @extend_schema(exclude=True)
 class SearchAPIView(generics.ListAPIView):
@@ -882,11 +913,14 @@ class SearchAPIView(generics.ListAPIView):
             if cc:
                 qs = qs.filter(ccodes__overlap=cc)
 
-        filtered = qs[:pagesize]
+        # One bounded scan for page and count (the attribution below also used to re-run it).
+        filtered, count, count_capped = bounded_search(qs, pagesize)
 
         serializer = LPFSerializer(filtered, many=True, context={'request': self.request})
         result = {
-            "count": qs.count(),
+            # Exact unless count_capped, when it is LEGACY_DB_COUNT_CAP: "at least this many".
+            "count": count,
+            "count_capped": count_capped,
             "pagesize": len(filtered),
             "parameters": params,
             "note": err_note,
@@ -894,7 +928,7 @@ class SearchAPIView(generics.ListAPIView):
             "features": serializer.data,
             # Aggregated source terms at the response root (place#157).
             "attribution": safe_attribution_block(
-                datasets=set(filtered.values_list('dataset_id', flat=True))),
+                datasets=set(p.dataset_id for p in filtered)),
         }
         return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False, 'indent': 2})
 
