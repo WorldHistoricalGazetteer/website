@@ -34,6 +34,10 @@ const S = {
   shortcuts: store('local', 'mf.shortcuts') === 'on',   // off until the person switches them on
   publish: store('session', 'mf.publish') === '1',
   note: '', relation: 'closeMatch',   // kept across redraws; both reset when the record changes
+  owner: root.dataset.owner === '1',  // place#350: only the dataset owner adopts or places a location
+  placing: false, pending: null,      // placing a location by hand: on/off, and the clicked point
+  keptRef: new Set(),                 // "keep it as a reference": offers set aside on this page
+  askUndo: null,                      // a match Undo waiting for "remove the adopted location too?"
 };
 const NOTES = {
   confident: 'The suggestion and your record agree on the name and at least one other thing. Check before you confirm: a perfect name can still be a lake or a station named after the place.',
@@ -48,7 +52,7 @@ const FAILURES = {
   disabled: 'suggestions were switched off for this run', error: 'the search service reported an error',
 };
 window.__whgMatchFeed = {
-  ready: false, tab: S.tab, saves: 0, map: { state: 'idle', renders: 0, basemap: null, hand: [] },
+  ready: false, tab: S.tab, saves: 0, map: { state: 'idle', renders: 0, basemap: null, hand: [], placing: false, pending: null },
   regions: { record: false, rows: false, map: false, bar: false },
 };
 
@@ -324,7 +328,10 @@ function renderQueue() {
 function recordCardHTML(r) {
   const meta = [r.names && r.names.length ? `also: <span dir="auto">${r.names.map(esc).join(', ')}</span>` : '',
     r.types && r.types.length ? esc(r.types.join(', ')) : '', r.ccodes && r.ccodes.length ? esc(r.ccodes.join(', ')) : '',
-    years(r.minmax) ? esc(years(r.minmax)) : '', r.has_geometry ? '' : 'no location'].filter(Boolean).join(' · ');
+    years(r.minmax) ? esc(years(r.minmax)) : '',
+    // has_geometry is as it was when the suggestions were made; location_info is as it is now.
+    (r.location_info ? r.location_info.kind === 'adopted' ? 'location adopted' : r.location_info.kind === 'placed' ? 'location placed by hand' : ''
+      : (r.has_geometry && r.location_info === undefined ? '' : 'no location'))].filter(Boolean).join(' · ');
   const tierBadge = r.tier === 'unqueried' ? '<span class="badge bg-warning text-dark ms-1">waiting for the search service</span>' : '';
   const why = r.tier === 'unqueried'
     ? `<p class="small mb-0 mt-2" id="mf_waiting">Nothing was found yet because ${esc(FAILURES[r.last_failure] || 'the search service has not answered')}. It will be tried again; this is not "nothing found".</p>` : '';
@@ -368,6 +375,87 @@ function barHTML(r, t) {
     </div>`;
 }
 
+// ── A location for a record that has none (place#350) ────────────────────────────────────────────
+// Two acts, both the dataset owner's, both separate from the match: adopt the location of a place
+// marked "Same place" (only from a source whose terms allow it), or place one by clicking the map.
+// Anything else is shown as a reference: the place, a link and a citation, nothing copied.
+function dateText(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function adoptOffer(c) {
+  const a = c.adopt;
+  if (!a || !S.owner) return false;
+  return a.offer || (a.reason === 'not_matched' && c.status === 'accepted');
+}
+
+function referenceHTML(c) {
+  const a = c.adopt || {};
+  const title = (c.card && c.card.title) || c.title;
+  const link = a.link ? ` <a href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">${esc(a.id || c.candidate_id)}</a>` : ` ${esc(c.candidate_id)}`;
+  const terms = a.terms ? ` · ${a.terms.url ? `<a href="${esc(a.terms.url)}" target="_blank" rel="noopener noreferrer">${esc(a.terms.id)}</a>` : esc(a.terms.id)}` : '';
+  return `<div class="small mf-location-ref" data-ref="${esc(c.candidate_id)}">Location: <span dir="auto">${esc(title)}</span> (reference) ·${link} ${esc(nsLabel(c.namespace))}${terms}
+      ${a.citation ? `<div class="text-secondary">${esc(a.citation)}</div>` : ''}
+      ${a.message && a.reason !== 'owner_only' ? `<div class="text-secondary">${esc(a.message)}</div>` : ''}</div>`;
+}
+
+function locationHTML(r) {
+  const info = r.location_info;
+  if (info && info.kind !== 'own') {
+    const what = info.kind === 'adopted'
+      ? `Location adopted from ${esc(info.source_label || '')}${info.date ? ` on ${esc(dateText(info.date))}` : ''}${info.by ? ` by ${esc(info.by)}` : ''}.`
+      : `Location placed on the map${info.date ? ` on ${esc(dateText(info.date))}` : ''}${info.by ? ` by ${esc(info.by)}` : ''} (approximate).`;
+    return `<div class="mf-location small" id="mf_location" data-kind="${esc(info.kind)}">
+        <i class="fas fa-map-pin me-1" aria-hidden="true"></i>${what}
+        ${S.owner ? `<button type="button" class="btn btn-sm btn-link py-0" data-act="loc-remove" data-geom="${info.geom}">Remove this location</button>` : ''}</div>`;
+  }
+  if (info) return '';
+  const matched = (r.candidates || []).filter((c) => c.status === 'accepted' && c.adopt
+    && !['withheld', 'sensitive'].includes(c.adopt.reason));
+  const parts = [];
+  matched.forEach((c) => {
+    const i = r.candidates.indexOf(c);
+    if (adoptOffer(c) && !S.keptRef.has(c.id)) {
+      const a = c.adopt;
+      parts.push(`<div class="mf-adopt" data-i="${i}">
+          <div class="fw-semibold small">Adopt this place's location?</div>
+          <p class="small mb-1">${esc(a.statement || '')} You can also keep it as a reference: nothing is copied.</p>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" data-act="adopt" data-i="${i}">Adopt this place's location</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-act="keep-ref" data-i="${i}">Keep it as a reference</button>
+          </div></div>`);
+    } else {
+      parts.push(referenceHTML(c));
+    }
+  });
+  if (r.can_place && S.owner) {
+    parts.push(S.placing
+      ? `<div class="mf-place small" id="mf_place">
+          <div class="alert alert-info py-1 px-2 mb-1" role="note" id="mf_place_note">You are placing this location yourself. Restricted suggestions are shown only to help you look; do not copy their positions.</div>
+          <div id="mf_place_status">${S.pending ? 'Click again to move it, or save it. It is stored only as precisely as the map\'s zoom allows, and marked approximate.' : 'Click the map where the place is.'}</div>
+          <div class="d-flex flex-wrap gap-2 mt-1">
+            <button type="button" class="btn btn-sm btn-primary" data-act="place-save" ${S.pending ? '' : 'disabled'}>Save this location</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-act="place-cancel">Cancel</button>
+          </div></div>`
+      : `<div class="small"><button type="button" class="btn btn-sm btn-outline-secondary" data-act="place-start">Place a location on the map</button>
+          <span class="text-secondary ms-1">This record has no location: you can say where it is, whatever the suggestions.</span></div>`);
+  }
+  if (!parts.length) return '';
+  return `<div class="mf-location" id="mf_location">${parts.join('')}</div>`;
+}
+
+function undoAskHTML() {
+  if (!S.askUndo || !current() || S.askUndo.place !== current().place) return '';
+  return `<div class="alert alert-warning py-2 small" role="alert" id="mf_undo_ask">
+      This record's location was adopted from the match you are undoing. Remove the location too?
+      <div class="d-flex flex-wrap gap-2 mt-1">
+        <button type="button" class="btn btn-sm btn-warning" data-act="undo-remove">Undo, and remove the location</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo-keep">Undo, keep the location</button>
+        <button type="button" class="btn btn-sm btn-link" data-act="undo-cancel">Don't undo</button>
+      </div></div>`;
+}
+
 function searchHTML(r) {
   return `<div class="mt-3" id="mf_search" data-tour="search">
       <label class="small text-secondary" for="mf_search_q">Search for another name <kbd>/</kbd></label>
@@ -399,7 +487,7 @@ function renderRecord(opts = {}) {
     : (r.tier === 'unqueried' ? '' : '<p class="text-secondary mt-2" id="mf_nosugg" data-tour="candidates">No suggestions for this record.</p>');
   // With nothing suggested, the search comes first: it is the way forward.
   const search = searchHTML(r);
-  box.innerHTML = `${recordCardHTML(r)}${has ? '' : search}${rows}${barHTML(r, t)}${has ? search : ''}`;
+  box.innerHTML = `${undoAskHTML()}${recordCardHTML(r)}${has ? '' : search}${rows}${barHTML(r, t)}${locationHTML(r)}${has ? search : ''}`;
   if (searchBefore) {
     const nowBox = document.getElementById('mf_search');
     if (nowBox) nowBox.replaceWith(searchBefore);
@@ -444,6 +532,7 @@ function mapView(r) {
         i, title: (c.card && c.card.title) || c.title, location: c.location, km: c.km,
         focus: !handFocus && S.focus === i, status: c.status, state: v ? v.d : null,
         provisional: !!(v && v.src === 'prefilled'), group: c.group == null ? null : c.group,
+        hint: c.adopt && !c.adopt.adoptable ? c.adopt.hint : null,
       });
     } else if (c.location_withheld) withheld.push(i + 1);
     else missing.push(i + 1);
@@ -466,6 +555,8 @@ function mapCaption(r, v) {
   if (v.withheld.length) parts.push(`not on the map (location not available to you): ${v.withheld.join(', ')}`);
   if (v.hand.length) parts.push('s1, s2…: your own search results (click one to see it here)');
   if (v.handMissing.length) parts.push(`search results not on the map (no location): ${v.handMissing.join(', ')}`);
+  if (v.points.some((p) => p.hint)) parts.push('some suggestions are hints only: their locations cannot be adopted');
+  if (S.placing) parts.push('<strong>placing a location: click the map</strong>');
   if (window.__whgMatchFeed.map.basemap === 'blank') parts.push('the background map could not be loaded');
   return parts.join(' · ');
 }
@@ -524,7 +615,7 @@ function renderMap(refit) {
   const tools = document.getElementById('mf_map_tools');
   const caption = document.getElementById('mf_map_caption');
   document.getElementById('mf_map_failed').hidden = true;
-  if (!v.record && !v.points.length && !v.hand.length) {
+  if (!v.record && !v.points.length && !v.hand.length && !S.placing) {
     // A clear "no location" state, never an empty box.
     box.hidden = true;
     tools.hidden = true;
@@ -546,6 +637,10 @@ function renderMap(refit) {
     if (!now || now.place !== place) return;   // the person has moved on; that render will draw
     const latest = mapView(now);
     fm.update(latest, { refit });
+    fm.setPlacing(S.placing ? onPlaceClick : null);
+    if (S.placing) fm.setPending(S.pending ? S.pending.location : null);
+    window.__whgMatchFeed.map.placing = S.placing;
+    window.__whgMatchFeed.map.pending = S.pending ? S.pending.location : null;
     mapDone('ok', latest);
   }).catch((err) => {
     console.warn('The feed map could not be shown:', err);
@@ -557,7 +652,11 @@ function highlight(i) {
   if (feedMap) feedMap.highlight(i);
 }
 
-function render() { renderQueue(); resetDecisions(current()); renderRecord(); window.__whgMatchFeed.record = current() ? current().place : null; }
+function render() {
+  renderQueue(); resetDecisions(current());
+  S.placing = false; S.pending = null;   // placing belongs to one record: it never carries over
+  renderRecord(); window.__whgMatchFeed.record = current() ? current().place : null;
+}
 
 async function load(tab, append) {
   if (!append) { S.offset = 0; S.records = []; S.idx = 0; S.note = ''; S.relation = 'closeMatch'; }
@@ -659,21 +758,70 @@ function saveDecision() {
     }), { stay: true });
 }
 
-async function undo() {
-  const place = S.undo.pop();
+async function undo(choice) {
+  const place = choice ? (S.askUndo && S.askUndo.place) : S.undo.pop();
   if (place == null) return;
-  const res = await postJSON(root.dataset.reviewUrl, { place, action: 'reopen' });
-  if (!res.ok) { announce('Undo failed.'); return; }
+  S.askUndo = null;
+  const body = { place, action: 'reopen' };
+  if (choice) body.adopted_location = choice;
+  const res = await postJSON(root.dataset.reviewUrl, body);
+  if (!res.ok && res.status === 409 && res.data.reason === 'adopted_location') {
+    // Never silently kept: ask whether the location adopted from this match goes too.
+    S.askUndo = { place };
+    const i = S.records.findIndex((r) => r.place === place);
+    if (i >= 0 && i !== S.idx) { S.idx = i; render(); } else renderRecord({ keepSearch: true, refit: false });
+    announce('This record has a location adopted from the match. Remove it too, or keep it?');
+    return;
+  }
+  if (!res.ok) { if (!choice) S.undo.push(place); announce(`Undo failed${res.data.error ? `: ${res.data.error}` : ''}.`); return; }
   updateCounts(res.data.counts);
   updateProgress(res.data.progress);
   const i = S.records.findIndex((r) => r.place === place);
   if (i >= 0) {
     S.records[i].state = 'unreviewed';
     (S.records[i].candidates || []).forEach((c) => { c.status = 'suggested'; });
+    if (choice === 'remove') clearLocation(S.records[i]);
     S.idx = i;
   }
-  announce('Undone.');
+  announce(choice === 'remove' ? 'Undone, and the adopted location removed.' : 'Undone.');
   render();
+}
+
+function clearLocation(r) {
+  r.location_info = null;
+  r.location = null;
+  r.can_place = S.owner;
+}
+
+// The location answer of the server is the truth for the record in view.
+function applyLocation(r, data) {
+  r.location = data.location;
+  r.location_info = data.location_info;
+  r.can_place = !!data.can_place;
+}
+
+async function locationPost(body, done) {
+  const r = current();
+  if (!r) return;
+  const res = await postJSON(root.dataset.locationUrl, { place: r.place, ...body });
+  if (!res.ok) {
+    announce(`Not saved: ${res.data.error || res.status}`);
+    const box = document.getElementById('mf_location') || document.getElementById('mf_record');
+    box.insertAdjacentHTML('afterbegin', `<div class="alert alert-danger py-1 small" role="alert">Not saved: ${esc(res.data.error || String(res.status))}</div>`);
+    return;
+  }
+  window.__whgMatchFeed.saves += 1;
+  applyLocation(r, res.data);
+  S.placing = false; S.pending = null;
+  announce(done);
+  renderRecord({ keepSearch: true, refit: true });
+}
+
+function onPlaceClick(location, zoom) {
+  if (!S.placing) return;
+  S.pending = { location, zoom };   // exactly where the click was: never moved to a marker
+  renderRecord({ keepSearch: true, refit: false });
+  announce('Location chosen. Save it, or click again to move it.');
 }
 
 // ── Hand search (unchanged in behaviour) ──────────────────────────────────────────────────────────
@@ -755,6 +903,25 @@ root.addEventListener('click', (e) => {
   else if (act === 'later') review({ action: 'later' });
   else if (act === 'tour') startMatchTour();
   else if (act === 'undo') undo();
+  else if (act === 'undo-remove') undo('remove');
+  else if (act === 'undo-keep') undo('keep');
+  else if (act === 'undo-cancel') { if (S.askUndo) S.undo.push(S.askUndo.place); S.askUndo = null; renderRecord({ keepSearch: true, refit: false }); }
+  else if (act === 'adopt') {
+    const r = current();
+    const c = r && r.candidates[Number(b.dataset.i)];
+    if (c) locationPost({ action: 'adopt', candidate: c.id }, `Location adopted from ${nsLabel(c.namespace)}.`);
+  } else if (act === 'keep-ref') {
+    const r = current();
+    const c = r && r.candidates[Number(b.dataset.i)];
+    if (c) { S.keptRef.add(c.id); renderRecord({ keepSearch: true, refit: false }); announce('Kept as a reference. Nothing was copied.'); }
+  } else if (act === 'place-start') { S.placing = true; S.pending = null; renderRecord({ keepSearch: true, refit: false }); }
+  else if (act === 'place-cancel') { S.placing = false; S.pending = null; renderRecord({ keepSearch: true, refit: false }); }
+  else if (act === 'place-save') {
+    if (S.pending) {
+      const [lon, lat] = S.pending.location;
+      locationPost({ action: 'place', lon, lat, zoom: S.pending.zoom }, 'Location saved.');
+    }
+  } else if (act === 'loc-remove') locationPost({ action: 'remove', geom: Number(b.dataset.geom) }, 'Location removed.');
   else if (act === 'prev') move(-1);
   else if (act === 'next') move(1);
   else if (act === 'search') search();

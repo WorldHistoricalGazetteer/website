@@ -74,15 +74,14 @@ point — it is also how you check the image really carried what you built it fo
 
 ### The base image (place#254)
 
-The image is built on **`python:3.10-slim-bookworm`** (Debian 12). It was
+The image is built on **`python:3.12-slim-bookworm`** (Debian 12). It was
 `python:3.10.7-slim-bullseye` until 2026-09-07, when the image stopped building at
 all: Debian 11's security pool no longer holds the packages its own index
 advertises, so `apt-get install` 404s (and, once the index's `Valid-Until` passed,
 `apt-get update` fails first with an expired-Release error instead — same cause).
 `security.debian.org` and `archive.debian.org` do not have those packages either.
 
-bookworm **keeps Python 3.10** (3.10.21), so this was an OS bump, not a Python bump.
-Two consequences to know about:
+Python 3.10 was kept through the bookworm move (3.10.21); the image moved to Python 3.12 together with Django 5.2 (2026-11). The official python image brings its own Python, so the base OS and the Python version are independent. The bookworm move itself was an OS bump. Two consequences to know about:
 
 - `netcat` is not an installable package name on bookworm — it is `netcat-openbsd`.
 - **GDAL moves**: bullseye `/usr/lib/libgdal.so.28` (3.2) → bookworm

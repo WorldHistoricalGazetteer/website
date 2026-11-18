@@ -40,6 +40,7 @@ from html.parser import HTMLParser
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase, TestCase
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 from django.urls import reverse
 
 from main import tests_navbar_overflow as navtests
@@ -210,6 +211,7 @@ class _BrowserBase(LiveServerTestCase):
                 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = cls._prev_async_unsafe
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def _context(self, user, width):
         ctx = self.browser.new_context(viewport={"width": width, "height": 800})

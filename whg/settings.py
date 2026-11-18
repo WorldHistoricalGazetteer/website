@@ -612,9 +612,11 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
-# USE_L10N = True
+# Pinned explicitly: Django 5.0 changed the default from False to True, which turns timezone.now()
+# into an aware datetime and breaks code that compares it with naive ones (validation/tasks.py).
+# Keeping the pre-5.0 behaviour; moving to aware datetimes is a separate change.
+USE_TZ = False
 # USE_THOUSAND_SEPARATOR = True
-USE_L10N = False
 USE_THOUSAND_SEPARATOR = False
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')

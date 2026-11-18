@@ -23,6 +23,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import Client, override_settings
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 
 from datasets.models import Dataset
 from datasets.tests_lifecycle import patch_side_effects
@@ -54,8 +55,10 @@ class LifecyclePanelBrowserTests(StaticLiveServerTestCase):
             cls._pw.stop()
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from django.core.cache import cache
         from licensing.models import License
         cache.clear()

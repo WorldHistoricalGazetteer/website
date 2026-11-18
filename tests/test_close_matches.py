@@ -1,9 +1,9 @@
 from unittest.mock import patch, MagicMock
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from places.models import Place, CloseMatch
 from datasets.models import Dataset
 from datasets.tasks import maxID
-from datasets.views import indexMatch
+from datasets.services import indexMatch
 from django_celery_results.models import TaskResult
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -11,13 +11,6 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 class IndexMatchTestCase(TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        # Mock the Elasticsearch settings once for all tests
-        settings.ES_CONN = MagicMock()
-        settings.ES_WHG = 'test_index'
 
     def setUp(self):
         # Ensure the user is created
@@ -57,6 +50,8 @@ class IndexMatchTestCase(TestCase):
             ccodes=['BR']
         )
         place_id = place.id
+        parent = Place.objects.create(src_id='parent1', dataset=self.test_dataset, title='Parent Place', ccodes=['BR'])
+        parent_id = parent.id
         print(f"Created place with ID: {place_id}")
 
         # Mock Elasticsearch response for place_id
@@ -71,10 +66,10 @@ class IndexMatchTestCase(TestCase):
             'hits': {
                 'total': {'value': 1},
                 'hits': [{
-                    '_id': '1001',
+                    '_id': str(parent_id),
                     '_source': {
                         'relation': {'name': 'parent'},
-                        'place_id': 1001,
+                        'place_id': parent_id,
                         'children': []
                     }
                 }]
@@ -90,15 +85,18 @@ class IndexMatchTestCase(TestCase):
             print(f"Mock search query: {body}")
             if body['query']['bool']['must'][0]['match'].get('place_id') == place_id:
                 return es_response_no_hits
-            elif body['query']['bool']['must'][0]['match'].get('place_id') == 1001:
+            elif body['query']['bool']['must'][0]['match'].get('place_id') == parent_id:
                 return es_response_hit
             return es_response_no_hits
 
-        # Mock the necessary functions
-        with patch('datasets.views.es.search', side_effect=mock_search), \
-             patch('datasets.tasks.maxID', side_effect=mock_maxID), \
-             patch('datasets.views.es.index', return_value={'result': 'created'}), \
-             patch('datasets.views.es.update_by_query', return_value={'updated': 1}):
+        # indexMatch() reads django.conf.settings (it used to import the settings module directly,
+        # which override_settings could not reach)
+        es = MagicMock()
+        es.search.side_effect = mock_search
+        es.index.return_value = {'result': 'created'}
+        es.update.return_value = {'result': 'updated'}
+        with override_settings(ES_CONN=es, ES_WHG='test_index'), \
+             patch('datasets.tasks.maxID', side_effect=mock_maxID):
 
             # Test case: No match found, create new parent
             indexMatch(place_id, user=self.user, task=self.task)
@@ -120,7 +118,7 @@ class IndexMatchTestCase(TestCase):
             print(f"Created another place with ID: {another_place_id}")
 
             # Call indexMatch with the correct hit_pid
-            indexMatch(another_place_id, hit_pid=1001, user=self.user, task=self.task)
+            indexMatch(another_place_id, hit_pid=parent_id, user=self.user, task=self.task)
 
             # Check that the Place object has been indexed as a child
             self.assertTrue(Place.objects.filter(id=another_place_id).exists())
@@ -131,7 +129,9 @@ class IndexMatchTestCase(TestCase):
                 print(f"CloseMatch: place_a_id={match.place_a_id}, place_b_id={match.place_b_id}")
 
             # Check that the CloseMatch record has been created
-            self.assertTrue(CloseMatch.objects.filter(place_a_id=1001, place_b_id=another_place_id).exists())
+            # (update_close_matches stores the pair with the lower id first)
+            a, b = sorted([parent_id, another_place_id])
+            self.assertTrue(CloseMatch.objects.filter(place_a_id=a, place_b_id=b).exists())
 
     print('All tests passed!')
 

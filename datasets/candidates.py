@@ -147,6 +147,12 @@ def record_hit(place, sid=None):
     rp = place.repr_point
     if rp and len(rp) >= 2:
         hit["repr_point"] = [rp[0], rp[1]]
+        # place#350 decision D: a location adopted from a matched place is the record's location,
+        # but measuring the record against that same place would compare the point with itself.
+        from datasets.location_adoption import adopted_from
+        sources = adopted_from(place)
+        if sources:
+            hit["adopted_from"] = sorted(sources)
     mm = place.minmax or []
     if len(mm) == 2 and (mm[0] is not None or mm[1] is not None):
         hit["temporal_range"] = [mm[0], mm[1]]
@@ -310,12 +316,17 @@ def score_candidates(rec, hits, params, edges=None, stoplist=None, record_fclass
     eidx = _edge_index(edges)
     stop = clustering._stop_set(stoplist)
     rl = clustering.hit_lat_lng(rec)
+    # Decision D's guard (place#350): against the place a location was adopted from, the record is
+    # scored as if it had no location (the spatial signal degrades out, no distance is shown).
+    adopted = set(rec.get("adopted_from") or ())
+    rec_unlocated = {k: v for k, v in rec.items() if k not in ("repr_point", "point")} if adopted else rec
     out = []
     for order, h in enumerate(hits):
-        res = clustering.score_pair(rec, h, weights, eidx, stop)
+        own_source = str(clustering.hit_id(h)) in adopted
+        res = clustering.score_pair(rec_unlocated if own_source else rec, h, weights, eidx, stop)
         sig = dict(res["signals"])
         hl = clustering.hit_lat_lng(h)
-        km = clustering.haversine_km(rl[0], rl[1], hl[0], hl[1]) if rl and hl else None
+        km = clustering.haversine_km(rl[0], rl[1], hl[0], hl[1]) if rl and hl and not own_source else None
         conf = _num(h.get("confidence"))
         sane, reason = type_sanity(h, record_fclasses, rules)
         name_ok = conf is not None and conf >= CONFIDENT_MIN_CONFIDENCE

@@ -262,6 +262,21 @@ def _record_payload(place) -> dict:
     return record
 
 
+def _location_provenance(place):
+    from datasets.location_adoption import ADOPTED, provenance
+    own, added = 0, []
+    for g in place.geoms.select_related("reviewer"):
+        p = provenance(g)
+        if p is None:
+            own += 1
+            continue
+        added.append({"kind": p["kind"], "adopted": p["kind"] == ADOPTED,
+                      "source_label": p.get("source_label"), "terms": p.get("terms"),
+                      "match": p.get("match"), "date": g.create_date,
+                      "by": getattr(g.reviewer, "name", None) or getattr(g.reviewer, "username", "")})
+    return {"own_geom_count": own, "added_locations": added}
+
+
 def atlas_record_page(request, pk):
     """The Record page (beta). Anonymous: to the login page. Signed in without
     beta access: 404, as ``main.views.reconciliation_view`` answers. A record
@@ -294,6 +309,9 @@ def atlas_record_page(request, pk):
         "descriptions": _display_descriptions(record.get("descriptions")),
         "depictions": _display_depictions(record.get("depictions")),
         "explore_similar": explore,
+        # place#350: an adopted or hand-placed location is labelled as such, never counted as
+        # one the contributor loaded.
+        **_location_provenance(place),
         "default_cluster": default_cluster_link(place, request.user),
         "concordance_endpoint": reverse("atlas-record-concordance", args=[place.pk]),
         # The gloss and environment sections for non-beta visitors: only with the

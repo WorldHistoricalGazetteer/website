@@ -26,7 +26,7 @@ from areas.models import Area
 from .forms import CommentModalForm, ContactForm, AnnouncementForm, VolunteerForm, InviteForm
 
 logger = get_task_logger(__name__)
-from collection.models import Collection, CollectionGroup
+from collection.models import Collection, CollectionGroup, CollectionGroupUser
 from datasets.models import Dataset
 from datasets.tasks import testAdd
 from .models import Announcement, Link, DownloadFile, Comment
@@ -78,6 +78,11 @@ def OpenAPIView(request):
 
 
 def get_task_progress(request, taskid):
+    # Login required (anonymous could poll any task until 2026-11-18). A Celery task id cannot
+    # be tied to its requester here, so this is not scoped per user. 401 JSON like
+    # validation.tasks.get_task_status, since callers poll it by AJAX.
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
     task = AsyncResult(taskid)
 
     if isinstance(task.backend, DisabledBackend):
@@ -231,14 +236,35 @@ def get_objects_for_user(model, user, filter_criteria, is_admin=False, extra_fil
     return objects
 
 
+# The four dashboard list views below (/main/<name>_list/<sort>/<order>/, loaded by AJAX into
+# the dashboard_admin tabs) show 'my' objects: whg_admins see everything; any other logged-in
+# user sees only what they own or collaborate on (groups: lead or belong to). Until 2026-11-18
+# they had no login check and collections/areas/groups started from .objects.all(), so an
+# anonymous request listed every sandbox collection. Admin-ness deliberately stays
+# whg_admins-only (as dashboard_redirect decides who gets this dashboard); widening it to
+# api.dataset_access.user_sees_every_dataset (staff/superuser/whg_team) would newly show
+# those users everyone's objects. Tests: main/tests_list_visibility.py.
+def _is_list_admin(user):
+    return user.groups.filter(name='whg_admins').exists()
+
+
+def _groups_for_user(user, is_admin):
+    if is_admin:
+        return CollectionGroup.objects.all()
+    return CollectionGroup.objects.filter(
+        Q(owner=user) | Q(id__in=CollectionGroupUser.objects.filter(user=user)
+                          .values('collectiongroup_id')))
+
+
+@login_required
 def area_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     text_fields = ['title', 'description', 'type', 'owner']
 
-    # only user-created areas
-    areas = Area.objects.filter(type__in=['ccodes', 'copied', 'drawn'])
+    # only user-created areas (ccodes, copied, drawn); non-admins only their own
+    areas = get_objects_for_user(Area, request.user, {'owner': request.user}, is_admin)
 
     # Sort based on the parameters
     if sort and order:
@@ -285,10 +311,11 @@ def area_list(request, sort='', order=''):
     return render(request, 'lists/area_list.html', context)
 
 
+@login_required
 def dataset_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     datasets = get_objects_for_user(Dataset, request.user, {'owner': request.user}, is_admin)
     text_fields = ['title', 'label', 'status', 'owner']
 
@@ -348,13 +375,15 @@ def dataset_list(request, sort='', order=''):
     return render(request, 'lists/dataset_list.html', context)
 
 
+@login_required
 def collection_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     text_fields = ['title', 'type', 'status', 'owner']
 
-    collections = Collection.objects.all()
+    # owned + collaborated (CollectionUser) for non-admins; everything for whg_admins
+    collections = get_objects_for_user(Collection, request.user, {'owner': request.user}, is_admin)
     # collections = collections.annotate(recent_log_timestamp=Max('log__timestamp')).order_by('recent_log_timestamp')
     #
     # collections = collections.annotate(
@@ -428,13 +457,15 @@ def collection_list(request, sort='', order=''):
     return render(request, 'lists/collection_list.html', context)
 
 
+@login_required
 def group_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     text_fields = ['title', 'category', 'owner']
 
-    groups = CollectionGroup.objects.all()
+    # led (owner) or belonged to (CollectionGroupUser) for non-admins
+    groups = _groups_for_user(request.user, is_admin)
 
     if sort and order:
         if sort == 'owner':
@@ -471,7 +502,7 @@ def group_list(request, sort='', order=''):
             'section': 'groups',
             'filtered': True,
             'filters': {
-                'type': request.GET.get('class', ''),
+                'type': request.GET.get('type', ''),
                 'owner': request.GET.get('owner', ''),
                 'title': request.GET.get('title', '')
             }
@@ -880,203 +911,201 @@ def wb_gazetteer_group_view(request):
 # Stages: 'beta' = usable now by staff + invited testers, not yet public; 'dev' = being built, not
 # yet testable; 'shipped' = live for everyone / changes an existing workflow; 'horizon' = planned
 # direction, NOT a dated commitment. Edit BETA_STATUS_UPDATED whenever this list changes.
-BETA_STATUS_UPDATED = "7 September 2026"
+#
+# Every figure and status here was checked against a live source on the date below (the source of
+# each is in the commit that last changed this list). Re-check before re-dating: do not carry a
+# number forward unmeasured. v4.0 timing is "early 2027", a direction, not a date (SG 2026-09-28).
+# Optional item keys: version, staff, links (a list of {"url", "label"}).
+BETA_STATUS_UPDATED = "18 November 2026"
+PLATO_URL = "https://plato.pelagios.org/"
+PLATO_TOOLS_URL = "https://plato.pelagios.org/tools/"
+PLATO_MAP_YOUR_DATA_GUIDE_URL = "https://plato.pelagios.org/guide/tools.html#map-your-data"
 BETA_STATUS_SECTIONS = [
     {
-        "heading": "In development & beta preview",
-        "note": "Available to WHG staff and invited beta testers while we refine them — not yet linked for the public.",
+        "heading": "Beta preview",
+        "note": "Usable now by WHG staff and invited beta testers, but not yet open to everyone.",
         "items": [
-            {"name": "Map your Data", "stage": "beta", "version": "3.3",
-             "body": "Turn a spreadsheet or list of place names into located, dated, standardised places — "
-                     "matched to the World Historical Gazetteer, cleaned up, and ready to map, share, or "
-                     "contribute. Import from CSV/TSV/JSON, Excel, GeoJSON, or a Google Sheet — or have "
-                     "place names picked out of free text you paste or upload; match against WHG (including "
-                     "historical periods via PeriodO); add coordinates, shapes, dates, and place types; "
-                     "gather variant spellings of the same value into one; enrich with Wikipedia links from "
-                     "matched records; validate; and export or contribute. Your table stays in your browser. "
-                     "Only the names you look up — and any text you ask WHG to read for place names — are "
-                     "sent to our servers, and the place-name reader is a small language model running on "
-                     "WHG's own machines rather than a commercial AI service. The matching itself keeps "
-                     "improving: it tries a name's natural variants, reads the head word of a name like "
-                     "'Ashby, Leicestershire', tells you how confident it is, and keeps the rows you have "
-                     "already decided when you run it again. Sounds-like matching in your browser and the "
-                     "same matching on our servers now agree with each other, which had been quietly "
-                     "costing matches for names in non-Latin scripts."},
-            {"name": "Collaborative Workbench", "stage": "beta", "version": "3.3",
-             "body": "Work on the same project as a team, together and in real time, with shared roles and a "
-                     "project owned by your group rather than a single account. You can invite colleagues by "
-                     "email whether or not they already have a WHG account, and talk to each other while you "
+            {"name": "Map your Data is moving to PLATO Tools", "stage": "beta",
+             "body": "Map your Data takes a list of place names, finds each place in the World Historical "
+                     "Gazetteer, and helps you check, locate and write out the result. It is moving out of "
+                     "WHG and into PLATO Tools, a set of browser tools for checking and converting data "
+                     "about places, published alongside PLATO (see WHG v4.0 below). In PLATO Tools it is a "
+                     "step-by-step workflow, also called Map your data, which is in beta testing; PLATO "
+                     "Tools as a whole is marked experimental and may still change. PLATO Tools keeps your "
+                     "files on your own computer and sends nothing to another site unless you allow it. "
+                     "Looking places up in WHG from there needs your own WHG account, enrolled in WHG's "
+                     "beta, and a WHG API token. The earlier version built into WHG is still available to "
+                     "beta testers.",
+             "links": [
+                 {"url": PLATO_TOOLS_URL, "label": "PLATO Tools"},
+                 {"url": PLATO_MAP_YOUR_DATA_GUIDE_URL, "label": "The Map your data workflow, in the PLATO guide"},
+             ]},
+            {"name": "Match your places", "stage": "beta", "version": "4.0",
+             "body": "A new way for a contributor to match the places in their own dataset with records in "
+                     "WHG's source gazetteers, such as GeoNames or Wikidata, and the first part of the new "
+                     "approach to matching planned for v4. For each suggestion you answer Same place, Not "
+                     "the same, or Can't tell, and a record you are unsure about can be set aside for "
+                     "later. Nothing is merged or changed: your record stays yours. Nothing is marked on "
+                     "your behalf either; only the answers you give are recorded, and any of them can be "
+                     "undone. Beta testers reach it from their dashboard."},
+            {"name": "Atlas: a map-first way into the gazetteer", "stage": "beta", "version": "4.0",
+             "body": "The Atlas groups places as you pan and zoom, so that very large gazetteers stay "
+                     "legible at every scale, and narrows what you see by date (including holding the map "
+                     "at a single year and stepping it on), by region and by kind of place. A Gazetteers "
+                     "panel lists the source gazetteers WHG draws on, and a Place List lets you browse and "
+                     "search every place in one of them, including places that have no location. From a "
+                     "place, beta testers can open its Record page, which is one contributor's account of "
+                     "it together with the other records it has been matched to, and a Locus page, which "
+                     "gathers records that appear to be the same place. Anyone can open the Atlas page; "
+                     "the places on it are shown to beta testers only for now."},
+            {"name": "Collaborative Workbench", "stage": "beta", "version": "4.0",
+             "body": "Work on a project as a team, in real time, with shared roles and a project owned by "
+                     "your group rather than by a single account. You can invite colleagues by email "
+                     "whether or not they already have a WHG account, and talk to each other while you "
                      "work in a chat that is never stored."},
-            {"name": "Browser-first, collaborative Collections", "stage": "beta", "version": "3.3",
-             "body": "Build and curate Collections directly in the browser and together as a team, rather "
-                     "than through multi-step server workflows — the same local-first model as Map your "
-                     "Data. Now in beta: Place Collections, Itineraries (ordered journeys), and Gazetteer "
-                     "Groups, each with search-as-you-type place-finding ranked by geographic nearness, "
-                     "map previews, add-places-from-text, team collaboration, and publish into WHG's "
-                     "existing public collection pages. (Routes and Networks arrive with the v4 model.)"},
-            {"name": "Suggest a correction to a published record", "stage": "beta", "version": "3.3",
-             "body": "A reader who spots something wrong in a published record — a name, a date, a location, "
-                     "a shape on the map — can propose the fix from the record itself, drawing the geometry "
-                     "if that is what is wrong. The people who own that gazetteer choose whether to invite "
-                     "suggestions at all, and every one is reviewed by a person before anything changes. It "
-                     "is a first, small step towards the attestation model planned for v4."},
-            {"name": "Atlas — a map-first interface, and a browser for the gazetteers behind WHG",
-             "stage": "beta", "version": "3.5",
-             "body": "An exploration-led interface for the gazetteer, now open to staff and invited testers "
-                     "rather than only being built. It clusters and reveals places adaptively as you pan and "
-                     "zoom, keeping very large gazetteers legible at every scale, and lets you narrow what "
-                     "you see by date, by region, and by kind of place — including holding the map at a "
-                     "single year and stepping through time. Alongside it, a Gazetteers browser lists the "
-                     "source gazetteers WHG draws on: what each one covers in space and time, who made it, "
-                     "how it is licensed, how to cite it, and a link to any record at its own source."},
-            {"name": "Phonetic rule review", "stage": "beta",
+            {"name": "Collections built in the browser", "stage": "beta", "version": "4.0",
+             "body": "Build Place Collections, Itineraries (ordered journeys) and Gazetteer Groups directly "
+                     "in the browser, alone or with a team, and publish them to WHG's public collection "
+                     "pages, instead of working through several server-side steps."},
+            {"name": "Suggest a correction to a published record", "stage": "beta", "version": "4.0",
+             "body": "A reader who spots something wrong in a published record, such as a name, a date, a "
+                     "location or a shape on the map, can propose the fix from the record itself, drawing "
+                     "the geometry if that is what is wrong. Suggestions are off unless the people who own "
+                     "the dataset turn them on, and each one is reviewed by a person before anything "
+                     "changes."},
+            {"name": "Phonetic rule review", "stage": "beta", "version": "4.0",
              "body": "WHG can find names that sound alike even when they are written differently, or in a "
                      "different script. That rests on rule sets that turn written letters into sounds, "
                      "language by language, and some of those rules are wrong, incomplete, or missing "
                      "letters the language uses. This is a place where people who know a language can check "
                      "its rules against real place names from WHG's own index, say what is wrong, and "
                      "propose a correction. Reading it will be open to everyone when it launches; "
-                     "contributing needs an account, and what contributors write is dedicated to the public "
-                     "domain so it can be used by anyone, including the open-source project the rules come "
+                     "contributing needs an account, and contributors place what they write in the public "
+                     "domain, so that anyone can use it, including the open-source project the rules come "
                      "from."},
-            {"name": "Citations & contributor credit (CRediT)", "stage": "dev", "version": "3.3",
-             "body": "Build a proper citation for a dataset, in a form both people and software can read, "
-                     "and credit everyone who worked on it by the role they played — carried with the data "
-                     "when it is shared or contributed to WHG. The licensing half of this work is now live "
-                     "(see below); the citation builder and contributor credit are still being built."},
-            {"name": "Submission tracker (GRACE)", "stage": "dev", "version": "3.4",
-             "body": "A way to follow a dataset submission through its lifecycle — from first contribution, "
-                     "through review, to publication — so contributors and editors can see where each "
-                     "submission stands and what happens next. It also holds the editorial work around it: "
-                     "the people, projects, organisations and printed sources behind the datasets we are "
-                     "seeking, and our correspondence with them. It is built into WHG itself rather than "
-                     "relying on a separate external service, which is where this work started. The first "
-                     "visible piece is already in place: 'Suggest a Source' in the Data menu is now a WHG "
-                     "page rather than a form on someone else's site. The editorial side behind it was "
-                     "reviewed by the team in September and is not yet in day-to-day use; targeted for "
-                     "v3.4."},
-            {"name": "Standardised place types across every source (Getty AAT)", "stage": "dev", "version": "3.5",
+        ],
+    },
+    {
+        "heading": "In development",
+        "note": "Being built; parts may already be visible.",
+        "items": [
+            {"name": "Locations for records that have none", "stage": "dev", "version": "4.0",
+             "body": "Many historical datasets arrive with names but no coordinates. We are adding two "
+                     "optional steps to Match your places for a record that has no location of its own, "
+                     "open only to the dataset's owner, and not yet available to anyone. After answering "
+                     "Same place, the owner can adopt the matched place's location when it comes from a "
+                     "source whose terms allow that (public-domain or attribution-only sources, such as "
+                     "GeoNames or Wikidata). It is stored as a separate location labelled as coming from "
+                     "that source, never as the owner's own, and it can be undone. Or the owner can place "
+                     "the location themselves by clicking on the map. Suggestions from sources whose terms "
+                     "do not allow their coordinates to be copied are still shown as hints, but nothing "
+                     "snaps to them, and the position you click is rounded to what the zoom level supports "
+                     "and marked approximate. Locations are single points to begin with; nothing is adopted "
+                     "automatically or in bulk, and adopting a location never changes your match."},
+            {"name": "Citations and contributor credit (CRediT)", "stage": "dev", "version": "4.0",
+             "body": "The first part is live: on a dataset's metadata page, the people who worked on it can "
+                     "be credited by the role they played, using the CRediT roles, and those credits are "
+                     "used in the dataset's citation and in the record registered with its DOI. The rest "
+                     "of the citation work is planned for v4.0."},
+            {"name": "Submission tracker (GRACE)", "stage": "dev",
+             "body": "A way to follow a dataset from first contact, through review, to publication, together "
+                     "with the editorial work around it: the people, projects, organisations and printed "
+                     "sources behind the datasets we are seeking, and our correspondence with them. It is "
+                     "built into WHG itself. Its public door, 'Suggest a Source' in the Data menu, is "
+                     "live; the editorial side behind it is built but not yet in day-to-day use."},
+            {"name": "Standardised place types across every source (Getty AAT)", "stage": "dev",
              "staff": True,
-             "body": "We're giving every place in WHG a standardised place type from the Getty Art & "
-                     "Architecture Thesaurus (AAT) — a shared, hierarchical vocabulary — so you can filter "
-                     "and browse by the kind of place (city, river, temple, administrative area…) "
-                     "consistently, whichever gazetteer a record came from. You can see it working in the "
-                     "Atlas preview, where places are filtered by a hierarchical type list (choose "
-                     "'inhabited places' and also get its subtypes) and labelled in readable words rather "
-                     "than raw source codes; place types chosen by contributors are picked from the same "
-                     "vocabulary throughout WHG. It's a large, source-by-source effort spanning several "
-                     "months: the biggest sources — GeoNames, OpenStreetMap, Wikidata, OpenHistoricalMap, "
-                     "and the Getty Thesaurus of Geographic Names (~3M records) — are typed, but a number "
-                     "of smaller and specialist gazetteers still need their type vocabularies mapped to AAT "
-                     "before their records become fully filterable by type. Coverage is growing steadily."},
-            {"name": "Platform foundations", "stage": "dev", "staff": True,
-             "body": "Nothing here is visible to users; it is what keeps everything else possible. Over "
-                     "the summer WHG's software dependencies were brought up to date — the JavaScript audit "
-                     "went from 71 vulnerabilities to none, and the Python one from 16 vulnerable "
-                     "packages to none — and Django moved to its long-term-support release. Then the "
-                     "operating system underneath the servers was moved to a current "
-                     "Debian release: the old one had stopped supplying the packages its own catalogue "
-                     "still advertised, so the server image could not be rebuilt at all, and no security "
-                     "update or new dependency could have reached the site. That is done: both the public "
-                     "site and the development server now run the rebuilt image."},
+             "body": "The aim is for every place in WHG to carry a type from the Getty Art & Architecture "
+                     "Thesaurus (AAT), a shared, hierarchical vocabulary, so that places can be filtered by "
+                     "kind (city, river, temple, administrative area and so on) in the same way whichever "
+                     "gazetteer a record came from. The Atlas type filter already works from this "
+                     "vocabulary (choosing a type includes its subtypes), and contributors pick place types "
+                     "from the same vocabulary throughout WHG. How far each source gazetteer is typed was "
+                     "not re-measured for this review, so no coverage figure is given here."},
         ],
     },
     {
         "heading": "Recently shipped",
         "note": "Live now for everyone, or a change to how an existing workflow behaves.",
         "items": [
-            {"name": "New gazetteers, and a more accurate index", "stage": "shipped", "version": "3.2",
-             "body": "WHG now searches 28 source gazetteers holding about 51 million place records. Newly "
-                     "added are the historic administrative geographies of England and Wales: registration "
-                     "districts and counties, local government districts and administrative counties, "
-                     "from the Great Britain Historical GIS; and 23,000 ancient parishes, townships "
-                     "and places from before 1850, from Kain and Oliver via the Cambridge Group. "
-                     "Behind the "
-                     "scenes the index itself was rebuilt in several ways that change what you find: "
-                     "country codes were re-derived across 9.3 million records that had been assigned to "
-                     "the wrong country; 10.5 million records from OpenStreetMap and OpenHistoricalMap "
-                     "that claimed a shape but did not actually carry one now have it; dates were "
-                     "re-encoded across the whole corpus so that filtering by period is meaningful; "
-                     "'contains' searching, which had been quietly failing for most gazetteers, works; "
-                     "and a fault in how we searched near a place was losing the great majority of the "
-                     "matches it should have found."},
-            {"name": "Sign in with ORCiD", "stage": "shipped", "version": "3.2",
-             "body": "Signing in to WHG now goes through ORCiD, the identifier many researchers already "
-                     "hold, so an account is tied to a person rather than to a password we have to keep. "
-                     "If you had a WHG account before, you claim it after signing in and keep everything "
-                     "in it."},
-            {"name": "Data licences, stated in the open", "stage": "shipped", "version": "3.2",
-             "body": "A public page now lists every licence WHG recognises, grouped by how open it is, with "
-                     "links to the licence itself. Contributors choose a licence for what they contribute "
-                     "from a guided picker — a few questions about what you will allow — instead of ticking "
-                     "one blanket box. A companion page publishes the licence of every piece of third-party "
-                     "software WHG runs.",
-             "link": {"url": "/licenses/", "label": "Data licences"}},
-            {"name": "Each source's terms travel with the data", "stage": "shipped", "version": "3.2",
-             "body": "A search result or a download usually draws on several source gazetteers at once, and "
-                     "one blanket statement could never be true of all of them. The terms of every source "
-                     "that contributed now come with the result, both on the download page and through the "
-                     "matching service. A few gazetteers we hold under agreement can be kept out of bulk "
-                     "download while remaining fully searchable."},
-            {"name": "Stable links, and a citable platform", "stage": "shipped", "version": "3.2",
-             "body": "Place pages now have one canonical web address instead of two competing ones, and we "
-                     "stopped describing links as permanent while that was still a promise rather than a "
-                     "fact — genuinely persistent identifiers are part of the v4 work. WHG's software has "
-                     "also been given a DOI, so the platform itself can be cited."},
-            {"name": "Fewer ways for an upload to go wrong", "stage": "shipped", "version": "3.2",
-             "body": "Coordinates written in an unusual format — a comma for a decimal point, longitude and "
-                     "latitude the wrong way round, a value out of range — are now caught and explained "
-                     "rather than quietly dropped. Place types behave the same whether a record is new or "
-                     "an update. And a Linked Places file is now read as Linked Places, so the "
-                     "descriptions, links, dates and shapes already in it survive the journey into WHG "
-                     "instead of being discarded."},
-            {"name": "Smaller fixes across the site", "stage": "shipped", "version": "3.2",
-             "body": "The home-page carousels can be paused, and the Published Datasets and Published "
-                     "Collections galleries now lead the Data menu instead of sitting below the "
-                     "signed-in user's own links. A dialog that could open empty, with no way to close "
-                     "it, no longer can. And a daily "
-                     "limit on the public data service now expires at midnight instead of locking an "
-                     "account out for good."},
-            {"name": "Publish & index independent of reconciliation", "stage": "shipped", "staff": True, "version": "3.2",
-             "body": "A dataset can now be made public and searchable regardless of how far its "
-                     "reconciliation has progressed, with a clear warning about the trade-offs — removing a "
-                     "trap where public datasets could stay invisible in search. (Staff workflow note.)"},
-            {"name": "In-house analytics dashboard (Plausible aggregation)", "stage": "shipped", "staff": True, "version": "3.2",
-             "body": "A staff view in the admin area that aggregates WHG's self-hosted Plausible sites "
-                     "(main, blog, docs) into one dashboard — top-line metrics, visitors over time, and "
-                     "breakdowns — including the Map-your-Data usage funnel. It now also shows where "
-                     "contributed data is thin on the ground, ranking the gaps by records per unit area, "
-                     "to inform what we go looking for next. (Staff tool.)"},
+            {"name": "Clearer terms for contributed and reused data", "stage": "shipped",
+             "body": "Each dataset carries its own licence, chosen by its contributor or set by its source, "
+                     "and the list of published datasets now says so instead of describing everything as "
+                     "CC BY 4.0. The Terms of Use now set out the permission a contributor gives WHG to "
+                     "host, index, reformat and redistribute their data, which is separate from the public "
+                     "licence they choose, and the licence picker links to it. The first time someone "
+                     "creates an API token, they are asked one question: what they will use it for. A "
+                     "public page lists every data licence WHG recognises, and another the licences of "
+                     "the software WHG runs.",
+             "links": [
+                 {"url": "/licenses/", "label": "Data licences"},
+                 {"url": "/terms_of_use/", "label": "Terms of Use"},
+             ]},
+            {"name": "Persistent identifiers for source-gazetteer records", "stage": "shipped",
+             "body": "A place from one of WHG's source gazetteers has a persistent web address under "
+                     "w3id.org/whg/id/ that anyone can follow, with no account or API key, to the record in "
+                     "WHG. The same addresses for places in contributed datasets are planned to open to "
+                     "everyone with v4.0. WHG's software also has a DOI, so the platform itself can be "
+                     "cited."},
+            {"name": "New gazetteers", "stage": "shipped",
+             "body": "On 18 November 2026 WHG's sources service listed 28 source gazetteers holding "
+                     "50,958,982 place records between them. Among the most recent additions are the "
+                     "historic administrative geographies of England and Wales: registration districts "
+                     "and counties, local government districts and administrative counties from the Great "
+                     "Britain Historical GIS, and 23,177 ancient parishes, townships and places from "
+                     "before 1850, from Kain and Oliver via the Cambridge Group."},
+            {"name": "Platform upgrade", "stage": "shipped", "staff": True,
+             "body": "Nothing here is visible to users; it is what keeps everything else possible. On 18 "
+                     "November 2026 WHG moved to Python 3.12 and Django 5.2, the current long-term-support "
+                     "release, replacing versions that had reached the end of their support. The site now "
+                     "runs on a new server with a current long-term-support operating system, in a "
+                     "container image built on a current Debian release."},
+            {"name": "An experimental MCP server", "stage": "shipped", "staff": True,
+             "body": "A read-only Model Context Protocol (MCP) server at mcp.whgazetteer.org lets AI "
+                     "assistants search WHG's public data and fetch public place records, through the same "
+                     "public services everyone else uses and within tight limits. It went live on 18 "
+                     "November 2026 and is not yet announced or documented on the site, so it is listed "
+                     "here as a staff note only."},
         ],
     },
     {
         "heading": "On the horizon",
-        "note": "The direction we're heading — shared for planning, not as committed release dates.",
+        "note": "The direction we're heading, shared for planning, not as committed release dates.",
         "items": [
-            {"name": "Joining the Open Metadata Exchange (with ISKME)", "stage": "horizon", "version": "3.4",
-             "body": "Exploratory work to make WHG a node in the Open Metadata Exchange (OME) — a "
-                     "peer-to-peer metadata-sharing network, an ISKME initiative. WHG would feed its "
-                     "place/entity metadata into the network and, in a later phase, extend its reconciliation "
-                     "service to query the federated metadata, enriching matches with links, alternate "
-                     "spellings, and context contributed by peer nodes. Our OME node is packaged and ready; "
-                     "we're awaiting the next stage of OME's own development. Targeted for v3.4."},
+            {"name": "WHG v4.0, and PLATO", "stage": "horizon", "version": "4.0",
+             "body": "The beta features above that carry a v4.0 label are planned to reach everyone "
+                     "together, as one release, expected in early 2027 after a period of beta testing; "
+                     "that is a direction, not a fixed date. v4.0 runs on WHG's existing platform rather "
+                     "than replacing it. Its data model is written up as PLATO, the Place Attestation "
+                     "Ontology, published by Pelagios: PLATO formalises the model developed for WHG v4, "
+                     "and is itself still described as experimental.",
+             "links": [{"url": PLATO_URL, "label": "PLATO"}]},
+            {"name": "Downloading the source gazetteers", "stage": "horizon",
+             "body": "In the Atlas, the download button is switched off for the source gazetteers WHG "
+                     "holds, as opposed to contributed datasets. Rather than build a stop-gap export, we "
+                     "plan to offer them in PLATO's formats once they have been converted. There is no "
+                     "date yet."},
+            {"name": "Retiring the older API endpoints", "stage": "horizon", "staff": True,
+             "body": "The older v3 endpoints (/api/spatial/, /api/db/, /api/index/, /api/place/ and "
+                     "/api/geojson/) are to be retired at the switch to v4, in favour of the reconciliation "
+                     "service and the Entity API. Deprecation notices for them have been written but are "
+                     "not yet live, and two forms of them still have no documented replacement."},
+            {"name": "Joining the Open Metadata Exchange (with ISKME)", "stage": "horizon",
+             "body": "A proposal to make WHG a node in the Open Metadata Exchange (OME), a peer-to-peer "
+                     "metadata-sharing network that is an ISKME initiative. WHG would feed its place "
+                     "metadata into the network and, in a later phase, let its reconciliation service "
+                     "draw on metadata contributed by other nodes. The proposal is open; there is no "
+                     "target release."},
             {"name": "WHG in more than one language", "stage": "horizon",
-             "body": "WHG's own wording — menus, buttons, help text — is English only, whoever is reading "
-                     "it. A written proposal exists for translating the interface itself, and the map "
-                     "already lets you choose the language its labels are drawn in. The decisions that "
-                     "would commit us to it are still open, so this is a direction rather than a plan: "
-                     "there is no target release."},
-            {"name": "Lesson plans on ISKME's publishing platform", "stage": "horizon", "version": "3.6",
+             "body": "WHG's own wording (menus, buttons, help text) is English only, whoever is reading it. "
+                     "A written proposal exists for translating the interface itself, and the map already "
+                     "lets you choose the language its labels are drawn in. The decisions that would "
+                     "commit us to it are still open, so this is a direction rather than a plan: there is "
+                     "no target release."},
+            {"name": "Lesson plans on ISKME's publishing platform", "stage": "horizon",
              "body": "Separately from OME, we plan to author lesson plans that draw on the World Historical "
                      "Gazetteer using ISKME's publishing platform, in time succeeding WHG's current Lesson "
-                     "Plans resources. A later effort, expected after v3.5."},
-            {"name": "WHG v4 — a graph data model", "stage": "horizon", "version": "4.0",
-             "body": "A re-architecture around a graph model (with the PLATO ontology — Place Attestation "
-                     "Ontology) to represent places, the relationships between them, and how they change over "
-                     "time far more richly than a flat record allows. It is also where places get identifiers "
-                     "that are stable enough to cite and to link to from outside WHG.",
-             "link": {"url": "https://github.com/pelagios/place-attestation-ontology",
-                      "label": "PLATO on the Pelagios GitHub"}},
+                     "Plans resources. This would come after v4.0, possibly as v4.1."},
         ],
     },
 ]
@@ -1104,7 +1133,7 @@ def beta_status_view(request):
         # item for all of them, and a missing key makes Django raise (and log) a
         # VariableDoesNotExist per item per key. `section.note` is optional too, below.
         items = [dict(it, staff=it.get("staff", False),
-                      version=it.get("version", ""), link=it.get("link"),
+                      version=it.get("version", ""), links=it.get("links", []),
                       stage_label=_BETA_STAGE_META[it["stage"]][0],
                       stage_class=_BETA_STAGE_META[it["stage"]][1])
                  for it in sec["items"] if is_staff or not it.get("staff")]
@@ -1115,10 +1144,9 @@ def beta_status_view(request):
         "app_version": settings.APP_VERSION,
         "updated": BETA_STATUS_UPDATED,
         "release_note": (
-            "Map your Data and the browser-first Collections tools are two halves of one new, unified "
-            "Workbench — targeted for v3.3 (alongside Citations). They're intended to reach "
-            "everyone together, as a single coordinated release, so the current workflow and its "
-            "documentation can be refreshed in one step rather than piecemeal."
+            "Map your Data is moving out of WHG and into PLATO Tools (see below). Most of the other beta "
+            "features are planned to reach everyone together as WHG v4.0, expected in early 2027; that "
+            "is a direction, not a fixed date."
         ),
     })
 
@@ -1126,8 +1154,8 @@ def beta_status_view(request):
 # ── WHG Analytics (in-house proxy for Plausible) ────────────────────────────────────────────────
 # Staff-only admin tool (dashboard_admin → Tools → "Analytics"). Aggregates all three WHG Plausible
 # sites (main / blog / docs) via the Stats API into one page — top-line metrics, a visitors-over-time
-# chart, and breakdowns (pages/sources/countries/devices/browsers/OS) — plus the Map-your-Data usage
-# funnel (main-site custom events) at the bottom. Replaces both the external Plausible link and the
+# chart, and breakdowns (pages/sources/countries/devices/browsers/OS) — plus the usage funnel of
+# WHG's built-in (beta) Map your Data (main-site custom events) at the bottom. Replaces both the external Plausible link and the
 # CE-absent funnel feature. Multi-site fetches run concurrently.
 PLAUSIBLE_PERIODS = [('7d', 'Last 7 days'), ('30d', 'Last 30 days'), ('month', 'This month'),
                      ('6mo', 'Last 6 months'), ('12mo', 'Last 12 months')]
@@ -1155,7 +1183,18 @@ MYD_OTHER = [
     ('MyD: shared', 'Created a read-only share link'),
     ('MyD: shared open', 'Opened a shared project'),
     ('MyD: conflict', 'Hit a merge conflict'),
+    ('MyD: extract column', 'Extracted places from a text column'),
 ]
+# Map your Data is moving out of WHG into PLATO Tools, which keeps files on the user's computer and
+# looks places up through WHG's API with a beta account's token. The MyD events above come only from
+# WHG's own built-in version (/reconciliation/, beta-gated), so the panel is labelled as that. PLATO
+# Tools runs no tracker that reports here, and WHG cannot yet tell its API calls from any other
+# client's, so nothing on this page measures it. See developer/analytics-map-your-data.md.
+PLATO_TOOLS_URL = 'https://plato.pelagios.org/tools/'
+PLATO_TOOLS_GUIDE_URL = 'https://plato.pelagios.org/guide/tools.html#map-your-data'
+# Below this many importing visitors in a period, step percentages are not shown: with a handful of
+# visitors (often one, and often staff testing) a "100%" or "0%" says nothing about conversion.
+MYD_PCT_MIN_BASE = 20
 
 
 def _plausible_get(path, params, site_id):
@@ -1454,6 +1493,38 @@ def _svg_donut(rows):
     return {'r': r, 'circ': round(circ, 2), 'segs': segs, 'total': total}
 
 
+API_ORIGIN_LABELS = {
+    'plato-tools': 'PLATO Tools (plato.pelagios.org)', 'pelagios': 'pelagios.org', 'whg-site': "WHG's own pages",
+    'whg-docs': 'WHG documentation', 'other-web': 'Another website', 'none': 'No Origin header (script, OpenRefine, curl ...)',
+}
+API_CLIENT_LABELS = {
+    'whg-mcp': 'WHG MCP server', 'openrefine': 'OpenRefine', 'python': 'Python script', 'curl': 'curl', 'postman': 'Postman',
+    'browser': 'Web browser', 'other': 'Other software', 'none': 'No User-Agent',
+}
+
+
+def _api_origin_panel(rows_of, results, period):
+    """API_Call events by `origin` and by `client`, with the denominator: ALL API_Call events in the period.
+    Events sent before the props were added (2026-11-18 deploy) carry neither and appear as 'before tracking'.
+    Self-reported headers: indicative, not authoritative."""
+    total = 0
+    for r in rows_of(('events', PLAUSIBLE_MAIN)):
+        if r.get('name') == 'API_Call':
+            total = r.get('events', 0) or 0
+    def table(prop, labels):
+        rows = [r for r in rows_of(('api_' + prop, PLAUSIBLE_MAIN)) if r.get(prop) not in (None, '(none)', '')]  # Plausible keys the row by the bare prop name
+        tagged = sum(r.get('events', 0) or 0 for r in rows)
+        out = [{'key': r[prop], 'label': labels.get(r[prop], r[prop]),
+                'events': r.get('events', 0) or 0, 'visitors': r.get('visitors', 0) or 0,
+                'pct': round(100 * (r.get('events', 0) or 0) / total, 1) if total else None} for r in rows]
+        out.sort(key=lambda x: -x['events'])
+        return out, tagged
+    origins, tagged = table('origin', API_ORIGIN_LABELS)
+    clients, _ = table('client', API_CLIENT_LABELS)
+    return {'total': total, 'tagged': tagged, 'untagged': max(total - tagged, 0), 'origins': origins, 'clients': clients,
+            'has_data': bool(origins or clients)}
+
+
 @login_required
 def plausible_analyser_view(request):
     if not request.user.is_staff:
@@ -1484,6 +1555,12 @@ def plausible_analyser_view(request):
             'metrics': 'visitors', 'limit': 10}, site)
     tasks[('events', PLAUSIBLE_MAIN)] = ('breakdown', {'period': period, 'property': 'event:name',
         'metrics': 'visitors,events', 'limit': 200}, PLAUSIBLE_MAIN)
+    # API calls by origin / client (api/middleware.py adds the `origin` and `client` props to API_Call; they must
+    # be allow-listed in the Plausible site settings, done 2026-11-18). Not counted in the page's error banner:
+    # an empty answer is the normal state until events carrying the props have arrived.
+    for prop in ('origin', 'client'):
+        tasks[('api_' + prop, PLAUSIBLE_MAIN)] = ('breakdown', {'period': period, 'property': 'event:props:' + prop,
+            'metrics': 'events,visitors', 'filters': 'event:name==API_Call', 'limit': 30}, PLAUSIBLE_MAIN)
 
     from concurrent.futures import ThreadPoolExecutor
     results, errors = {}, []
@@ -1495,8 +1572,8 @@ def plausible_analyser_view(request):
                 results[key] = fut.result()
             except Exception as e:  # noqa: BLE001 - surface any thread error
                 results[key] = (None, str(e))
-    for res in results.values():
-        if res[1]:
+    for key, res in results.items():
+        if res[1] and not (isinstance(key, tuple) and str(key[0]).startswith('api_')):
             errors.append(res[1])
 
     def rows_of(key):
@@ -1633,7 +1710,7 @@ def plausible_analyser_view(request):
         {'title': 'Browsers', 'icon': 'fa-window-maximize', 'donut': _svg_donut(merge('browser', 'browser', 6))},
     ]
 
-    # ── Map your Data funnel (main-site custom events) ──
+    # ── Map your Data funnel: WHG's built-in (beta) version only; see PLATO_TOOLS_URL above ──
     by_name = {r['name']: r for r in rows_of(('events', PLAUSIBLE_MAIN))}
 
     def mk(name, label):
@@ -1643,12 +1720,21 @@ def plausible_analyser_view(request):
 
     funnel = [mk(n, l) for n, l in MYD_FUNNEL]
     base_v = funnel[0]['visitors'] if funnel else 0
+    myd_show_pct = base_v >= MYD_PCT_MIN_BASE
     prev_v = None
     for step in funnel:
-        step['pct'] = round(100 * step['visitors'] / base_v, 1) if base_v else 0
-        step['drop'] = round(100 * (prev_v - step['visitors']) / prev_v, 1) if prev_v else None
+        if myd_show_pct:
+            step['pct'] = round(100 * step['visitors'] / base_v, 1)
+            step['drop'] = round(100 * (prev_v - step['visitors']) / prev_v, 1) if prev_v else None
+        else:
+            step['pct'] = step['drop'] = None
         prev_v = step['visitors']
     others = [mk(n, l) for n, l in MYD_OTHER]
+    # Who can open the built-in version at all (users.models.User.can_access_beta, as a query).
+    myd_beta_accounts = reg.filter(Q(is_staff=True) | Q(is_superuser=True)
+                                   | Q(role__in=('beta_tester', 'superuser'))).count()
+
+    api_origin = _api_origin_panel(rows_of, results, period)
 
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
@@ -1662,6 +1748,9 @@ def plausible_analyser_view(request):
         'country_map': country_map, 'country_colors': country_colors,
         'coverage': coverage,
         'funnel': funnel, 'others': others, 'base_v': base_v,
+        'myd_show_pct': myd_show_pct, 'myd_pct_min_base': MYD_PCT_MIN_BASE,
+        'myd_beta_accounts': myd_beta_accounts, 'api_origin': api_origin,
+        'plato_tools_url': PLATO_TOOLS_URL, 'plato_tools_guide_url': PLATO_TOOLS_GUIDE_URL,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
     })
@@ -1690,12 +1779,14 @@ def dashboard_admin_view(request):
     # section = request.GET.get('section')
     section = request.GET.get('section', 'datasets')
 
-    #
-    datasets = get_objects_for_user(Dataset, request.user, {}, is_admin)
+    # Not rendered by dashboard_admin.html (its tabs load the *_list views by AJAX), but kept
+    # in the context and scoped like them: an EMPTY filter_criteria made
+    # get_objects_for_user return every object to a non-admin.
+    datasets = get_objects_for_user(Dataset, request.user, {'owner': user}, is_admin)
     datasets = datasets.order_by('create_date')
 
-    collections = get_objects_for_user(Collection, request.user, {}, is_admin)
-    areas = get_objects_for_user(Area, request.user, {'type': ['predefined', 'country']}, is_admin)
+    collections = get_objects_for_user(Collection, request.user, {'owner': user}, is_admin)
+    areas = get_objects_for_user(Area, request.user, {'owner': user}, is_admin)
     groups_member = CollectionGroup.objects.filter(members__user=user)
     groups_led = CollectionGroup.objects.filter(owner=user)
 

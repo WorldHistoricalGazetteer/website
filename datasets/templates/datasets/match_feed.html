@@ -13,6 +13,8 @@
      data-dataset="{{ ds.id }}" data-tab="{{ tab }}" data-record="{{ record }}"
      data-candidates-url="{% url 'datasets:ds_matches_candidates' ds.id %}"
      data-review-url="{% url 'datasets:ds_matches_review' ds.id %}"
+     data-location-url="{% url 'datasets:ds_matches_location' ds.id %}"
+     data-owner="{% if ds.owner_id == request.user.pk %}1{% endif %}"
      data-search-url="{% url 'datasets:ds_matches_search' ds.id %}"
      data-progress-url="{% url 'datasets:ds_matches_progress' ds.id %}"
      data-regenerate-url="{% url 'datasets:ds_matches_regenerate' ds.id %}">

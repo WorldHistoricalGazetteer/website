@@ -221,8 +221,37 @@ def check_link_resolution(ds):
                   detail="Not checked automatically yet.")
 
 
+def check_locations_added(ds):
+    """place#350: locations the owner adopted from a matched place (count per source) or placed on
+    the map, so an editor sees them as such, never as the contributor's own. Information only."""
+    from datasets.location_adoption import ADOPTED, PLACED, source_label
+    from places.models import PlaceGeom
+    by_source, placed, ids = {}, 0, []
+    for place_id, j in (PlaceGeom.objects.filter(place__dataset=ds.label, jsonb__provenance__kind__in=(ADOPTED, PLACED))
+                        .values_list("place_id", "jsonb")):
+        p = (j or {}).get("provenance") or {}
+        ids.append(place_id)
+        if p.get("kind") == ADOPTED:
+            ns = str(p.get("source") or "")
+            by_source[ns] = by_source.get(ns, 0) + 1
+        else:
+            placed += 1
+    total = placed + sum(by_source.values())
+    parts = []
+    if by_source:
+        parts.append("adopted from a matched place: " + ", ".join(
+            f"{source_label(ns)} {n}" for ns, n in sorted(by_source.items())))
+    if placed:
+        parts.append(f"placed on the map by the owner: {placed}")
+    out = _check("locations_added", "Locations added after upload", "ok", total,
+                 ("; ".join(parts) + ".") if parts else "None.", _examples(ids))
+    out["by_source"], out["placed"] = by_source, placed
+    return out
+
+
 CHECKS = (check_records, check_licence, check_placeholders, check_duplicates, check_geometry,
-          check_temporal, check_attribution, check_sensitivity, check_link_resolution)
+          check_temporal, check_attribution, check_sensitivity, check_link_resolution,
+          check_locations_added)
 
 
 # ---------------------------------------------------------------------------

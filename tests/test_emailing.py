@@ -44,7 +44,7 @@ class NewUserTestCase(TestCase):
   def setUp(self):
     """ Create a user and dataset to test with."""
     self.user = User.objects.create_user(username='testuser',
-                                         name='Test User',
+                                         given_name='Test', surname='User',
                                          email='test@example.com',
                                          password='testpassword')
     self.user.save()
@@ -62,71 +62,55 @@ class NewUserTestCase(TestCase):
     print('dataset created in setUp', self.dataset.label)
 
   def test_new_user_emails(self):
-    """ Test that two emails are sent when a new user registers."""
+    """ When a user's email is verified they get ONE welcome email; the admin notice goes to Zulip
+    (it used to be a second email, but admin notifications moved to Zulip)."""
+    mail.outbox = []
     self.user.email_confirmed = True
-    self.user.save()
-    print('user.email_confirmed', self.user.email_confirmed)
-    # 1 from added dataset, 2 from new user
-    self.assertEqual(len(mail.outbox), 3)
+    with patch('whgmail.messaging.zulip_notification') as zulip:
+      self.user.save()
 
-    # check subjects
-    self.assertEqual(mail.outbox[0].subject, 'New Dataset Created')
-    self.assertEqual(mail.outbox[1].subject, 'Welcome to WHG')
-    self.assertEqual(mail.outbox[2].subject, 'New User Registered')
+    self.assertEqual([m.subject for m in mail.outbox], ['Welcome to WHG'])
+    self.assertIn(self.user.email, mail.outbox[0].to)
+    topics = [c.kwargs.get('topic') for c in zulip.call_args_list]
+    self.assertEqual(topics.count('New User Registered'), 1)
 
-    # check bodies
-    self.assertIn('has created a new dataset', mail.outbox[0].body)
-    self.assertIn('Thank you for registering', mail.outbox[1].body)
-    self.assertIn('just registered', mail.outbox[2].body)
-
-    # check recipient
-    self.assertIn(self.user.email, mail.outbox[1].to)
-    self.assertEqual(mail.outbox[2].to, settings.EMAIL_TO_ADMINS)
+    self.assertIn('Thank you for registering', mail.outbox[0].body)
 
     mail.outbox.clear()
 
 class ContactFormTestCase(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', email='testuser@example.com',
-                                             password='testpass')
+                                             password='testpass', given_name='Test', surname='User')
         self.client.login(username='testuser', password='testpass')
 
-    @patch("captcha.fields.CaptchaField.clean")
-    def test_contact_form_email(self, validate_method):
-      print('test in sus.argv?', 'test' in sys.argv)
-
+    def test_contact_form_goes_to_zulip(self):
+      """The contact form posts to Zulip (stream website-contact), not by email, and an authenticated
+      user does not face the Turnstile check. (This used to be two emails behind a django-captcha field.)"""
       data = {
           'name': 'Test User',
           'username': 'testuser',
           'subject': 'Test Subject',
           'from_email': 'testuser@example.com',
           'message': 'Test Message',
-          'captcha': 'XXX'
       }
-      validate_method.return_value = True
-      response = self.client.post(reverse('contact'), data=data)
+      with patch('main.views.zulip_notification') as zulip:
+        response = self.client.post(reverse('contact-modal'), data=data)
 
-      # if response.status_code != 200:
-      if response.status_code != 302:
-        print("Form errors:", response.context['form'].errors)
-
-      self.assertEqual(response.status_code, 302)  # form submission was successful
-      self.assertEqual(len(mail.outbox), 2) # 2 emails? (1 to user, 1 to admins)
-
-      self.assertEqual(mail.outbox[0].to, settings.EMAIL_TO_ADMINS)
-      self.assertEqual(mail.outbox[0].subject, 'Contact form submission')
-      self.assertIn('on the subject of', mail.outbox[0].body )
-
-      self.assertEqual(mail.outbox[1].to, ['testuser@example.com'])
-      self.assertEqual(mail.outbox[1].subject, 'Message to WHG received')
-      self.assertIn('We received your message',mail.outbox[1].body)
+      self.assertEqual(response.status_code, 200)
+      self.assertEqual(response.json(), {'success': True})
+      self.assertEqual(len(mail.outbox), 0)
+      zulip.assert_called_once()
+      self.assertEqual(zulip.call_args.kwargs['stream'], 'website-contact')
+      self.assertEqual(zulip.call_args.kwargs['topic'], 'Test Subject')
+      self.assertIn('Test Message', zulip.call_args.args[0])
 
 
 class DatasetSignalTestCase(TestCase):
     def setUp(self):
       with transaction.atomic():
         # Create a user, dataset, place and placegeom for testing
-        self.user = User.objects.create_user(username='testuser', name="Test User", email='testuser@example.com',
+        self.user = User.objects.create_user(username='testuser', given_name='Test', surname='User', email='testuser@example.com',
                                              password='testpass')
         self.dataset = Dataset.objects.create(owner=self.user, title='Test Dataset',
                                               label='test_dataset', ds_status=None)
@@ -146,17 +130,16 @@ class DatasetSignalTestCase(TestCase):
         print(self.place_geom.geom)
 
     def test_send_new_dataset_email(self):
-        self.dataset.ds_status = 'uploaded'
-        self.dataset.save()
+        # The admin notice for a newly uploaded dataset goes to Zulip now, not to email.
+        with patch('whgmail.messaging.zulip_notification') as zulip:
+            self.dataset.ds_status = 'uploaded'
+            self.dataset.save()
 
-        # Check if an email was sent
-        self.assertEqual(len(mail.outbox), 1)
-
-        # Check the subject of the email
-        self.assertEqual(mail.outbox[0].subject, 'New Dataset Created')
-
-        # Check recipient is admins
-        self.assertEqual(mail.outbox[0].to, settings.EMAIL_TO_ADMINS)
+        topics = [c.kwargs.get('topic') for c in zulip.call_args_list]
+        self.assertEqual(topics.count('New Dataset Created'), 1)
+        notice = zulip.call_args_list[topics.index('New Dataset Created')].args[0]
+        self.assertIn(self.dataset.label, notice)
+        self.assertEqual(len(mail.outbox), 0)
 
         # Clear the outbox
         mail.outbox = []
@@ -214,8 +197,9 @@ class DatasetSignalTestCase(TestCase):
       # Check the subject of the email
       self.assertEqual(mail.outbox[0].subject, 'WHG reconciliation review complete')
 
-      # Check recipient is admins
-      self.assertEqual(mail.outbox[0].to, [settings.EMAIL_TO_ADMINS])
+      # The owner is told, with the editorial address on bcc
+      self.assertEqual(mail.outbox[0].to, [self.user.email])
+      self.assertIn(settings.DEFAULT_FROM_EDITORIAL, mail.outbox[0].bcc)
 
     # def test_handle_indexed(self):
     #   # Clear the outbox

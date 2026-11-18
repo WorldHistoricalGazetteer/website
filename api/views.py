@@ -1174,12 +1174,16 @@ class UserAreaFeaturesView(APIView):
 class UserList(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    # name + email of every account: staff only (anonymous could list all users until 2026-11-18)
+    permission_classes = [permissions.IsAdminUser]
 
 
 @extend_schema(exclude=True)
 class UserDetail(generics.RetrieveAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    # name + email of every account: staff only (anonymous could list all users until 2026-11-18)
+    permission_classes = [permissions.IsAdminUser]
 
 
 """

@@ -1,5 +1,5 @@
 ## WHG v3 Tests 
-_as of 23 June 2024_; more to come
+_as of 17 November 2026: the stale tests were repaired or removed (see git log); not every test file is listed here_
 
 ### tests/test_place_collections.py
 #### 1. [CollectionTestCase(PlaceCollection)](tests/test_place_collections.py)
@@ -21,19 +21,17 @@ _as of 23 June 2024_; more to come
       - check, uncheck 'nominated' flag
     - test_withdraw_collection_from_group
 
-### tests/test_places.py
-#### 4. [DatasetAndPlaceModelsTest](tests/test_places.py)
+### tests/test_models.py
+#### 4. [DatasetAndPlaceModelsTest](tests/test_models.py)
     - test_dataset
     - test_place
 
-### tests/test_validation.py
-#### 5. [DatasetCreateViewTest (validation: upload, insert)](tests/test_validation.py)
+### 5. [DatasetCreateViewTest (validation: upload, insert)](tests/test_validation.py)
     - test_validate_delim
     - test_ds_insert_delim (fails on missing_field.tsv)
     - test_end_to_end (fails)
 
-### tests/test_wdlocal.py
-#### 6. [ReconWD](tests/test_wdlocal.py)
+### 6. [ReconWD](tests/test_wdlocal.py)
     - test_ReconWDlocal (fails)
 
 ### tests/test_tilesets.py
@@ -52,10 +50,9 @@ _as of 23 June 2024_; more to come
     - test_handle_indexed
 
 #### 10. [ContactFormTestCase](tests/test_emailing.py)
-    - test_contact_form_email
+    - test_contact_form_goes_to_zulip
 
-### tests/test_dumps.py
-#### 11. [DumpDistinctToponymsCommandTest](tests/test_dumps.py)
+### 11. [DumpDistinctToponymsCommandTest](tests/test_dumps.py)
     - test_command_output_zip
 
 ### tests/test_reviewer.py

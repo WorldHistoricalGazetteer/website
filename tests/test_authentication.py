@@ -15,7 +15,8 @@ User = get_user_model()
 
 class UserPasswordResetTest(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='testuser', email='test@example.com', password='old_password')
+        self.user = User.objects.create_user(username='testuser', email='test@example.com', password='old_password',
+                                             given_name='Test', surname='User')
 
     def test_password_reset(self):
       # Access and submit the password reset form
@@ -23,7 +24,9 @@ class UserPasswordResetTest(TestCase):
       self.client.post(reverse('accounts:password_reset'), {'email': 'test@example.com'})
 
       # Extract token and uidb64 from the email
-      email_body = mail.outbox[2].body
+      reset_mails = [m for m in mail.outbox if '/reset/' in m.body]
+      self.assertTrue(reset_mails, 'no password-reset email was sent: %r' % [m.subject for m in mail.outbox])
+      email_body = reset_mails[-1].body
       uidb64, token = re.search(r'/reset/(\w+)/(\w+-\w+)/', email_body).groups()
 
       # Access the password reset confirmation page
@@ -35,8 +38,12 @@ class UserPasswordResetTest(TestCase):
 
       # Submit the new password form
       new_password = '84Hfdh@LFNP8iLe'
+      # Django redirects the emailed link to a session-backed `set-password` URL; the new password
+      # must be POSTed there, not to the tokenised URL (which only stores the token and redirects).
+      set_password_url = response.redirect_chain[-1][0] if response.redirect_chain else reverse(
+        'accounts:password_reset_confirm', kwargs={'uidb64': uidb64, 'token': token})
       response = self.client.post(
-        reverse('accounts:password_reset_confirm', kwargs={'uidb64': uidb64, 'token': token}),
+        set_password_url,
         {
           'csrfmiddlewaretoken': csrf_token,
           'new_password1': new_password,
@@ -65,37 +72,18 @@ class AuthenticationActionsTestCase(TestCase):
             'password': 'testpassword123',
             'email': 'testuser@example.com',
             'affiliation': 'test affiliation',
-            'name': 'Test User',
+            'given_name': 'Test',
+            'surname': 'User',
             'role': 'normal',
         }
         self.user = User.objects.create_user(**self.user_data)
 
-    def test_registration(self):
-      # Define the registration data
-      registration_data = {
-        'username': 'newuser',
-        'password1': 'newpassword123',
-        'password2': 'newpassword123',
-        'email': 'newuser@example.com',
-        'affiliation': 'new affiliation',
-        'name': 'New User',
-        'role': 'normal',
-      }
-
-      # Send a POST request to the registration view
-      response = self.client.post(reverse('accounts:register'), registration_data)
-
-      # Check that the response is a redirect
-      self.assertEqual(response.status_code, 302)
-
-      # Retrieve the new user
-      new_user = User.objects.get(username=registration_data['username'])
-
-      # Check the new user's attributes
-      self.assertEqual(new_user.email, registration_data['email'])
-      self.assertEqual(new_user.affiliation, registration_data['affiliation'])
-      self.assertEqual(new_user.name, registration_data['name'])
-      self.assertEqual(new_user.role, registration_data['role'])
+    def test_registration_is_closed(self):
+      # Self-registration was withdrawn: accounts are ORCiD-first (place#73), so the old
+      # `accounts:register` route no longer exists. Keep a check that it stays closed.
+      from django.urls import NoReverseMatch
+      with self.assertRaises(NoReverseMatch):
+        reverse('accounts:register')
 
     def test_login(self):
       # Define the login data

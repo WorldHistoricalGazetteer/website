@@ -14,14 +14,16 @@ class CollectionGroupScenarioTestCase(TestCase):
     def setUp(self):
         # Create a User instance
         self.user = get_user_model().objects.create_user(
+            username='testuser',
             email='testuser@somewhere.com',
-            name='testuser',
+            given_name='Test', surname='User',
             password='12345')
 
         # Create a group leader user
         self.group_leader = get_user_model().objects.create_user(
+            username='group_leader',
             email='testleader@somewhere.com',
-            name='group_leader',
+            given_name='Group', surname='Leader',
             password='12345')
 
         # create 'group_leaders' group, add group_leader to it
@@ -46,24 +48,17 @@ class CollectionGroupScenarioTestCase(TestCase):
         self.collection.group = self.collection_group
         self.collection.save()
 
-        # create a dataset with label 'owt10' (page load requires it)
-        self.dataset = Dataset.objects.create(
-            owner=self.user,
-            title='Test Dataset',
-            label='owt10',
-            description='Test Dataset Description')
-
         # add the user to the group
         CollectionGroupUser.objects.create(
             collectiongroup=self.collection_group, user=self.user, role='member')
 
         # Log in the user
         self.member = Client()
-        self.member.login(username=self.user.email, password='12345')
+        self.member.login(username=self.user.username, password='12345')
 
         # log in the group leader
         self.leader = Client()
-        self.leader.login(username=self.group_leader.email, password='12345')
+        self.leader.login(username=self.group_leader.username, password='12345')
 
     def test_submit_collection_to_group(self):
         print('status before', self.collection.status)
@@ -91,8 +86,11 @@ class CollectionGroupScenarioTestCase(TestCase):
         response_user = self.member.get(reverse('collection:place-collection-update',
                                            args=[self.collection.id]))
 
-        # Check that the user's builder page displays 'submitted...'
-        self.assertContains(response_user, f'Submitted to class: {self.collection_group.title}')
+        # Check that the user's builder page shows the group status and links to the group's info page
+        # (it used to print 'Submitted to class: <title>'; the builder was redesigned since)
+        self.assertContains(response_user, 'Status</span>: &nbsp;group</p>')
+        self.assertContains(response_user, reverse('collection:collection-group-detail',
+                                                   args=[self.collection_group.id]))
 
         # Check that collection appears in "#coll_list" on leader's CollectionGroup update page
         coll_list = soup_group.find(id='coll_list')
@@ -116,7 +114,7 @@ class CollectionGroupScenarioTestCase(TestCase):
 
         response_user = self.member.get(reverse('collection:place-collection-update',
                                            args=[self.collection.id]))
-        self.assertContains(response_user, 'Status: reviewed')
+        self.assertContains(response_user, 'Status</span>: &nbsp;reviewed</p>')
 
 
         """
@@ -132,17 +130,28 @@ class CollectionGroupScenarioTestCase(TestCase):
 
         response_user = self.member.get(reverse('collection:place-collection-update',
                                            args=[self.collection.id]))
-        self.assertContains(response_user, 'Status: group')
+        self.assertContains(response_user, 'Status</span>: &nbsp;group</p>')
 
 
         """
         leader checks 'nominated' checkbox
         """
-        # JS collection_status() function changes the status to 'nominated'
+        # A group leader cannot set 'nominated' through status-update any more (only 'group'/'reviewed'):
+        # it is refused and nothing changes...
         response = self.leader.post(reverse('collection:status-update'), {
             'status': 'nominated',
             'coll': self.collection.id,
         })
+        self.assertEqual(response.status_code, 400)
+        self.collection.refresh_from_db()
+        self.assertEqual(self.collection.status, 'group')
+
+        # ...nominating goes through the dedicated `nominator` endpoint
+        response = self.leader.post(reverse('collection:nominator'), {
+            'nominated': 'true',
+            'coll': self.collection.id,
+        })
+        self.assertEqual(response.status_code, 200)
         self.collection.refresh_from_db()
 
         # collection status to 'nominated'
@@ -151,7 +160,7 @@ class CollectionGroupScenarioTestCase(TestCase):
         # check status on member's collection update page
         response_user = self.member.get(reverse('collection:place-collection-update',
                                            args=[self.collection.id]))
-        self.assertContains(response_user, 'Status: nominated')
+        self.assertContains(response_user, 'Status</span>: &nbsp;nominated</p>')
 
 
         """
@@ -170,7 +179,7 @@ class CollectionGroupScenarioTestCase(TestCase):
         # check status on member's collection update page
         response_user = self.member.get(reverse('collection:place-collection-update',
                                            args=[self.collection.id]))
-        self.assertContains(response_user, 'Status: reviewed')
+        self.assertContains(response_user, 'Status</span>: &nbsp;reviewed</p>')
 
     def test_withdraw_collection_from_group(self):
         response = self.member.post(reverse('collection:group-connect'), {
@@ -203,13 +212,15 @@ class CollectionGroupTestCase(TestCase):
         # Create a User instance
         User = get_user_model()
         self.user = User.objects.create_user(
-            name='testuser',
+            username='testuser',
+            given_name='Test', surname='User',
             email='testuser@foo.com',
             password='12345')
 
         # Create a group leader user
         self.group_leader = User.objects.create_user(
-            name='group_leader',
+            username='group_leader',
+            given_name='Group', surname='Leader',
             email='testleader@foo.com',
             password='12345')
 
@@ -275,6 +286,10 @@ class CollectionGroupTestCase(TestCase):
         # Use the ordinary user and the collection created in setUp
         user = self.user
         collection = self.collection
+
+        # Submitting needs the requester to be a member of the target group
+        CollectionGroupUser.objects.create(
+            collectiongroup=self.collection_group, user=user, role='member')
 
         # Log in the user
         self.client = Client()

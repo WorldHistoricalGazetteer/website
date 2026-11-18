@@ -528,6 +528,14 @@ class CollectionGroup(models.Model):
             return True
         return self.owner_id is not None and self.owner_id == user.id
 
+    def user_can_view(self, user):
+        """True if ``user`` may see this group's detail page: its leader, staff/admins
+        (``user_can_manage``) and its members. The public face of a group is its gallery
+        page, not this one."""
+        if self.user_can_manage(user):
+            return True
+        return _is_authenticated(user) and self.members.filter(user_id=user.id).exists()
+
     @staticmethod
     def user_can_create(user):
         """True if ``user`` may create a group: the same people the dashboards offer the

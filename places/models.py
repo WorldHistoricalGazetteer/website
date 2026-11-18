@@ -178,7 +178,9 @@ from placetypes.models import Type  # noqa: F401, E402
 
 # NB in LPF spec but seldom used
 class Source(models.Model):
-    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # NULL for a source gazetteer's own row, which ``PlaceGeom.geom_src`` points at when a
+    # dataset owner adopts a matched place's location (place#350): an authority has no WHG owner.
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
     # TODO: force unique...turn into slug or integer
     src_id = models.CharField(max_length=30, unique=True)  # contributor's id
     uri = models.URLField(null=True, blank=True)

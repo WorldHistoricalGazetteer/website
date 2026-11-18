@@ -45,6 +45,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase, override_settings
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 
 from api.tests_edop_client import AREA, FakeTransport
 from places import locus_registry as registry
@@ -124,8 +125,10 @@ class LocusLayoutBrowserTests(LiveServerTestCase):
                 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = cls._prev_async_unsafe
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         from api.models import GazetteerRegistryEntry
         from django.core.cache import cache
         cache.clear()

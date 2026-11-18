@@ -50,6 +50,7 @@ import unittest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase
+from utils.livetest import drain_live_server_threads, stub_type_vocab
 from django.urls import reverse
 
 try:
@@ -141,8 +142,10 @@ class NavbarOverflowTests(LiveServerTestCase):
                 os.environ["DJANGO_ALLOW_ASYNC_UNSAFE"] = cls._prev_async_unsafe
         finally:
             super().tearDownClass()
+            drain_live_server_threads()
 
     def setUp(self):
+        stub_type_vocab(self)  # /types/vocab/ would query the real ES (see utils/livetest.py)
         User = get_user_model()
         self.beta = User.objects.create_user(
             username="navbar_beta", email="navbar-beta@example.org", password="pw",

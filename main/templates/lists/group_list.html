@@ -1,65 +1,75 @@
-{% if groups %}
- <div class="list-options" style="display: flex; justify-content: flex-end; align-items: center;">
-    <div style="display: flex; align-items: center; margin-right: auto;">
-      <div class="input-group" style="width: 300px; max-width: 100%; margin-left:47px;">
-        <input type="text" id="title_search" class="filter-input form-control"
-               name="title" value="{{ filters.title|default_if_none:'' }}"
-               placeholder="Search titles">
-        <span class="input-group-text">
-          <button class="btn btn-outline-secondary border-0 bg-transparent p-0"
-                  type="button" id="clear_search">
-            <i class="fa fa-times"></i>
-          </button>
-        </span>
-      </div>
-    </div>
-    <div style="display: flex; align-items: center; margin-right: 35px;">
-      {% if filtered %}
-        <span class="me-3"><a href="javascript:location.reload()">reset</a></span>
-      {% endif %}
-      <label for="group_type" style="margin-right: 10px;">Category:</label>
-      <select id="group_type" class="filter-input form-control" name="type">
-          <option value="all" {% if filters.ds_status == 'all' %}selected{% endif %}>All</option>
-          <option value="class" {% if filters.ds_status == 'class' %}selected{% endif %}>Class</option>
-          <option value="workshop" {% if filters.ds_status == 'workshop' %}selected{% endif %}>Workshop</option>
+{% comment %}
+  Admin dashboard > Collection groups tab, loaded by AJAX from /main/groups_list/<sort>/<order>/.
+  The toolbar stays visible when nothing matches, so a filter can be changed back.
+{% endcomment %}
+<div class="list-toolbar list-options">
+  <div class="input-group input-group-sm list-search">
+    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted" aria-hidden="true"></i></span>
+    <input type="text" id="title_search" class="filter-input form-control"
+           name="title" value="{{ filters.title|default_if_none:'' }}"
+           placeholder="Search titles" aria-label="Search titles">
+    <button class="btn btn-outline-secondary" type="button" id="clear_search" aria-label="Clear search">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="list-filters">
+    {% if filtered %}
+      <a class="btn btn-sm btn-link px-1" href="javascript:location.reload()">Reset filters</a>
+    {% endif %}
+    <div class="list-filter">
+      <label for="group_type">Category</label>
+      <select id="group_type" class="filter-input form-select form-select-sm" name="type">
+        <option value="all" {% if filters.type == 'all' %}selected{% endif %}>All</option>
+        <option value="class" {% if filters.type == 'class' %}selected{% endif %}>Class</option>
+        <option value="workshop" {% if filters.type == 'workshop' %}selected{% endif %}>Workshop</option>
       </select>
     </div>
-    <div style="display: flex; align-items: center;">
-      <select id="owners" class="filter-input form-control" name="owner">
-        <option value="all" {% if filters.ds_status == 'all' %}selected{% endif %}>All owners</option>
-        <option value="staff" {% if filters.ds_status == 'staff' %}selected{% endif %}>Staff</option>
-        <option value="users" {% if filters.ds_status == 'users' %}selected{% endif %}>Users</option>
+    <div class="list-filter">
+      <label for="owners">Owner</label>
+      <select id="owners" class="filter-input form-select form-select-sm" name="owner">
+        <option value="all" {% if filters.owner == 'all' %}selected{% endif %}>All owners</option>
+        <option value="staff" {% if filters.owner == 'staff' %}selected{% endif %}>Staff</option>
+        <option value="users" {% if filters.owner == 'users' %}selected{% endif %}>Users</option>
       </select>
     </div>
   </div>
+</div>
+{% if groups %}
   <div class="scrollable-table">
-    <table id="table_groups"class="table table-striped">
-  <thead class="small">
-    <th>id</th>
-    <th>title <i class="fa fa-sort ms-1" data-id="title" ref="asc"></i></th>
-    <th class="text-center">members <i class="fa fa-sort ms-1" data-id="count" ref="asc"></i></th>
-    <th>created <i class="fa fa-sort ms-1" data-id="created" ref="asc"></i></th>
-    <th>category <i class="fa fa-sort ms-1" data-id="type" ref="asc"></i></th>
-    <th>owner <i class="fa fa-sort ms-1" data-id="owner" ref="asc"></i></th>
-  </thead>
-  <tbody>
-    {% for group in groups %}
+    <table id="table_groups" class="table table-hover table-sm admin-list-table">
+    <thead>
       <tr>
-        <td>{{ group.id }}</td>
-        <td>
-          <a href="{% url 'collection:collection-group-detail' group.id %}">{{ group.title }}</a>
-          <span class="float-end me-2"><a href="{% url 'collection:collection-group-update' group.id%}">
-            <i class="fa fa-edit"></i></a></span>
-        </td>
-        <td class="text-center">{{ group.members.count }}</td>
-        <td class="small">{{ group.created|date:"Y-m-d" }}</td>
-        <td>{{ group.type }}</td>
-        <td>{{ group.owner }}</td>
+        <th class="col-id">id</th>
+        <th>title<i class="fa fa-sort" data-id="title" ref="asc"></i></th>
+        <th class="col-num">members<i class="fa fa-sort" data-id="count" ref="asc"></i></th>
+        <th>created<i class="fa fa-sort" data-id="created" ref="asc"></i></th>
+        <th>category<i class="fa fa-sort" data-id="type" ref="asc"></i></th>
+        <th>owner<i class="fa fa-sort" data-id="owner" ref="asc"></i></th>
       </tr>
-    {% endfor %}
-  </tbody>
-</table>
+    </thead>
+    <tbody>
+      {% for group in groups %}
+        <tr>
+          <td class="col-id">{{ group.id }}</td>
+          <td>
+            <div class="title-cell">
+              <a href="{% url 'collection:collection-group-detail' group.id %}">{{ group.title }}</a>
+              <a class="row-edit" href="{% url 'collection:collection-group-update' group.id %}" title="Edit group"
+                 data-bs-toggle="tooltip" aria-label="Edit group"><i class="fa-solid fa-pen-to-square"></i></a>
+            </div>
+          </td>
+          <td class="col-num">{{ group.members.count }}</td>
+          <td class="col-date">{{ group.created|date:"Y-m-d" }}</td>
+          <td><span class="badge text-bg-light border status-badge">{{ group.type }}</span></td>
+          <td class="text-nowrap">{{ group.owner }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
   </div>
 {% else %}
-    <p>No groups meet those criteria, <a href="javascript:location.reload()">refresh</a></p>
+  <div class="list-empty">
+    <i class="fa-solid fa-users" aria-hidden="true"></i>
+    No collection groups match these filters. <a href="javascript:location.reload()">Reset</a>
+  </div>
 {% endif %}
