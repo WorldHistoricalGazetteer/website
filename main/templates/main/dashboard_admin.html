@@ -1,120 +1,261 @@
 {% extends "main/base_webpack.html" %}
 {% load lifecycle_tags %}
 
+{% block title %}<title>WHG · Admin dashboard</title>{% endblock %}
+
 {% block extra_head %}
 <style>
+  /* ---- page frame ------------------------------------------------------ */
+  .admin-dash { max-width: 1320px; font-variant-numeric: lining-nums; }  /* Raleway's old-style digits read as 'o' */
+  .admin-dash__header { gap: .25rem 1rem; }
+  .admin-dash__title { font-size: 1.5rem; font-weight: 500; margin: 0; }
+
+  /* Tabs: one line at every width; scroll sideways on a phone instead of wrapping. */
+  #adminTabs.admin-tabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+  .admin-tabs .nav-link { white-space: nowrap; display: flex; align-items: center; gap: .4rem; }
+  .admin-tabs .nav-link i { font-size: .9em; opacity: .75; }
+  .admin-tabs .nav-link.active i { opacity: 1; }
+  @media (max-width: 575.98px) {
+    #adminTabs .nav-link { padding: .5rem .6rem; font-size: .95rem; }
+    #adminTabs .nav-link i { display: none; }
+  }
+
+  .admin-pane {
+    border: 1px solid var(--bs-border-color);
+    border-top: 0;
+    border-radius: 0 0 .5rem .5rem;
+    background: #fff;
+    padding: 1.25rem;
+    min-height: 16rem;       /* no collapse/jump while a list loads */
+  }
+  @media (max-width: 575.98px) { .admin-pane { padding: .75rem; } }
+
+  .admin-loading { min-height: 12rem; }
+
+  /* ---- Tools tab ------------------------------------------------------- */
+  .admin-card { border-radius: .5rem; }
+  .admin-card .card-header { background: #f8f9fa; font-weight: 500; }
+  .admin-card .card-header small { font-weight: 400; }
+  .list-group .tool-link { display: flex; align-items: flex-start; gap: .75rem; padding: .7rem 1rem; }
+  .tool-link__icon {
+    flex: 0 0 2rem; height: 2rem; border-radius: .4rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--bs-primary-bg-subtle, #cfe2ff); color: var(--bs-primary, #0d6efd);
+  }
+  .tool-link__name { font-weight: 500; }
+  .tool-link__desc { font-size: .85rem; color: var(--bs-secondary-color, #6c757d); }
+  .tool-link:hover .tool-link__name { text-decoration: underline; }
+  .grace-row { display: grid; grid-template-columns: 7.5rem 1fr; gap: .25rem 1rem; padding: .55rem 0;
+               border-bottom: 1px solid var(--bs-border-color-translucent, rgba(0,0,0,.075)); }
+  .grace-row:last-child { border-bottom: 0; }
+  .grace-row__label { font-weight: 500; color: var(--bs-secondary-color, #6c757d); font-size: .875rem; padding-top: .1rem; }
+  .grace-row__links a { white-space: nowrap; }
+  .grace-row__links .sep { color: #adb5bd; margin: 0 .1rem; }
+  @media (max-width: 575.98px) { .grace-row { grid-template-columns: 1fr; } }
+
+  /* ---- list tabs (partials in main/templates/lists/) ------------------- */
+  .list-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; margin-bottom: .75rem; }
+  .list-toolbar .list-search { flex: 1 1 16rem; max-width: 24rem; }
+  .list-toolbar .list-filters { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; margin-left: auto; }
+  .list-toolbar .list-filter { display: flex; align-items: center; gap: .4rem; }
+  .list-toolbar .list-filter label { margin: 0; font-size: .875rem; color: var(--bs-secondary-color, #6c757d); white-space: nowrap; }
+  .list-toolbar .form-select { width: auto; min-width: 8.5rem; }
+  @media (max-width: 575.98px) {
+    .list-toolbar .list-search { max-width: none; flex-basis: 100%; }
+    .list-toolbar .list-filters { margin-left: 0; width: 100%; }
+    .list-toolbar .list-filter { flex: 1 1 9rem; }
+    .list-toolbar .form-select { flex: 1 1 auto; min-width: 0; }
+  }
+
   .scrollable-table {
     max-height: 550px;
-    overflow-y: auto;
+    overflow: auto;
     display: block;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .375rem;
   }
+  table.admin-list-table { margin-bottom: 0; min-width: 720px; border-collapse: separate; border-spacing: 0; }
+  /* Qualified (0,1,2) so the sticky header keeps its background over Bootstrap's transparent cell bg. */
+  .admin-list-table thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: #f8f9fa;
+    font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .02em;
+    color: #495057; white-space: nowrap;
+    border-bottom: 1px solid var(--bs-border-color);
+    padding-top: .6rem; padding-bottom: .6rem;
+  }
+  table.admin-list-table tbody td { font-size: .9rem; vertical-align: middle; border-bottom: 1px solid var(--bs-border-color-translucent, #eee); }
+  .admin-list-table tbody tr:last-child td { border-bottom: 0; }
+  .admin-list-table .fa-sort { cursor: pointer; color: #adb5bd; margin-left: .25rem; }
+  .admin-list-table .fa-sort:hover { color: var(--bs-primary, #0d6efd); }
+  .admin-list-table .col-id { width: 4.5rem; color: #6c757d; font-variant-numeric: lining-nums tabular-nums; }
+  .admin-list-table .col-num { text-align: end; padding-right: 1.25rem; font-variant-numeric: lining-nums tabular-nums; }
+  .admin-list-table .col-date { white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+  .admin-list-table .title-cell { min-width: 14rem; display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .admin-list-table .row-edit { color: #6c757d; flex: none; }
+  .admin-list-table .row-edit:hover { color: var(--bs-primary, #0d6efd); }
+  .admin-list-table .status-badge { font-weight: 500; }
+
+  .list-empty { text-align: center; padding: 3rem 1rem; color: var(--bs-secondary-color, #6c757d); }
+  .list-empty i { font-size: 1.75rem; opacity: .5; display: block; margin-bottom: .5rem; }
 </style>
 {% endblock %}
 
 {% block content %}
 
-  <div id="container" class="container mt-2">
-    <div class="ps-2"><h5>Admin Dashboard</h5></div>
+  <div id="container" class="container admin-dash mt-3 mb-5">
+    <div class="admin-dash__header d-flex flex-wrap align-items-baseline mb-3">
+      <h1 class="admin-dash__title">Admin dashboard</h1>
+      <span class="text-muted small">Staff tools and site-wide lists</span>
+    </div>
     {% review_waiting_notice user %}
-    <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+    <ul class="nav nav-tabs admin-tabs" id="adminTabs" role="tablist">
       <li class="nav-item" role="presentation">
-        <a class="nav-link active" id="datasets-tab" data-bs-toggle="tab" href="#datasets" role="tab"
-           ref="dataset" aria-controls="datasets" aria-selected="true">Datasets</a>
+        <a class="nav-link active" id="tools-tab" data-bs-toggle="tab" href="#tools" role="tab"
+           ref="tools" aria-controls="tools" aria-selected="true"><i class="fa-solid fa-toolbox" aria-hidden="true"></i>Tools</a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a class="nav-link" id="datasets-tab" data-bs-toggle="tab" href="#datasets" role="tab"
+           ref="dataset" aria-controls="datasets" aria-selected="false"><i class="fa-solid fa-table-list" aria-hidden="true"></i>Datasets</a>
       </li>
       <li class="nav-item" role="presentation">
         <a class="nav-link" id="collections-tab" data-bs-toggle="tab" href="#collections" role="tab"
-           ref="pcoll" aria-controls="collections" aria-selected="false">Collections</a>
+           ref="pcoll" aria-controls="collections" aria-selected="false"><i class="fa-solid fa-layer-group" aria-hidden="true"></i>Collections</a>
       </li>
       <li class="nav-item" role="presentation">
         <a class="nav-link" id="areas-tab" data-bs-toggle="tab" href="#areas" role="tab" aria-controls="areas"
-           ref="area" aria-selected="false">Areas</a>
+           ref="area" aria-selected="false"><i class="fa-solid fa-draw-polygon" aria-hidden="true"></i>Areas</a>
       </li>
       <li class="nav-item" role="presentation">
         <a class="nav-link" id="collection-groups-tab" data-bs-toggle="tab" href="#groups" role="tab"
-           ref="group" aria-controls="groups" aria-selected="false">Collection Groups</a>
-      </li>
-      <li class="nav-item" role="presentation">
-        <a class="nav-link" id="tools-tab" data-bs-toggle="tab" href="#tools" role="tab"
-           ref="tools" aria-controls="groups" aria-selected="false">Tools</a>
+           ref="group" aria-controls="groups" aria-selected="false"><i class="fa-solid fa-users" aria-hidden="true"></i><span><span class="d-none d-sm-inline">Collection g</span><span class="d-sm-none">G</span>roups</span></a>
       </li>
     </ul>
     <div class="tab-content" id="adminTabsContent">
-      <div class="tab-pane fade show active" id="datasets" role="tabpanel" aria-labelledby="datasets-tab">
-      </div>
-      <div class="tab-pane fade" id="collections" role="tabpanel" aria-labelledby="collections-tab">
-      </div>
-      <div class="tab-pane fade" id="areas" role="tabpanel" aria-labelledby="areas-tab">
-      </div>
-      <div class="tab-pane fade" id="groups" role="tabpanel" aria-labelledby="collection-groups-tab">
-      </div>
-      <div class="tab-pane fade" id="tools" role="tabpanel" aria-labelledby="tools-tab">
-        <div><h5>Tools</h5>
-        <ul>
-          <li><a href="{% url 'announcements-list' %}">Announcements</a></li>
-          <li><a href="/admin">Django admin interface</a></li>
-          <li><a href="{% url 'plausible-analyser' %}">Analytics</a> &mdash; usage stats (all sites) &amp; Map-your-Data funnel</li>
-          <li><a href="https://errors.whgazetteer.org/" target="_blank" rel="noopener">GlitchTip</a> &mdash; error tracking</li>
-          <li><a href="https://chat.whgazetteer.org/" target="_blank" rel="noopener">Zulip</a> &mdash; team chat</li>
-        </ul>
+      <div class="tab-pane fade show active admin-pane" id="tools" role="tabpanel" aria-labelledby="tools-tab">
+        <div class="row g-3">
+          <div class="{% if grace %}col-lg-5{% else %}col-lg-7{% endif %}">
+            <div class="card admin-card h-100">
+              <div class="card-header">Site tools</div>
+              <div class="list-group list-group-flush">
+                <a class="list-group-item list-group-item-action tool-link" href="{% url 'announcements-list' %}">
+                  <span class="tool-link__icon"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i></span>
+                  <span><span class="tool-link__name d-block">Announcements</span>
+                    <span class="tool-link__desc">Site-wide notices on the home page</span></span>
+                </a>
+                <a class="list-group-item list-group-item-action tool-link" href="/admin">
+                  <span class="tool-link__icon"><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i></span>
+                  <span><span class="tool-link__name d-block">Django admin interface</span>
+                    <span class="tool-link__desc">Users, datasets and every model table</span></span>
+                </a>
+                <a class="list-group-item list-group-item-action tool-link" href="{% url 'plausible-analyser' %}">
+                  <span class="tool-link__icon"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
+                  <span><span class="tool-link__name d-block">Analytics</span>
+                    <span class="tool-link__desc">Usage stats (all sites) &amp; Map-your-Data funnel</span></span>
+                </a>
+                <a class="list-group-item list-group-item-action tool-link" href="https://errors.whgazetteer.org/" target="_blank" rel="noopener">
+                  <span class="tool-link__icon"><i class="fa-solid fa-bug" aria-hidden="true"></i></span>
+                  <span><span class="tool-link__name d-block">GlitchTip <i class="fa-solid fa-arrow-up-right-from-square small text-muted ms-1" aria-hidden="true"></i></span>
+                    <span class="tool-link__desc">Error tracking</span></span>
+                </a>
+                <a class="list-group-item list-group-item-action tool-link" href="https://chat.whgazetteer.org/" target="_blank" rel="noopener">
+                  <span class="tool-link__icon"><i class="fa-solid fa-comments" aria-hidden="true"></i></span>
+                  <span><span class="tool-link__name d-block">Zulip <i class="fa-solid fa-arrow-up-right-from-square small text-muted ms-1" aria-hidden="true"></i></span>
+                    <span class="tool-link__desc">Team chat</span></span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {% if grace %}
+          {% comment %}
+            GRACE — the editorial tracker. Its UI is the Django admin, so these are
+            deep links into it. The three badges are the failure modes that happen
+            by nobody noticing: an untriaged public suggestion, a stalled
+            conversation, and an Article 14 notice we owe but have not sent.
+          {% endcomment %}
+          <div class="col-lg-7">
+            <div class="card admin-card h-100" id="grace-card">
+              <div class="card-header d-flex flex-wrap align-items-baseline gap-2">
+                <span>GRACE &mdash; editorial tracker</span>
+                <small class="text-muted">datasets, people, sources, outreach</small>
+              </div>
+              <div class="card-body">
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                  {% if grace.untriaged %}
+                    <a class="btn btn-sm btn-warning"
+                       href="/grace/admin/grace/sourcesuggestion/?triage=untriaged">
+                      <i class="fa-solid fa-inbox me-1" aria-hidden="true"></i>{{ grace.untriaged }} untriaged suggestion{{ grace.untriaged|pluralize }}</a>
+                  {% endif %}
+                  {% if grace.stalled %}
+                    <a class="btn btn-sm btn-danger"
+                       href="/grace/admin/grace/engagement/?stale=stale">
+                      <i class="fa-solid fa-hourglass-half me-1" aria-hidden="true"></i>{{ grace.stalled }} stalled conversation{{ grace.stalled|pluralize }}</a>
+                  {% endif %}
+                  {% if grace.notices_due %}
+                    <a class="btn btn-sm btn-outline-danger"
+                       href="/grace/admin/grace/person/?notice=overdue"
+                       title="GDPR Art. 14 — people we hold details for who have not been told.">
+                      <i class="fa-solid fa-user-shield me-1" aria-hidden="true"></i>{{ grace.notices_due }} privacy notice{{ grace.notices_due|pluralize }} due</a>
+                  {% endif %}
+                  {% if not grace.untriaged and not grace.stalled and not grace.notices_due %}
+                    <span class="badge rounded-pill text-bg-success fw-normal px-3 py-2">
+                      <i class="fa-solid fa-check me-1" aria-hidden="true"></i>Nothing needs attention</span>
+                  {% endif %}
+                </div>
+
+                <div class="grace-row">
+                  <div class="grace-row__label">Pipeline</div>
+                  <div class="grace-row__links">
+                    <a href="/grace/admin/grace/trackeddataset/">Datasets</a>
+                    <span class="text-muted small">({{ grace.datasets }}, of which {{ grace.prospects }} prospect{{ grace.prospects|pluralize }})</span> <span class="sep">&middot;</span> <a href="/grace/admin/grace/sourcesuggestion/">Suggestions</a> <span class="text-muted small">inbox</span>
+                  </div>
+                </div>
+                <div class="grace-row">
+                  <div class="grace-row__label">Catalogue</div>
+                  <div class="grace-row__links">
+                    <a href="/grace/admin/grace/person/">People</a> <span class="text-muted small">({{ grace.people }})</span> <span class="sep">&middot;</span> <a href="/grace/admin/grace/organisation/">Organisations</a> <span class="sep">&middot;</span> <a href="/grace/admin/grace/source/">Sources</a> <span class="text-muted small">({{ grace.sources }})</span> <span class="sep">&middot;</span> <a href="/grace/admin/grace/project/">Projects</a>
+                  </div>
+                </div>
+                <div class="grace-row">
+                  <div class="grace-row__label">Engagement</div>
+                  <div class="grace-row__links">
+                    <a href="/grace/admin/grace/engagement/">Engagements</a> <span class="sep">&middot;</span> <a href="/grace/admin/grace/actionitem/">Action items</a> <span class="sep">&middot;</span> <a href="/grace/admin/grace/interaction/">Interaction log</a>
+                  </div>
+                </div>
+                <div class="grace-row">
+                  <div class="grace-row__label">Content</div>
+                  <div class="grace-row__links">
+                    <a href="/grace/admin/grace/content/">Planned &amp; published items</a>
+                  </div>
+                </div>
+                <div class="grace-row">
+                  <div class="grace-row__label">Everything</div>
+                  <div><a href="/grace/admin/grace/">All GRACE tables</a>, including the
+                    vocabularies <span class="text-muted">&mdash; pick-lists are editable here, no developer needed</span></div>
+                </div>
+                <div class="grace-row">
+                  <div class="grace-row__label">Public</div>
+                  <div><a href="{% url 'grace:suggest' %}">Suggest-a-source form</a>
+                    <span class="text-muted">&mdash; what <code>/contribute/</code> now shows</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
         </div>
-
-        {% if grace %}
-        {% comment %}
-          GRACE — the editorial tracker. Its UI is the Django admin, so these are
-          deep links into it. The three badges are the failure modes that happen
-          by nobody noticing: an untriaged public suggestion, a stalled
-          conversation, and an Article 14 notice we owe but have not sent.
-        {% endcomment %}
-        <div class="mt-4">
-          <h5>GRACE &mdash; editorial tracker
-            <small class="text-muted fw-normal">datasets, people, sources, outreach</small>
-          </h5>
-
-          <p class="mb-2">
-            {% if grace.untriaged %}
-              <a class="btn btn-sm btn-warning me-1"
-                 href="/grace/admin/grace/sourcesuggestion/?triage=untriaged">
-                {{ grace.untriaged }} untriaged suggestion{{ grace.untriaged|pluralize }}</a>
-            {% endif %}
-            {% if grace.stalled %}
-              <a class="btn btn-sm btn-danger me-1"
-                 href="/grace/admin/grace/engagement/?stale=stale">
-                {{ grace.stalled }} stalled conversation{{ grace.stalled|pluralize }}</a>
-            {% endif %}
-            {% if grace.notices_due %}
-              <a class="btn btn-sm btn-outline-danger me-1"
-                 href="/grace/admin/grace/person/?notice=overdue"
-                 title="GDPR Art. 14 — people we hold details for who have not been told.">
-                {{ grace.notices_due }} privacy notice{{ grace.notices_due|pluralize }} due</a>
-            {% endif %}
-            {% if not grace.untriaged and not grace.stalled and not grace.notices_due %}
-              <span class="badge bg-success">Nothing needs attention</span>
-            {% endif %}
-          </p>
-
-          <ul>
-            <li><strong>Pipeline</strong> &mdash;
-              <a href="/grace/admin/grace/trackeddataset/">Datasets</a>
-              ({{ grace.datasets }}, of which {{ grace.prospects }} prospect{{ grace.prospects|pluralize }}) &middot;
-              <a href="/grace/admin/grace/sourcesuggestion/">Suggestions</a> inbox</li>
-            <li><strong>Catalogue</strong> &mdash;
-              <a href="/grace/admin/grace/person/">People</a> ({{ grace.people }}) &middot;
-              <a href="/grace/admin/grace/organisation/">Organisations</a> &middot;
-              <a href="/grace/admin/grace/source/">Sources</a> ({{ grace.sources }}) &middot;
-              <a href="/grace/admin/grace/project/">Projects</a></li>
-            <li><strong>Engagement</strong> &mdash;
-              <a href="/grace/admin/grace/engagement/">Engagements</a> &middot;
-              <a href="/grace/admin/grace/actionitem/">Action items</a> &middot;
-              <a href="/grace/admin/grace/interaction/">Interaction log</a></li>
-            <li><strong>Content</strong> &mdash;
-              <a href="/grace/admin/grace/content/">Planned &amp; published items</a></li>
-            <li><a href="/grace/admin/grace/">All GRACE tables</a>, including the
-              vocabularies &mdash; pick-lists are editable here, no developer needed</li>
-            <li><a href="{% url 'grace:suggest' %}">Public suggest-a-source form</a>
-              &mdash; what <code>/contribute/</code> now shows</li>
-          </ul>
-        </div>
-        {% endif %}
+      </div>
+      <div class="tab-pane fade admin-pane" id="datasets" role="tabpanel" aria-labelledby="datasets-tab">
+        <div class="admin-loading d-flex align-items-center justify-content-center text-muted small">Loading datasets&hellip;</div>
+      </div>
+      <div class="tab-pane fade admin-pane" id="collections" role="tabpanel" aria-labelledby="collections-tab">
+        <div class="admin-loading d-flex align-items-center justify-content-center text-muted small">Loading collections&hellip;</div>
+      </div>
+      <div class="tab-pane fade admin-pane" id="areas" role="tabpanel" aria-labelledby="areas-tab">
+        <div class="admin-loading d-flex align-items-center justify-content-center text-muted small">Loading areas&hellip;</div>
+      </div>
+      <div class="tab-pane fade admin-pane" id="groups" role="tabpanel" aria-labelledby="collection-groups-tab">
+        <div class="admin-loading d-flex align-items-center justify-content-center text-muted small">Loading collection groups&hellip;</div>
       </div>
     </div>
   </div> <!-- .container -->
@@ -163,20 +304,6 @@
       },
     };
 
-    function getFilterValues(tabId) {
-      var titleSearch = $('#' + tabId + ' .title-search').val();
-      var status = $('#' + tabId + ' .status').val(); // Adjust based on tab
-      var owners = $('#' + tabId + ' .owners').val();
-      var types = $('#' + tabId + ' .types').val(); // If applicable
-
-      return {
-        title_search: titleSearch,
-        status: status,
-        owners: owners,
-        types: types,
-      };
-    }
-
     function initializeFilters(tabId) {
       $(document).
         off('change', '#' + tabId + ' .filter-input').
@@ -199,15 +326,12 @@
     }
 
     function initializeSorting(tabId) {
-      console.log('Initializing sorting for ' + tabId);
-      {#console.log('Found .fa-sort elements:', $('#' + tabId + ' .fa-sort').length);#}
       var sortOrders = JSON.parse(localStorage.getItem('sortOrders-' + tabId)) || initialSortOrders[tabId];
-      console.log('sortOrders:', sortOrders);
 
-      {#$('#' + tabId + ' .fa-sort').off('click').on('click', function() {#}
-      $(document).off('click').on('click', '#' + tabId + ' .fa-sort', function() {
+      // Namespaced: a bare off('click') here used to strip every delegated click
+      // handler on the document, including site-wide ones from base.js.
+      $(document).off('click.adminSort').on('click.adminSort', '#' + tabId + ' .fa-sort', function() {
         var columnId = $(this).data('id');
-        console.log('Sorting clicked', columnId);
         var currentSortOrder = sortOrders[columnId];
         var newSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
         sortOrders[columnId] = newSortOrder;
@@ -220,7 +344,7 @@
           $('#' + tabId).empty().html(data);
           initializeSorting(tabId);  // Reinitialize sorting
         }).fail(function() {
-          console.log('AJAX request failed');
+          console.error('Sorting request failed');
         }).always(function() {
           $('#adminTabsContent').stopSpin();
         });
@@ -235,19 +359,35 @@
             loadTabContent(tabId);
         });
 
-        // Determine the initial tab to load
-        // A ?section= in the URL wins over the remembered tab, so a link like
-        // /dashboard_admin/?section=tools opens on the right one.
-        var requested = '{{ section|escapejs }}';
-        var activeTab = requested && $('#adminTabs a[href="#' + requested + '"]').length
-                        ? requested
-                        : sessionStorage.getItem('activeTab');
+        // Which tab to open. Tools is the default (first, and marked active in the
+        // markup). An explicit ?section=<tab> wins, then a #<tab> hash (the Analytics
+        // page links back to #tools), then — only when this page is being reloaded or
+        // revisited with Back/Forward — the tab that was open before.
+        function known(id) { return id && $('#adminTabs a[href="#' + id + '"]').length ? id : null; }
+        var navType = '';
+        try {
+          var nav = performance.getEntriesByType('navigation')[0];
+          navType = nav ? nav.type : '';
+        } catch (e) {}
+        var remembered = null;
+        if (navType === 'reload' || navType === 'back_forward') {
+          try { remembered = sessionStorage.getItem('activeTab'); } catch (e) {}
+        }
+        var activeTab = known('{{ request.GET.section|default:""|escapejs }}')
+                        || known(window.location.hash.substring(1))
+                        || known(remembered);
         if (activeTab) {
             $('#adminTabs a[href="#' + activeTab + '"]').tab('show');
         } else {
             activeTab = $('#adminTabs .nav-link.active').attr('href').substring(1);
         }
         loadTabContent(activeTab);
+
+        // A #<tab> link followed while already on this page
+        $(window).on('hashchange', function() {
+            var tab = known(window.location.hash.substring(1));
+            if (tab) { $('#adminTabs a[href="#' + tab + '"]').tab('show'); window.scrollTo(0, 0); }
+        });
 
         // Scroll to the top of the page
         window.scrollTo(0, 0);
@@ -259,15 +399,10 @@
       if (!currentState[tabId]) {
         return; // bail
       }
-      console.log('Loading tab content for ' + tabId);
-      console.log('currentState:', currentState);
 
       var state = currentState[tabId];
       var url = '/main/' + tabId + '_list/' + state.sort + '/' + state.order + '/';
-      console.log('constructed url: ' + url);
-      console.log('state filters for ' + tabId + ':', JSON.stringify(state.filters));
 
-      {#$.get(url, { filters: state.filters }, function(data) {#}
       $.get(url, filters, function(data) {
         $('#' + tabId).html(data);
         var appliedStatus = "{{ applied_filters.ds_status }}";
@@ -276,9 +411,8 @@
         }
         initializeSorting(tabId);
         initializeFilters(tabId);
-        // Add event listener for clear search button
-        $(document).on('click', '#clear_search', function() {
-          console.log('Clear search clicked');
+        // Clear-search button (namespaced so repeated loads do not stack handlers)
+        $(document).off('click.adminClear').on('click.adminClear', '#clear_search', function() {
           // Clear the input field
           $('#title_search').val('');
 
@@ -292,6 +426,9 @@
 
       }).fail(function(jqXHR, textStatus, errorThrown) {
         console.error('Error loading tab content:', textStatus, errorThrown);
+        $('#' + tabId).html(
+          '<div class="list-empty"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>' +
+          'This list could not be loaded. <a href="javascript:location.reload()">Reload the page</a></div>');
       }).always(function() {
         $('#adminTabsContent').stopSpin();
       });

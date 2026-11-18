@@ -1,27 +1,25 @@
-<!--
-id, title, label, created, format, #rows, ds_status (if)owner
--->
-{% if datasets %}
-  <div class="list-options" style="display: flex; justify-content: flex-end; align-items: center;">
-    <div style="display: flex; align-items: center; margin-right: auto;">
-      <div class="input-group" style="width: 300px; max-width: 100%; margin-left:47px;">
-        <input type="text" id="title_search" class="filter-input form-control"
-               name="title" value="{{ filters.title|default_if_none:'' }}"
-               placeholder="Search titles & owners">
-        <span class="input-group-text">
-          <button class="btn btn-outline-secondary border-0 bg-transparent p-0"
-                  type="button" id="clear_search">
-            <i class="fa fa-times"></i>
-          </button>
-        </span>
-      </div>
-    </div>
-    <div style="display: flex; align-items: center; margin-right: 10px;">
-      {% if filtered %}
-        <span class="me-3"><a href="javascript:location.reload()">reset</a></span>
-      {% endif %}
-      <label for="ds_status" style="margin-right: 10px;">Status:</label>
-      <select id="ds_status" class="filter-input form-control" name="ds_status">
+{% comment %}
+  Admin dashboard > Datasets tab, loaded by AJAX from /main/datasets_list/<sort>/<order>/.
+  Columns: id, title, label, created, #rows, ds_status, (admin) owner.
+  The toolbar stays visible when nothing matches, so a filter can be changed back.
+{% endcomment %}
+<div class="list-toolbar list-options">
+  <div class="input-group input-group-sm list-search">
+    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted" aria-hidden="true"></i></span>
+    <input type="text" id="title_search" class="filter-input form-control"
+           name="title" value="{{ filters.title|default_if_none:'' }}"
+           placeholder="Search titles &amp; owners" aria-label="Search titles and owners">
+    <button class="btn btn-outline-secondary" type="button" id="clear_search" aria-label="Clear search">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="list-filters">
+    {% if filtered %}
+      <a class="btn btn-sm btn-link px-1" href="javascript:location.reload()">Reset filters</a>
+    {% endif %}
+    <div class="list-filter">
+      <label for="ds_status">Status</label>
+      <select id="ds_status" class="filter-input form-select form-select-sm" name="ds_status">
         <option value="all">All</option>
         <option value="uploaded" {% if filters.ds_status == 'uploaded' %}selected{% endif %}>Uploaded</option>
         <option value="reconciling" {% if filters.ds_status == 'reconciling' %}selected{% endif %}>Reconciling</option>
@@ -32,48 +30,48 @@ id, title, label, created, format, #rows, ds_status (if)owner
         <option value="indexed" {% if filters.ds_status == 'indexed' %}selected{% endif %}>Indexed</option>
       </select>
     </div>
-    <div style="display: flex; align-items: center;">
-        <select id="owners" class="filter-input form-control" name="owner">
-          <option value="all" {% if filters.ds_status == 'all' %}selected{% endif %}>All owners</option>
-          <option value="staff" {% if filters.owner == 'staff' %}selected{% endif %}>Staff</option>
-          <option value="contributors" {% if filters.owner == 'contributors' %}selected{% endif %}>Contributors</option>
-        </select>
-      </div>
+    <div class="list-filter">
+      <label for="owners">Owner</label>
+      <select id="owners" class="filter-input form-select form-select-sm" name="owner">
+        <option value="all" {% if filters.owner == 'all' %}selected{% endif %}>All owners</option>
+        <option value="staff" {% if filters.owner == 'staff' %}selected{% endif %}>Staff</option>
+        <option value="contributors" {% if filters.owner == 'contributors' %}selected{% endif %}>Contributors</option>
+      </select>
+    </div>
   </div>
+</div>
+{% if datasets %}
   <div class="scrollable-table">
-    <table id="table_ds" class="table table-striped">
-    <thead class="small strong">
-    <th>id<i class="fa fa-sort ms-1" data-id='id'></i></th>
-    <th>title <i class="fa fa-sort ms-1" data-id='title'></i></th>
-    <th>label <i class="fa fa-sort ms-1" data-id='label'></i></th>
-    <th>created <i class="fa fa-sort ms-1" data-id='create_date' title="UTC"></i></th>
-    <th># rows<i class="fa fa-sort ms-1" data-id='numrows'></i></th>
-    <th>status <i class="fa fa-sort ms-1" data-id='ds_status'></i></th>
-    <th>owner <i class="fa fa-sort ms-1" data-id='owner'></i></th>
+    <table id="table_ds" class="table table-hover table-sm admin-list-table">
+    <thead>
+      <tr>
+        <th class="col-id">id<i class="fa fa-sort" data-id='id'></i></th>
+        <th>title<i class="fa fa-sort" data-id='title'></i></th>
+        <th>label<i class="fa fa-sort" data-id='label'></i></th>
+        <th>created<i class="fa fa-sort" data-id='create_date' title="UTC"></i></th>
+        <th class="col-num"># rows<i class="fa fa-sort" data-id='numrows'></i></th>
+        <th>status<i class="fa fa-sort" data-id='ds_status'></i></th>
+        <th>owner<i class="fa fa-sort" data-id='owner'></i></th>
+      </tr>
     </thead>
     <tbody>
     {% for d in datasets %}
       {% if d.places.count > 0 %}
       <tr class="place-row">
-        <td>{{ d.id }}</td>
+        <td class="col-id">{{ d.id }}</td>
         <td>
-          <a href="{% url 'datasets:ds_places' d.id %}" title="Dataset browse" rel="tooltip">
-            {{ d.title }}</a>
-          <span class="float-end">
-            <a href="{% url 'datasets:ds_status' d.id %}">
-              <i class="fa fa-edit"></i>
-            </a>
-          </span>
+          <div class="title-cell">
+            <a href="{% url 'datasets:ds_places' d.id %}" title="Browse places" data-bs-toggle="tooltip">{{ d.title }}</a>
+            <a class="row-edit" href="{% url 'datasets:ds_status' d.id %}" title="Dataset status page"
+               data-bs-toggle="tooltip" aria-label="Dataset status page"><i class="fa-solid fa-pen-to-square"></i></a>
+          </div>
         </td>
-        <td>{% if d.core == True %}
-          {{ d.label }} <span class="corerow"> (core)</span>
-        {% else %}{{ d.label }}{% endif %}
-        </td>
-        <td class="small">{{ d.create_date|date:"Y-m-d" }}</td>
-        <td>{{ d.places.count }}</td>
-        <td>{{ d.ds_status }}</td>
+        <td class="text-nowrap">{{ d.label }}{% if d.core == True %} <span class="badge rounded-pill text-bg-warning fw-normal">core</span>{% endif %}</td>
+        <td class="col-date">{{ d.create_date|date:"Y-m-d" }}</td>
+        <td class="col-num">{{ d.places.count }}</td>
+        <td><span class="badge text-bg-light border status-badge">{{ d.ds_status|default:"—" }}</span></td>
         {% if is_admin %}
-          <td>{{ d.owner.username|truncatechars:20 }}</td>
+          <td class="text-nowrap">{{ d.owner.username|truncatechars:20 }}</td>
         {% endif %}
       </tr>
       {% endif %}
@@ -82,8 +80,8 @@ id, title, label, created, format, #rows, ds_status (if)owner
   </table>
   </div>
 {% else %}
-  <p>No datasets meet those criteria, <a href="javascript:location.reload()">refresh</a></p>
+  <div class="list-empty">
+    <i class="fa-solid fa-table-list" aria-hidden="true"></i>
+    No datasets match these filters. <a href="javascript:location.reload()">Reset</a>
+  </div>
 {% endif %}
-{% block extra_js %}
-  <script type="text/javascript"></script>
-{% endblock %}

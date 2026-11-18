@@ -1,110 +1,105 @@
-{% if collections %}
-  <div class="list-options" style="display: flex; justify-content: flex-end; align-items: center;">
-    <div style="display: flex; align-items: center; margin-right: auto;">
-      <div class="input-group" style="width: 300px; max-width: 100%; margin-left:47px;">
-        <input type="text" id="title_search" class="filter-input form-control"
-               name="title" value="{{ filters.title|default_if_none:'' }}"
-               placeholder="Search titles & owners">
-        <span class="input-group-text">
-          <button class="btn btn-outline-secondary border-0 bg-transparent p-0"
-                  type="button" id="clear_search">
-            <i class="fa fa-times"></i>
-          </button>
-        </span>
-      </div>
-    </div>
-     <div style="display: flex; align-items: center; margin-right: 10px;">
-      {% if filtered %}
-        <span class="me-3"><a href="javascript:location.reload()">reset</a></span>
-      {% endif %}
-      <label for="coll_class" style="margin-right: 10px;">Type:</label>
-      <select id="coll_class" class="filter-input form-control" name="class">
+{% comment %}
+  Admin dashboard > Collections tab, loaded by AJAX from /main/collections_list/<sort>/<order>/.
+  The toolbar stays visible when nothing matches, so a filter can be changed back.
+{% endcomment %}
+<div class="list-toolbar list-options">
+  <div class="input-group input-group-sm list-search">
+    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted" aria-hidden="true"></i></span>
+    <input type="text" id="title_search" class="filter-input form-control"
+           name="title" value="{{ filters.title|default_if_none:'' }}"
+           placeholder="Search titles &amp; owners" aria-label="Search titles and owners">
+    <button class="btn btn-outline-secondary" type="button" id="clear_search" aria-label="Clear search">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="list-filters">
+    {% if filtered %}
+      <a class="btn btn-sm btn-link px-1" href="javascript:location.reload()">Reset filters</a>
+    {% endif %}
+    <div class="list-filter">
+      <label for="coll_class">Type</label>
+      <select id="coll_class" class="filter-input form-select form-select-sm" name="class">
         <option value="all" {% if filters.class == 'all' %}selected{% endif %}>All</option>
         <option value="place" {% if filters.class == 'place' %}selected{% endif %}>Place</option>
         <option value="dataset" {% if filters.class == 'dataset' %}selected{% endif %}>Dataset</option>
       </select>
     </div>
-    <div style="display: flex; align-items: center; margin-right: 10px;">
-      <label for="coll_status" style="margin-right: 10px;">Status:</label>
-      <select id="coll_status" class="filter-input form-control" name="status">
-        <optgroup label="">
-          <option value="all" {% if filters.status == 'all' %}selected{% endif %}>All</option>
-          <option value="sandbox" {% if filters.status == 'sandbox' %}selected{% endif %}>Sandbox</option>
-          <option value="demo" {% if filters.status == 'demo' %}selected{% endif %}>Demo</option>
-        </optgroup>
-        <optgroup label="">
-          <option value="group" {% if filters.status == 'group' %}selected{% endif %}>Group</option>
-          <option value="reviewed" {% if filters.status == 'reviewed' %}selected{% endif %}>Reviewed</option>
-          <option value="nominated" {% if filters.status == 'nominated' %}selected{% endif %}>Nominated</option>
-          <option value="published" {% if filters.status == 'published' %}selected{% endif %}>Published</option>
-        </optgroup>
+    <div class="list-filter">
+      <label for="coll_status">Status</label>
+      <select id="coll_status" class="filter-input form-select form-select-sm" name="status">
+        <option value="all" {% if filters.status == 'all' %}selected{% endif %}>All</option>
+        <option value="sandbox" {% if filters.status == 'sandbox' %}selected{% endif %}>Sandbox</option>
+        <option value="demo" {% if filters.status == 'demo' %}selected{% endif %}>Demo</option>
+        <option value="group" {% if filters.status == 'group' %}selected{% endif %}>Group</option>
+        <option value="reviewed" {% if filters.status == 'reviewed' %}selected{% endif %}>Reviewed</option>
+        <option value="nominated" {% if filters.status == 'nominated' %}selected{% endif %}>Nominated</option>
+        <option value="published" {% if filters.status == 'published' %}selected{% endif %}>Published</option>
       </select>
     </div>
-    <div style="display: flex; align-items: center;">
-      <select id="owners" class="filter-input form-control" name="owner">
+    <div class="list-filter">
+      <label for="owners">Owner</label>
+      <select id="owners" class="filter-input form-select form-select-sm" name="owner">
         <option value="all" {% if filters.owner == 'all' %}selected{% endif %}>All owners</option>
         <option value="staff" {% if filters.owner == 'staff' %}selected{% endif %}>Staff</option>
         <option value="contributors" {% if filters.owner == 'contributors' %}selected{% endif %}>Contributors</option>
       </select>
     </div>
   </div>
+</div>
+{% if collections %}
   <div class="scrollable-table">
-    <table id="table_collections"class="table table-striped">
-    <thead class="small">
-      <th>id <i class="fa fa-sort ms-1" data-id='id'></i></th>
-      <th>title <i class="fa fa-sort ms-1" data-id='title'></i></th>
-      <th>count</th>
-      <th>type <i class="fa fa-sort ms-1" data-id='collection_class'></i></th>
-      <th>created <i class="fa fa-sort ms-1" data-id='create_date'></i></th>
-      <th>status <i class="fa fa-sort ms-1" data-id='status'></i></th>
-      <th>owner <i class="fa fa-sort ms-1" data-id='owner'></i></th>
+    <table id="table_collections" class="table table-hover table-sm admin-list-table">
+    <thead>
+      <tr>
+        <th class="col-id">id<i class="fa fa-sort" data-id='id'></i></th>
+        <th>title<i class="fa fa-sort" data-id='title'></i></th>
+        <th class="col-num">count</th>
+        <th>type<i class="fa fa-sort" data-id='collection_class'></i></th>
+        <th>created<i class="fa fa-sort" data-id='create_date'></i></th>
+        <th>status<i class="fa fa-sort" data-id='status'></i></th>
+        <th>owner<i class="fa fa-sort" data-id='owner'></i></th>
+      </tr>
     </thead>
     <tbody>
       {% for c in collections %}
         <tr class="place-row">
-          <td>{{ c.id }}</td> <!-- id -->
+          <td class="col-id">{{ c.id }}</td>
           <td>
-            {% if c.collection_class == 'place' %}
-              <a href="{% url 'collection:place-collection-browse' c.id %}">{{ c.title }}</a>
-            {% elif c.collection_class == 'dataset' %}
-              <a href="{% url 'collection:ds-collection-browse' c.id %}">{{ c.title }}</a>
-            {% else %}
-              {{ c.title }}
-            {% endif %}
-            <span class="float-end me-2">
+            <div class="title-cell">
               {% if c.collection_class == 'place' %}
-                <a href="{% url 'collection:place-collection-update' c.id %}">
-                  <i class="fa fa-edit"></i>
-                </a>
+                <a href="{% url 'collection:place-collection-browse' c.id %}">{{ c.title }}</a>
+                <a class="row-edit" href="{% url 'collection:place-collection-update' c.id %}" title="Edit collection"
+                   data-bs-toggle="tooltip" aria-label="Edit collection"><i class="fa-solid fa-pen-to-square"></i></a>
               {% elif c.collection_class == 'dataset' %}
-                <a href="{% url 'collection:ds-collection-update' c.id %}">
-                  <i class="fa fa-edit"></i>
-                </a>
+                <a href="{% url 'collection:ds-collection-browse' c.id %}">{{ c.title }}</a>
+                <a class="row-edit" href="{% url 'collection:ds-collection-update' c.id %}" title="Edit collection"
+                   data-bs-toggle="tooltip" aria-label="Edit collection"><i class="fa-solid fa-pen-to-square"></i></a>
               {% else %}
-                {{ c.title }}
+                <span>{{ c.title }}</span>
               {% endif %}
-            </span>
-          </td> <!-- title -->
-          <td>
+            </div>
+          </td>
+          <td class="col-num text-nowrap">
             {% if c.collection_class == 'place' %}
-              {{ c.annos.count }} places
+              {{ c.annos.count }} place{{ c.annos.count|pluralize }}
             {% elif c.collection_class == 'dataset' %}
-              {{ c.datasets.count }} datasets
-{#              {{ c.count }}#}
+              {{ c.datasets.count }} dataset{{ c.datasets.count|pluralize }}
             {% else %}
-              0  {# Fallback in case neither condition is met #}
+              0
             {% endif %}
           </td>
-          <td>{{ c.collection_class }}</td> <!-- type -->
-					<td class="small">{{ c.create_date|date:"Y-m-d" }}</td> <!-- create date for now -->
-          <td>{{ c.status }}</td> <!-- status -->
-          <td>{{ c.owner.username }}</td> <!-- owner -->
+          <td>{{ c.collection_class }}</td>
+          <td class="col-date">{{ c.create_date|date:"Y-m-d" }}</td>
+          <td><span class="badge text-bg-light border status-badge">{{ c.status|default:"—" }}</span></td>
+          <td class="text-nowrap">{{ c.owner.username }}</td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
   </div>
 {% else %}
-    <p>No collections met that criteria, <a href="javascript:location.reload()">refresh</a></p>
+  <div class="list-empty">
+    <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+    No collections match these filters. <a href="javascript:location.reload()">Reset</a>
+  </div>
 {% endif %}
-

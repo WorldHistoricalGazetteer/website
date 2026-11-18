@@ -1,70 +1,72 @@
-<!--
-id, owner, title, type, title, description, ccodes, geojson, created
--->
-
-{% if areas %}
-  <div class="list-options" style="display: flex; justify-content: flex-end; align-items: center;">
-    <div style="display: flex; align-items: center; margin-right: auto;">
-      <div class="input-group" style="width: 300px; max-width: 100%; margin-left:47px;">
-        <input type="text" id="title_search" class="filter-input form-control"
-               name="title" value="{{ filters.title|default_if_none:'' }}"
-               placeholder="Search titles and descriptions">
-        <span class="input-group-text">
-          <button class="btn btn-outline-secondary border-0 bg-transparent p-0"
-                  type="button" id="clear_search">
-            <i class="fa fa-times"></i>
-          </button>
-        </span>
-      </div>
-    </div>
-    <div style="display: flex; align-items: center; margin-right: 10px;">
-      {% if filtered %}
-        <span class="me-3"><a href="javascript:location.reload()">reset</a></span>
-      {% endif %}
-      <label for="area_type" style="margin-right: 10px;">Type:</label>
-      <select id="area_type" class="filter-input form-control" name="type">
+{% comment %}
+  Admin dashboard > Areas tab, loaded by AJAX from /main/areas_list/<sort>/<order>/.
+  User-created areas only (ccodes, copied, drawn).
+  The toolbar stays visible when nothing matches, so a filter can be changed back.
+{% endcomment %}
+<div class="list-toolbar list-options">
+  <div class="input-group input-group-sm list-search">
+    <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted" aria-hidden="true"></i></span>
+    <input type="text" id="title_search" class="filter-input form-control"
+           name="title" value="{{ filters.title|default_if_none:'' }}"
+           placeholder="Search titles &amp; descriptions" aria-label="Search titles and descriptions">
+    <button class="btn btn-outline-secondary" type="button" id="clear_search" aria-label="Clear search">
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+    </button>
+  </div>
+  <div class="list-filters">
+    {% if filtered %}
+      <a class="btn btn-sm btn-link px-1" href="javascript:location.reload()">Reset filters</a>
+    {% endif %}
+    <div class="list-filter">
+      <label for="area_type">Type</label>
+      <select id="area_type" class="filter-input form-select form-select-sm" name="type">
         <option value="all" {% if filters.type == 'all' %}selected{% endif %}>All</option>
         <option value="drawn" {% if filters.type == 'drawn' %}selected{% endif %}>Drawn</option>
         <option value="ccodes" {% if filters.type == 'ccodes' %}selected{% endif %}>Countries</option>
       </select>
     </div>
-    <div style="display: flex; align-items: center;">
-      <select id="owners" class="filter-input form-control" name="owner">
+    <div class="list-filter">
+      <label for="owners">Owner</label>
+      <select id="owners" class="filter-input form-select form-select-sm" name="owner">
         <option value="all" {% if filters.owner == 'all' %}selected{% endif %}>All owners</option>
         <option value="staff" {% if filters.owner == 'staff' %}selected{% endif %}>Staff</option>
         <option value="contributors" {% if filters.owner == 'contributors' %}selected{% endif %}>Contributors</option>
       </select>
     </div>
   </div>
+</div>
+{% if areas %}
   <div class="scrollable-table">
-    <table id="table_ds" class="table table-striped">
-    <thead class="small strong">
-      <th>id <i class="fa fa-sort ms-1" data-id="id" ref="asc"></i></th>
-      <th>title <i class="fa fa-sort ms-1" data-id="title" ref="asc"></i></th>
-      <th>created <i class="fa fa-sort ms-1" data-id="created" ref="asc" title="UTC"></i></th>
-      <th>description <i class="fa fa-sort ms-1" data-id="description" ref="asc"></i></th>
-      <th>type <i class="fa fa-sort ms-1" data-id="type" ref="asc"></i></th>
-      <th>owner <i class="fa fa-sort ms-1" data-id="owner" ref="asc"></i></th>
+    <table id="table_areas" class="table table-hover table-sm admin-list-table">
+    <thead>
+      <tr>
+        <th class="col-id">id<i class="fa fa-sort" data-id="id" ref="asc"></i></th>
+        <th>title<i class="fa fa-sort" data-id="title" ref="asc"></i></th>
+        <th>created<i class="fa fa-sort" data-id="created" ref="asc" title="UTC"></i></th>
+        <th>description<i class="fa fa-sort" data-id="description" ref="asc"></i></th>
+        <th>type<i class="fa fa-sort" data-id="type" ref="asc"></i></th>
+        <th>owner<i class="fa fa-sort" data-id="owner" ref="asc"></i></th>
+      </tr>
     </thead>
     <tbody>
       {% for item in areas %}
         <tr class="place-row">
-          <td>{{ item.id }}</td>
-          <td>
-            <a href="{% url 'areas:area-update' item.id %}" rel="tooltip">
-            {{ item.title }}</a>
-          </td>
-          <td class="small">{{ item.created|date:"Y-m-d" }}</td>
-          <td>{{ item.description|truncatechars:40 }}</td>
-          <td>{{ item.type }}</td>
-	        {% if is_admin %}
-        	  <td>{{ item.owner.name }}</td>
-	        {% endif %}
+          <td class="col-id">{{ item.id }}</td>
+          <td><a href="{% url 'areas:area-update' item.id %}">{{ item.title }}</a></td>
+          <td class="col-date">{{ item.created|date:"Y-m-d" }}</td>
+          <td class="text-muted small" title="{{ item.description }}">{{ item.description|truncatechars:40 }}</td>
+          <td><span class="badge text-bg-light border status-badge">{{ item.type }}</span></td>
+          {% if is_admin %}
+            <td class="text-nowrap">{{ item.owner.name }}</td>
+          {% endif %}
         </tr>
       {% endfor %}
     </tbody>
   </table>
   </div>
 {% else %}
-    <p>No areas meet those criteria, <a href="javascript:location.reload()">refresh</a></p>
+  <div class="list-empty">
+    <i class="fa-solid fa-draw-polygon" aria-hidden="true"></i>
+    No areas match these filters. <a href="javascript:location.reload()">Reset</a>
+  </div>
 {% endif %}
