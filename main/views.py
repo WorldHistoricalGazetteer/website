@@ -1088,8 +1088,11 @@ BETA_STATUS_SECTIONS = [
             {"name": "Retiring the older API endpoints", "stage": "horizon", "staff": True,
              "body": "The older v3 endpoints (/api/spatial/, /api/db/, /api/index/, /api/place/ and "
                      "/api/geojson/) are to be retired at the switch to v4, in favour of the reconciliation "
-                     "service and the Entity API. Deprecation notices for them have been written but are "
-                     "not yet live, and two forms of them still have no documented replacement."},
+                     "service and the Entity API. Since 18 November 2026 they carry a deprecation notice in "
+                     "their responses and Deprecation and Link headers, with no retirement date yet; "
+                     "/api/spatial/ now returns a point and bounding box by default (geometry=full for "
+                     "the old output) and matches places wholly inside the circle. Two forms of them still "
+                     "have no documented replacement."},
             {"name": "Joining the Open Metadata Exchange (with ISKME)", "stage": "horizon",
              "body": "A proposal to make WHG a node in the Open Metadata Exchange (OME), a peer-to-peer "
                      "metadata-sharing network that is an ISKME initiative. WHG would feed its place "
