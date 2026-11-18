@@ -48,8 +48,9 @@ class AboutPagesTests(TestCase):
         html = self.client.get("/about/").content.decode()
         self.assertIn('id="funding"', html)
         self.assertIn("Funding and awards", html)
-        # The SVG logo has no intrinsic size, so without a cap it fills its whole column.
-        self.assertRegex(html, r'whg_logo\.svg[^>]*style="max-width: 120px;"')
+        # No logo in the page body (it is in the menu bar already; the SVG had no intrinsic size and
+        # filled its whole column).
+        self.assertNotIn('alt="The World Historical Gazetteer"', html)
         self.assertIn("PW‑253719‑17", html)
         self.assertIn("Digital Humanities Advancement Grant", html)
         self.assertIn("Best DH Tool or Suite of Tools Award", html)
