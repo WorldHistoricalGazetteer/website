@@ -93,9 +93,9 @@
                                 <td>{{ object.id }}
                                     {% if user.is_authenticated %}(<a href="/entity/place:{{ object.id }}/api" target="_blank"
                                         rel="noopener" class="lpf-record-link">Linked Places record</a>)
-                                    {% else %}<span class="text-muted small lpf-record-signin">(Linked Places record:
+                                    {% else %}<span class="text-muted small lpf-record-signin">(The machine-readable Linked Places record needs a free API token:
                                         <a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}">sign in</a>
-                                        or use an API token)</span>
+                                        to get one)</span>
                                     {% endif %}
                                 </td>
                             </tr>
