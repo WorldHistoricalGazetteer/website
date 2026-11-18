@@ -26,7 +26,7 @@ from areas.models import Area
 from .forms import CommentModalForm, ContactForm, AnnouncementForm, VolunteerForm, InviteForm
 
 logger = get_task_logger(__name__)
-from collection.models import Collection, CollectionGroup
+from collection.models import Collection, CollectionGroup, CollectionGroupUser
 from datasets.models import Dataset
 from datasets.tasks import testAdd
 from .models import Announcement, Link, DownloadFile, Comment
@@ -231,14 +231,35 @@ def get_objects_for_user(model, user, filter_criteria, is_admin=False, extra_fil
     return objects
 
 
+# The four dashboard list views below (/main/<name>_list/<sort>/<order>/, loaded by AJAX into
+# the dashboard_admin tabs) show 'my' objects: whg_admins see everything; any other logged-in
+# user sees only what they own or collaborate on (groups: lead or belong to). Until 2026-11-18
+# they had no login check and collections/areas/groups started from .objects.all(), so an
+# anonymous request listed every sandbox collection. Admin-ness deliberately stays
+# whg_admins-only (as dashboard_redirect decides who gets this dashboard); widening it to
+# api.dataset_access.user_sees_every_dataset (staff/superuser/whg_team) would newly show
+# those users everyone's objects. Tests: main/tests_list_visibility.py.
+def _is_list_admin(user):
+    return user.groups.filter(name='whg_admins').exists()
+
+
+def _groups_for_user(user, is_admin):
+    if is_admin:
+        return CollectionGroup.objects.all()
+    return CollectionGroup.objects.filter(
+        Q(owner=user) | Q(id__in=CollectionGroupUser.objects.filter(user=user)
+                          .values('collectiongroup_id')))
+
+
+@login_required
 def area_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     text_fields = ['title', 'description', 'type', 'owner']
 
-    # only user-created areas
-    areas = Area.objects.filter(type__in=['ccodes', 'copied', 'drawn'])
+    # only user-created areas (ccodes, copied, drawn); non-admins only their own
+    areas = get_objects_for_user(Area, request.user, {'owner': request.user}, is_admin)
 
     # Sort based on the parameters
     if sort and order:
@@ -285,10 +306,11 @@ def area_list(request, sort='', order=''):
     return render(request, 'lists/area_list.html', context)
 
 
+@login_required
 def dataset_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     datasets = get_objects_for_user(Dataset, request.user, {'owner': request.user}, is_admin)
     text_fields = ['title', 'label', 'status', 'owner']
 
@@ -348,13 +370,15 @@ def dataset_list(request, sort='', order=''):
     return render(request, 'lists/dataset_list.html', context)
 
 
+@login_required
 def collection_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     text_fields = ['title', 'type', 'status', 'owner']
 
-    collections = Collection.objects.all()
+    # owned + collaborated (CollectionUser) for non-admins; everything for whg_admins
+    collections = get_objects_for_user(Collection, request.user, {'owner': request.user}, is_admin)
     # collections = collections.annotate(recent_log_timestamp=Max('log__timestamp')).order_by('recent_log_timestamp')
     #
     # collections = collections.annotate(
@@ -428,13 +452,15 @@ def collection_list(request, sort='', order=''):
     return render(request, 'lists/collection_list.html', context)
 
 
+@login_required
 def group_list(request, sort='', order=''):
     filters = request.GET
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
+    is_admin = _is_list_admin(request.user)
     text_fields = ['title', 'category', 'owner']
 
-    groups = CollectionGroup.objects.all()
+    # led (owner) or belonged to (CollectionGroupUser) for non-admins
+    groups = _groups_for_user(request.user, is_admin)
 
     if sort and order:
         if sort == 'owner':
@@ -471,7 +497,7 @@ def group_list(request, sort='', order=''):
             'section': 'groups',
             'filtered': True,
             'filters': {
-                'type': request.GET.get('class', ''),
+                'type': request.GET.get('type', ''),
                 'owner': request.GET.get('owner', ''),
                 'title': request.GET.get('title', '')
             }
@@ -1687,12 +1713,14 @@ def dashboard_admin_view(request):
     # section = request.GET.get('section')
     section = request.GET.get('section', 'datasets')
 
-    #
-    datasets = get_objects_for_user(Dataset, request.user, {}, is_admin)
+    # Not rendered by dashboard_admin.html (its tabs load the *_list views by AJAX), but kept
+    # in the context and scoped like them: an EMPTY filter_criteria made
+    # get_objects_for_user return every object to a non-admin.
+    datasets = get_objects_for_user(Dataset, request.user, {'owner': user}, is_admin)
     datasets = datasets.order_by('create_date')
 
-    collections = get_objects_for_user(Collection, request.user, {}, is_admin)
-    areas = get_objects_for_user(Area, request.user, {'type': ['predefined', 'country']}, is_admin)
+    collections = get_objects_for_user(Collection, request.user, {'owner': user}, is_admin)
+    areas = get_objects_for_user(Area, request.user, {'owner': user}, is_admin)
     groups_member = CollectionGroup.objects.filter(members__user=user)
     groups_led = CollectionGroup.objects.filter(owner=user)
 
