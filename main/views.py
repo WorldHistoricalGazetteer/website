@@ -960,10 +960,10 @@ BETA_STATUS_SECTIONS = [
                      "their coordinates to be copied are shown as hints only; nothing snaps to them, and "
                      "the position you click is rounded to what the zoom level supports and marked "
                      "approximate. Nothing is adopted automatically or in bulk, and adopting a location "
-                     "never changes your match. The label is shown on the Record page, in downloads and in "
-                     "the quality-control report; showing it in the Atlas popup, and what happens to an "
-                     "adopted location when a dataset is withdrawn or made private, are still being "
-                     "completed."},
+                     "never changes your match. The label is shown on the Record page, in the Atlas popup, in "
+                     "downloads and in the quality-control report. If a dataset is withdrawn or made "
+                     "private its adopted locations are hidden with it, and if the match behind an adopted "
+                     "location is withdrawn the location goes back with it."},
             {"name": "Atlas: a map-first way into the gazetteer", "stage": "beta", "version": "4.0",
              "body": "The Atlas groups places as you pan and zoom, so that very large gazetteers stay "
                      "legible at every scale, and narrows what you see by date (including holding the map "
