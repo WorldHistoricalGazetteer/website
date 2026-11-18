@@ -28,6 +28,9 @@ from django.conf import settings
 
 logger = logging.getLogger("reconciliation")
 
+# The gateway's /api/reconcile accepts `size` in 1..500 (ReconcileRequest.size, le=500).
+GATEWAY_MAX_SIZE = 500
+
 
 def _is_enabled(user=None, allow_anonymous: bool = False) -> bool:
     """
@@ -570,7 +573,10 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     body = {
         "query": normalised_query.get("query_text"),
         "mode": raw.get("mode", "fuzzy"),
-        "size": normalised_query.get("size", 50),
+        # The gateway's ReconcileRequest takes 1 <= size <= 500 and 422s anything else, which the
+        # fail-safe below turns into an empty result: a caller asking for limit=1000 (the documented
+        # maximum) got NOTHING from the gateway. Clamp to what it accepts.
+        "size": max(1, min(int(normalised_query.get("size") or 50), GATEWAY_MAX_SIZE)),
     }
 
     # Client-supplied Symphonym query embedding (int8, 128-d, language-conditioned in the browser).
@@ -671,6 +677,19 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         body["lat"] = float(lat)
         body["lng"] = float(lng)
         body["radius"] = float(radius)
+        # A circle with NO name must also carry the circle as `bounds`. The gateway's
+        # /api/reconcile returns empty for any query that has no `query`, no `contained_in` and
+        # no `bounds` — before it ever looks at lat/lng/radius (indexing repo
+        # gateway/reconcile.py, `if not has_query and not req.contained_in and not req.bounds`).
+        # So a documented circle-only query returned nothing on prod, with or without `type`.
+        # Sending the polygon too gets past that guard without changing what is matched: the
+        # gateway still resolves the region from lat/lng/radius as an H3 disc (that branch is
+        # tried before `bounds`) and uses `bounds` only if the disc cannot be built. Named
+        # circle queries are sent exactly as before.
+        if not body.get("query") and not raw.get("contained_in"):
+            bounds = normalised_query.get("bounds")
+            if bounds:
+                body["bounds"] = bounds
     else:
         bounds = normalised_query.get("bounds")
         if bounds:

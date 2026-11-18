@@ -74,6 +74,15 @@ DOMAIN = os.environ.get('URL_FRONT', 'https://whgazetteer.org').rstrip('/')
 DOCS_URL = "https://docs.whgazetteer.org/content/technical/apis.html#reconciliation-service-api"
 TILESERVER_URL = os.environ.get('TILEBOSS', 'https://tiles.whgazetteer.org').rstrip('/')
 MAX_EARTH_RADIUS_KM = math.pi * 6371  # ~20015 km
+# A circle with no `query` (a spatial-only query) may be at most this big. The gateway resolves a
+# circle as an H3 disc capped at 2000 cells at resolution 4 or finer (indexing repo
+# gateway/spatial.py `region_from_circle`), which cannot be built beyond ~540 km — and a nameless
+# query has no ranking (every candidate scores 0, in index order), so a bigger circle returns an
+# arbitrary sample rather than "the places in it". Refused with a per-query error instead.
+# A NAMED circle query is not limited here: the name ranks it, and its behaviour is unchanged.
+SPATIAL_ONLY_MAX_RADIUS_KM = 500
+# Results per query. The documented maximum; also bounds the legacy-index `size`.
+MAX_QUERY_LIMIT = 1000
 SCHEMA_FILE = "/static/whg_schema.jsonld"
 SCHEMA_SPACE = DOMAIN + SCHEMA_FILE
 PROPOSE_PROPERTIES, VALID_FCLASSES = parse_schema(f"validation{SCHEMA_FILE}")
@@ -365,10 +374,14 @@ class ReconciliationView(APIView):
                 return json_error(str(e))
 
             if not entity_type:
-                # Check if any query has real query text — if so, default to "place"
-                # rather than assuming this is an OpenRefine type-guessing probe.
+                # Check if any query has real query text OR a constraint that can stand on
+                # its own (a circle, bbox/bounds, contained_in, dataset) — if so, default
+                # to "place" rather than assuming this is an OpenRefine type-guessing
+                # probe. Periods have no spatial filters, so "place" is the only reading.
+                # Until 2026-11-18 only `query` counted, so a documented circle-only
+                # query without `type` got the "Guessing Result" placeholders back.
                 has_real_query = any(
-                    q.get("query", "").strip()
+                    str(q.get("query") or "").strip() or _has_standalone_constraint(q)
                     for q in queries.values()
                     if isinstance(q, dict)
                 )
@@ -1412,6 +1425,32 @@ def bbox_to_polygon(bbox):
     }
 
 
+_STANDALONE_PROPERTY_PIDS = {PROPERTY_FILTER_RADIUS_PID, "whg:within_bbox", "whg:contained_in"}
+
+
+def _has_standalone_constraint(params):
+    """True when a query carries a constraint `normalise_query_params` accepts WITHOUT `query` text:
+    a circle (`lat`+`lng`+`radius`, or the `whg:within_radius` property), `bbox`/`bounds` (or
+    `whg:within_bbox`), `contained_in` (or `whg:contained_in`), or `dataset`. Used only to tell a
+    real spatial-only query from an empty OpenRefine type-guessing probe; validation is left to
+    `normalise_query_params`, which reports a malformed constraint per query."""
+    if not isinstance(params, dict):
+        return False
+    if all(params.get(k) not in (None, "") for k in ("lat", "lng", "radius")):
+        return True
+    if any(params.get(k) not in (None, "", [], {}) for k in ("bbox", "bounds", "contained_in")):
+        return True
+    if "dataset" in params:
+        return True
+    props = params.get("properties")
+    if isinstance(props, list):
+        for prop in props:
+            if isinstance(prop, dict) and (prop.get("pid") or prop.get("p") or prop.get("id")) \
+                    in _STANDALONE_PROPERTY_PIDS:
+                return True
+    return False
+
+
 def normalise_query_params(params):
     """
     Validate and normalise a single reconcile query dict.
@@ -1457,8 +1496,15 @@ def normalise_query_params(params):
                         )
                     params["lat"], params["lng"], params["radius"] = lat_s, lng_s, rad_s
 
-    query_text = params.get("query", "").strip() or None
-    size = int(params.get("limit", params.get("size", 100)))
+    query_text = str(params.get("query") or "").strip() or None
+    try:
+        size = int(params.get("limit", params.get("size", 100)))
+    except (TypeError, ValueError):
+        raise ValueError("`limit` must be an integer.")
+    # Clamped to the documented range rather than refused: a too-large limit is a request for "as
+    # many as you have", and the gateway itself rejects size > 500 or < 1 with a 422 that reached
+    # the caller only as an empty result (crc_client clamps its own leg to that).
+    size = max(1, min(size, MAX_QUERY_LIMIT))
 
     # `offset` pages a result list. Only `mode: "familysearch"` is served by one source, so only there
     # does an offset mean something: a hybrid (legacy + gateway) merge cannot be paged coherently.
@@ -1498,6 +1544,23 @@ def normalise_query_params(params):
             raise ValueError("Parameters 'lat', 'lng', 'radius' must be numeric.")
 
     if has_nearby:
+        if not query_text and not params.get("contained_in"):
+            # Spatial-only circle ("the places within r km of here"). Checked here, after the
+            # numeric validation above, so the message is about size and not about type.
+            if radius > SPATIAL_ONLY_MAX_RADIUS_KM:
+                raise ValueError(
+                    f"A circle with no `query` may have a radius of at most "
+                    f"{SPATIAL_ONLY_MAX_RADIUS_KM} km (got {radius:g}). Use a smaller circle, add "
+                    f"a `query`, or scope by `contained_in` / `bbox` instead."
+                )
+            # A nameless circle means "places IN the circle": default the relation to `within`
+            # (the candidate's geometry inside the circle), not the gateway's general default
+            # `intersects`, under which every country, ocean and empire overlapping the circle
+            # would be returned as a place "near" its centre. Same default as the /api/spatial/
+            # replacement mapping (api/spatial_legacy.py, match=within). An explicit `relation`
+            # wins. Named circle queries are untouched.
+            if not params.get("relation"):
+                params["relation"] = "within"
         bounds = circle_to_polygon(lat, lng, radius)
     else:
         # `bbox` shorthand (place#217 item 4). Rejected alongside `bounds` rather than silently
