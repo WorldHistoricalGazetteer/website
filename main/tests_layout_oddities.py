@@ -23,7 +23,12 @@
    fixed widths (up to 252 px) in a ``col-sm-3`` column that is 156 px wide at
    768, so the page scrolled sideways (scrollWidth 828 at 768). No horizontal
    overflow at 320, 375, 768, 1024 and 1440, and every logo is loaded and no
-   wider than its column.
+   wider than its column. Since 2026-11-18 the funders' seven logos live on
+   /about/ under "Funding and awards" (``AboutFunderLogosTests``: all seven
+   loaded and drawn, none wider than the content column or than the size it
+   had on /people_overview/, no sideways scroll); /people_overview/ keeps only
+   the Pelagios partner logo, and the same test asserts that it is the one
+   logo there.
 
 Browser tests: headless Playwright (its own chromium, throwaway contexts;
 never the user's Chrome) against a Django live server, as in
@@ -190,7 +195,7 @@ class NavMarkupTests(TestCase):
 
 class _BrowserBase(LiveServerTestCase):
     maxDiff = None  # show every failing width, not the first
-    # The People overview's logos are source files (main/static/images/); without this they
+    # The People overview's and About page's logos are source files (*/static/images/); without this they
     # 404 wherever collectstatic has not run, and "logo not drawn" says nothing about the page.
     static_handler = StaticRootThenFinders
 
@@ -313,6 +318,8 @@ PEOPLE = """() => {
   return {inner: innerWidth, scroll: document.documentElement.scrollWidth,
           heading: !![...document.querySelectorAll('h3')].find(h => /People & credits/.test(h.textContent)),
           colW: cr ? cr.width : 0,
+          // Every image in the page's two columns (not the header/footer), to catch a logo outside #credits_right.
+          allSrcs: [...document.querySelectorAll('#credits_left img, #credits_right img')].map(i => i.src.split('/').pop()),
           imgs: imgs.map(i => ({src: i.src.split('/').pop(), loaded: i.complete && i.naturalWidth > 0,
                                 w: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height,
                                 right: i.getBoundingClientRect().right, colRight: cr.right}))};
@@ -337,10 +344,12 @@ class PeopleOverviewTests(_BrowserBase):
                 page.set_viewport_size({"width": w, "height": 900})
                 page.wait_for_timeout(150)
                 m = page.evaluate(PEOPLE)
-                # Presence, in the same call: the page and all eight logos, loaded and drawn.
+                # Presence, in the same call: the page and its one remaining (partner) logo, loaded
+                # and drawn; the funders' logos are on /about/ now (AboutFunderLogosTests).
                 self.assertEqual(m["inner"], w)
                 self.assertTrue(m["heading"], f"@{w}: not the people overview page: {m}")
-                self.assertEqual(len(m["imgs"]), 8, f"@{w}: logos missing: {m}")
+                self.assertEqual([i["src"] for i in m["imgs"]], ["pelagioslogo_partner.svg"], f"@{w}: {m}")
+                self.assertEqual(m["allSrcs"], ["pelagioslogo_partner.svg"], f"@{w}: a logo elsewhere on the page: {m}")
                 for i in m["imgs"]:
                     self.assertTrue(i["loaded"] and i["w"] > 20 and i["h"] > 20, f"@{w}: logo not drawn: {i}")
                     if i["right"] > i["colRight"] + 0.5:
@@ -352,3 +361,62 @@ class PeopleOverviewTests(_BrowserBase):
         finally:
             ctx.close()
         self.assertEqual(failures, [], "/people_overview/ scrolls sideways or a logo leaves its column")
+
+
+ABOUT_LOGOS = """() => {
+  const sec = document.getElementById('funding');
+  const box = document.getElementById('funder_logos');
+  const imgs = box ? [...box.querySelectorAll('img')] : [];
+  const cr = (document.getElementById('about_content') || document.body).getBoundingClientRect();
+  return {inner: innerWidth, scroll: document.documentElement.scrollWidth,
+          heading: !!(sec && /Funding and awards/.test(sec.textContent)),
+          inFunding: !!(sec && box && sec.contains(box)),
+          imgs: imgs.map(i => ({src: i.src.split('/').pop(), alt: i.alt, loaded: i.complete && i.naturalWidth > 0,
+                                attrW: +i.getAttribute('width'),
+                                w: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height,
+                                left: i.getBoundingClientRect().left, right: i.getBoundingClientRect().right,
+                                colLeft: cr.left, colRight: cr.right}))};
+}"""
+
+FUNDER_LOGOS = ["neh_logo_horizontal_rgb.jpg", "ishi.png", "whc_logo250.png", "logo-knaw-humanities-cluster.png",
+                "logo-asc-pitt.png", "logo-creees-pitt.png", "dhaward.png"]
+
+
+@unittest.skipUnless(HAVE_PLAYWRIGHT, "playwright is not importable here")
+@unittest.skipUnless(os.environ.get("WHG_BROWSER_TESTS") == "1", "set WHG_BROWSER_TESTS=1 to run browser tests")
+class AboutFunderLogosTests(_BrowserBase):
+    WIDTHS = [320, 375, 768, 1024, 1440]
+
+    def test_funder_logos_drawn_and_contained(self):
+        os.makedirs(SHOT_DIR, exist_ok=True)
+        failures = []
+        ctx = self._context(None, self.WIDTHS[0])
+        try:
+            page = ctx.new_page()
+            self._load(page, "/about/")
+            page.wait_for_function("[...document.querySelectorAll('#funder_logos img')].every(i => i.complete)",
+                                   timeout=15000)
+            for w in self.WIDTHS:
+                page.set_viewport_size({"width": w, "height": 900})
+                page.wait_for_timeout(150)
+                m = page.evaluate(ABOUT_LOGOS)
+                # Presence, in the same call: the Funding section with all seven logos in it, loaded and drawn.
+                self.assertEqual(m["inner"], w)
+                self.assertTrue(m["heading"] and m["inFunding"], f"@{w}: logos not under Funding and awards: {m}")
+                self.assertEqual([i["src"] for i in m["imgs"]], FUNDER_LOGOS, f"@{w}: {m}")
+                for i in m["imgs"]:
+                    self.assertTrue(i["loaded"] and i["w"] > 20 and i["h"] > 20, f"@{w}: logo not drawn: {i}")
+                    self.assertTrue(len(i["alt"]) > 5, f"@{w}: no alt text: {i}")
+                    # Never larger than its declared size (the About page once drew a logo across its whole column).
+                    if i["w"] > i["attrW"] + 0.5 or i["h"] > 130:
+                        failures.append(f"@{w}: {i['src']} drawn {i['w']:.0f}x{i['h']:.0f}, declared width {i['attrW']}")
+                    if i["right"] > i["colRight"] + 0.5 or i["left"] < i["colLeft"] - 0.5:
+                        failures.append(f"@{w}: {i['src']} spans {i['left']:.0f}-{i['right']:.0f}, "
+                                        f"its column {i['colLeft']:.0f}-{i['colRight']:.0f}")
+                if m["scroll"] > m["inner"]:
+                    failures.append(f"@{w}: scrollWidth {m['scroll']} > innerWidth {m['inner']}")
+                if w in (375, 1440):
+                    page.screenshot(path=os.path.join(SHOT_DIR, f"about-funders-{w}.png"), full_page=True)
+        finally:
+            ctx.close()
+        self.assertEqual(failures, [], "/about/ funder logos overflow, oversize, or the page scrolls sideways")

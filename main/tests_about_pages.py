@@ -12,6 +12,11 @@ from django.urls import reverse
 
 from sitemap.views import StaticViewSitemap
 
+# The funders named under "Funding and awards" (NEH, ISHI, World History Center, KNAW HuC, Asian
+# Studies Center, CREEES, DH Awards): their logos live on /about/, not /people_overview/.
+FUNDER_LOGOS = ("neh_logo_horizontal_rgb.jpg", "ishi.png", "whc_logo250.png", "logo-knaw-humanities-cluster.png",
+                "logo-asc-pitt.png", "logo-creees-pitt.png", "dhaward.png")
+
 
 def about_menu_hrefs(html):
     """The hrefs of the About dropdown, in order (base_webpack.html, ul#aboutDropdownMenu)."""
@@ -64,13 +69,40 @@ class AboutPagesTests(TestCase):
             self.assertNotIn(f'href="{reverse(name)}"', html, name)
         self.assertIn('href="https://docs.whgazetteer.org/"', html)
 
+    def test_about_page_carries_funder_logos_under_funding(self):
+        html = self.client.get("/about/").content.decode()
+        section = re.search(r'<section id="funding".*?</section>', html, re.S)
+        self.assertIsNotNone(section, "no #funding section")
+        logos = re.search(r'<div id="funder_logos"[^>]*>(.*?)</div>', section.group(0), re.S)
+        self.assertIsNotNone(logos, "no funder logos inside #funding")
+        # After the text, not before it.
+        self.assertLess(section.group(0).index("Best DH Tool or Suite of Tools Award"),
+                        section.group(0).index('id="funder_logos"'))
+        imgs = re.findall(r"<img\b[^>]*>", logos.group(1))
+        self.assertEqual(sorted(re.search(r'src="[^"]*/([^"/]+)"', i).group(1) for i in imgs), sorted(FUNDER_LOGOS))
+        for i in imgs:
+            alt = re.search(r'alt="([^"]*)"', i)
+            self.assertTrue(alt and len(alt.group(1)) > 5, f"no useful alt text: {i}")
+            # Sized (no logo drawn at its natural size; ishi.png alone is 958 px wide).
+            self.assertRegex(i, r'width="\d+"', i)
+            self.assertLessEqual(int(re.search(r'width="(\d+)"', i).group(1)), 250, i)
+        self.assertIn("#funder_logos img", html)  # the max-width/height:auto rule
+        self.assertNotIn("pelagioslogo_partner.svg", html)  # a partner, not a funder
+
     def test_people_overview_points_to_moved_funding(self):
         html = self.client.get("/people_overview/").content.decode()
         self.assertIn("Current Project Team", html)
         self.assertIn('id="funding-pointer"', html)
         self.assertIn('href="/about/#funding"', html)
         self.assertNotIn("Digital Humanities Advancement Grant", html)
-        self.assertIn('id="credits_right"', html)  # partner/funder logos stay here
+        # The partner logo stays here; the funders' logos have moved to /about/.
+        self.assertIn('id="credits_right"', html)
+        self.assertIn("pelagioslogo_partner.svg", html)
+        for logo in FUNDER_LOGOS:
+            self.assertNotIn(logo, html, logo)
+        # The Getty and Flaticon credits stay.
+        self.assertIn("Thesaurus of Geographic Names", html)
+        self.assertIn("www.flaticon.com", html)
 
     # -- the menu ---------------------------------------------------------------------------------
 
