@@ -40,3 +40,12 @@ at 1.5 MB. A place geometry over 20 kB is replaced by its type and bbox.
 Deployment (compose project, nginx block with per-IP limits, token env file, rollback, logs): see `deploy/README.md`.
 
 Not yet done: `place_at_date`, a field whitelist. Open decisions are listed in the project memory note.
+
+## Notes from the first live run (2026-11-18)
+- A spatial-only `/reconcile` query (no text) must name the entity type (`type: ...#Place`), or WHG treats it as
+  an OpenRefine type-guessing probe and returns placeholder "Guessing Result" candidates.
+- The circle-only form (`lat`/`lng`/`radius`) returned no results in production even for London and Paris, so
+  `places_near` queries the bounding box around the circle and filters by exact distance on `repr_point`
+  (results carry `distance_km`; at most 50 candidates per query, with a note when that cap is reached).
+- The production service account is `whg-mcp-service` (non-staff, no groups, unusable password, unverified email,
+  daily limit 2000). Its token lives only in `~/stacks/mcp/mcp.env` on the droplet.

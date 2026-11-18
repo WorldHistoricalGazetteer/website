@@ -10,6 +10,7 @@ Run:  WHG_API_TOKEN=... WHG_BASE_URL=https://whgazetteer.org WHG_MCP_TRANSPORT=s
 import json
 import os
 import re
+import math
 from typing import Annotated, Optional
 
 from mcp.server.fastmcp import FastMCP
@@ -21,6 +22,9 @@ from .client import PLACE_ID, DailyBudget, WHGClient, WHGError
 
 BASE_URL = os.environ.get("WHG_BASE_URL", "https://whgazetteer.org")
 MAX_LIMIT = 50
+# A spatial-only query has no text and would be taken for an OpenRefine type-guessing probe (api/reconcile.py:
+# no `type` + no `query` -> placeholder "Guessing Result" candidates). Naming the entity type avoids that.
+PLACE_TYPE = "https://whgazetteer.org/static/whg_schema.jsonld#Place"
 MAX_BBOX_DEG = 10.0     # cap the area an anonymous caller can request
 MAX_KM = 100.0
 MAX_PLACE_IDS = 10      # get_place: one upstream call per id, sequential
@@ -70,6 +74,12 @@ def client() -> WHGClient:
         _client = WHGClient(BASE_URL, service_token(),
                             budget=DailyBudget(int(os.environ.get("WHG_MCP_DAILY_BUDGET", "2000"))))
     return _client
+
+
+def _haversine_km(lat1, lon1, lat2, lon2) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371.0088 * math.asin(math.sqrt(a))
 
 
 def _limit(n: int) -> int:
@@ -199,10 +209,31 @@ async def places_near(
         km: Annotated[float, Field(gt=0, le=MAX_KM, description=f"Radius in kilometres (max {MAX_KM:g})")] = 25,
         limit: Annotated[int, Field(description=f"Maximum results (1-{MAX_LIMIT})")] = 20,
 ) -> dict:
-    """Places whose geometry lies within a radius of a point (matched on an H3 cell disc that covers
-    the circle, so a place just beyond the radius can match)."""
-    return await _reconcile({"lat": float(lat), "lng": float(lon), "radius": float(km),
-                             "relation": "within", "limit": _limit(limit)})
+    """Places whose representative point lies within a radius of a point, nearest first.
+    (Done as a bounding-box query around the circle, then an exact distance filter on each place's
+    representative point: WHG's circle-only query returns nothing at present.)"""
+    dlat = km / 111.32
+    dlon = min(180.0, km / (111.32 * max(math.cos(math.radians(lat)), 0.01)))
+    west, east = max(-180.0, lon - dlon), min(180.0, lon + dlon)
+    south, north = max(-90.0, lat - dlat), min(90.0, lat + dlat)
+    out = await _reconcile({
+        "bounds": {"type": "Polygon", "coordinates": [[[west, south], [east, south], [east, north],
+                                                        [west, north], [west, south]]]},
+        "containment": "exact", "relation": "within", "limit": MAX_LIMIT, "type": PLACE_TYPE})
+    found = out.get("results", [])
+    kept = []
+    for r in found:
+        p = r.get("repr_point")
+        if isinstance(p, (list, tuple)) and len(p) >= 2:
+            d = _haversine_km(lat, lon, p[1], p[0])
+            if d <= km:
+                kept.append({**r, "distance_km": round(d, 3)})
+    kept.sort(key=lambda r: r["distance_km"])
+    out["results"] = kept[:_limit(limit)]
+    if len(found) >= MAX_LIMIT:
+        out["note"] = (f"WHG returned its maximum of {MAX_LIMIT} candidates for the box around this circle, so "
+                       "there may be more places within the radius: narrow `km` to see them.")
+    return out
 
 
 @mcp.tool()
@@ -219,7 +250,7 @@ async def places_in_bbox(
     w, s_, e, n = float(west), float(south), float(east), float(north)
     return await _reconcile({
         "bounds": {"type": "Polygon", "coordinates": [[[w, s_], [e, s_], [e, n], [w, n], [w, s_]]]},
-        "containment": "exact", "relation": "within", "limit": _limit(limit)})
+        "containment": "exact", "relation": "within", "limit": _limit(limit), "type": PLACE_TYPE})
 
 
 @mcp.tool()

@@ -182,17 +182,35 @@ async def test_search_needs_a_name():
     assert SEEN == []
 
 
-async def test_places_near_body():
-    await server.places_near(lon=-1.08, lat=53.96, km=10, limit=5)
-    assert body() == {"lat": 53.96, "lng": -1.08, "radius": 10.0, "relation": "within", "limit": 5}
-    assert "query" not in body()
+async def test_places_near_is_a_bbox_query_then_distance_filtered():
+    out = await server.places_near(lon=28.95, lat=41.0, km=10, limit=5)
+    q = body()
+    ring = q["bounds"]["coordinates"][0]
+    assert q["type"] == server.PLACE_TYPE and q["relation"] == "within" and q["limit"] == server.MAX_LIMIT
+    assert "lat" not in q and "radius" not in q and "query" not in q      # circle-only queries return nothing
+    assert ring[0] == ring[-1] and min(p[0] for p in ring) < 28.95 < max(p[0] for p in ring)
+    assert [r["id"] for r in out["results"]] == ["place:gn:745044"]        # Istanbul is ~1.2 km away
+    assert 0 < out["results"][0]["distance_km"] < 2
+
+
+async def test_places_near_drops_places_outside_the_circle_but_inside_the_box():
+    out = await server.places_near(lon=28.95, lat=41.0, km=0.5)           # box corner reaches, circle does not
+    assert out["results"] == []
 
 
 async def test_places_in_bbox_body():
     await server.places_in_bbox(west=-2, south=53, east=0, north=54)
     assert body() == {"bounds": {"type": "Polygon", "coordinates": [[[-2.0, 53.0], [0.0, 53.0], [0.0, 54.0],
                                                                     [-2.0, 54.0], [-2.0, 53.0]]]},
-                      "containment": "exact", "relation": "within", "limit": 20}
+                      "containment": "exact", "relation": "within", "limit": 20, "type": server.PLACE_TYPE}
+
+
+async def test_spatial_queries_name_the_entity_type():
+    """Without `type` (and with no query text) /reconcile answers with OpenRefine's placeholder
+    'Guessing Result' candidates instead of searching (found live 2026-11-18)."""
+    await server.places_near(lon=0, lat=0, km=1)
+    await server.places_in_bbox(west=0, south=0, east=1, north=1)
+    assert body(0)["type"].endswith("#Place") and body(1)["type"].endswith("#Place")
 
 
 async def test_gateway_outage_is_flagged_not_reported_as_absence():
