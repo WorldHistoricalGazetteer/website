@@ -12,9 +12,12 @@
 
 {% block content %}
 {% comment %}
-  DRAFT transcription of WHG_V4_Principles.docx (created 2026-10-28), unedited. It is served only
-  to staff until settings.PRINCIPLES_PAGE_ENABLED is set; the review of the text (suggested edits)
-  is in the commit that added this page. Edit the wording HERE, not by re-pasting the docx.
+  DRAFT. Revised 2026-11-18 from WHG_V4_Principles.docx (created 2026-10-28) after review: the 18 review
+  points (R1-R18) are applied, and Section 8 (the V4 requirements checklist) is deliberately NOT
+  published: it is internal planning. It is served only to staff until settings.PRINCIPLES_PAGE_ENABLED
+  is set. Points that need the owner's decision before publication: the Indigenous-data sentence in
+  section 4, the paid-capacity sentence in section 5 (Pitt sign-off), the section 7 wording.
+  Edit the wording HERE, not by re-pasting the docx.
 {% endcomment %}
 <div class="container">
   <article id="principles_content" class="mx-auto mt-3 mb-5">
@@ -27,6 +30,12 @@
 
     <h1 class="h3">Principles of the World Historical Gazetteer</h1>
 
+    <p class="lead">The World Historical Gazetteer (WHG) is a reference work, a piece of digital infrastructure, a publishing
+      platform and an authoring platform for historical place information. It treats places as entities known through
+      linked, authored attestations rather than as dots on a map, which lets it hold ambiguity and index places that
+      resist precise location. Its value comes from curated, well-documented specialist gazetteers and from an open,
+      free-to-use API, not from re-linking Wikidata and GeoNames. These are the principles that guide it.</p>
+
     <h2 id="what-whg-is">1. What WHG is</h2>
     <p>WHG is all of the following at once:</p>
     <ul>
@@ -35,64 +44,60 @@
       <li>a publishing platform</li>
       <li>an authoring platform</li>
     </ul>
-    <p><strong>Aspiration:</strong> to be the go-to source for historical place information. Think "Google Maps for the past."</p>
+    <p><strong>Aspiration:</strong> to be the first place people look for information about historical places.</p>
 
     <h2 id="data-model">2. The core data model</h2>
     <h3 id="entities">2.1 Places are entities, not names</h3>
-    <ul>
-      <li>Named spatial entities are entities, not just names.</li>
-      <li>The unit of entity is the named spatial entity.</li>
-      <li>A place is defined as a cluster of attestations: its names, location, and feature type.</li>
-    </ul>
+    <p>A place is a named spatial entity, known through the attestations made about it: its names, its location and its
+      feature type, each with a source and an author.</p>
     <h3 id="attestations">2.2 Attestations</h3>
+    <p>An <em>attestation</em> is a single, sourced statement about a place: a name, a location, a type, a date.
+      (<a href="https://plato.pelagios.org/" target="_blank" rel="noopener">PLATO</a>, the data model WHG builds on,
+      defines the term.)</p>
     <ul>
       <li>Entities and attestations are linked to one another.</li>
       <li>Places are never just one thing, so attestations must be linked in order to make sense of them.</li>
       <li>Individual attestations have authorship.</li>
     </ul>
-    <h3 id="hard-links">2.3 Hard links</h3>
+    <h3 id="relations">2.3 Authored relations</h3>
+    <p>WHG aims to let people author relations between attestations and places, such as succession, coexistence and
+      part-of:</p>
     <ul>
-      <li>It must be possible to author and hard link attestations to reflect coexistence and/or succession.</li>
-      <li>Links should record why they are hard linked, ideally through an ontology of change types.</li>
-      <li>Places can be hard linked into administrative hierarchies, because places relate to one another in both networks and hierarchies.</li>
+      <li>a relation should record why it was made, ideally through an ontology of types of change, which WHG aims to develop;</li>
+      <li>places can be placed in administrative hierarchies, because places relate to one another in both networks and hierarchies.</li>
     </ul>
     <h3 id="context">2.4 Context</h3>
-    <ul>
-      <li>Places exist in context with one another and with other characteristics, such as ecological setting.</li>
-    </ul>
+    <p>Places exist in context with one another and with other characteristics. WHG aims to situate places in
+      context, such as their ecological setting.</p>
     <h3 id="not-map-first">2.5 Not map-first</h3>
-    <ul>
-      <li>We are not map-first, and that is the point.</li>
-      <li>It lets us index entities that are difficult to situate in a precise location.</li>
-    </ul>
+    <p>WHG is not map-first. That lets it index entities that are difficult to situate in a precise location.</p>
 
-    <h2 id="scholarship">3. Scholarship, authorship, and curation</h2>
+    <h2 id="scholarship">3. Scholarship, authorship and curation</h2>
     <ul>
-      <li>WHG has a scholarly and domain-expert layer. Authored and well-cited submissions are important.</li>
-      <li>Expertise can be deep on a single place.</li>
-      <li>Dataset contributions and individual attestations both carry authorship.</li>
-      <li>Datasets should all have really good metadata.</li>
-      <li>There must be links back to contributor pages, with URIs that point to specific entities.</li>
-      <li>We need to recruit and curate what goes into our index rather than leave it to chance. That means active editing and curation.</li>
+      <li>WHG has a scholarly and domain-expert layer. Authored and well-cited submissions are important, and expertise can be deep on a single place.</li>
+      <li>Gazetteer contributions and individual attestations both carry authorship.</li>
+      <li>Every gazetteer should have rich, well-structured metadata.</li>
+      <li>WHG aims to link back to contributor pages, with URIs that point to specific entities.</li>
+      <li>WHG recruits and curates what goes into its index rather than leaving it to chance. That means active editing and curation.</li>
     </ul>
 
     <h2 id="value">4. Our value proposition</h2>
     <ul>
-      <li>The value we add is in specialist, artisanal datasets, not in building links between Wikidata and GeoNames.</li>
-      <li>We cannot just be rechewing GeoNames and Wikidata. The project's purpose is not "here's something you could find on Wikidata."</li>
-      <li>We are not a disambiguation engine but a reambiguation engine.</li>
-      <li>This remains a decolonial project.</li>
+      <li>The value WHG adds is in specialist, carefully made gazetteers. Linking records to GeoNames and Wikidata is necessary plumbing, but it is not our contribution.</li>
+      <li>WHG is more than a re-presentation of GeoNames and Wikidata: its purpose is the places and the knowledge about them that those sources do not hold.</li>
+      <li>WHG is not only a disambiguation engine but also a way of keeping the ambiguity of historical places visible: competing names, locations and extents are kept side by side instead of being collapsed into one answer.</li>
+      <li>WHG aims to be a decolonial project. For Indigenous place knowledge the default is to withhold rather than publish, until the communities concerned have decided how it may be shared, following the CARE principles for Indigenous data governance.</li>
     </ul>
 
     <h2 id="openness">5. Openness and the API</h2>
     <ul>
-      <li>Everything is open data and open source.</li>
-      <li>Openness does not prevent us from licensing large-scale calls to our API.</li>
-      <li>The API is highly valuable and should be marketed as an important way for people and institutions to engage with our index, not only as a way to drive people to the website.</li>
+      <li>WHG's code is open source (BSD&#8209;3&#8209;Clause) and WHG's own contributions are openly licensed. Every source keeps its own licence, which WHG shows with the data and passes on; see <a href="{% url 'licenses' %}">Data and software licences</a>.</li>
+      <li>The API is free to use within published limits. To sustain the service, WHG may offer higher-capacity access on a cost-recovery basis; that would charge for capacity, not license anyone else's data.</li>
+      <li>The API is a first-class way to use WHG, for people and institutions alike, not only a way to bring people to the website.</li>
     </ul>
 
     <h2 id="growth">6. Growth</h2>
-    <p>More is better, across the board:</p>
+    <p>WHG aims to grow, without lowering the bar for quality or documentation:</p>
     <ul>
       <li>more entities</li>
       <li>more attestations</li>
@@ -102,38 +107,7 @@
     </ul>
 
     <h2 id="institutional-context">7. Institutional context</h2>
-    <ul>
-      <li>For the foreseeable future, WHG faces toward Pitt as funder and host, and outward toward the world.</li>
-    </ul>
-
-    <h2 id="v4-checklist">8. V4 requirements checklist</h2>
-    <p>Derived directly from the principles above. Each item should be reflected in V4.</p>
-    <div class="table-responsive">
-      <table class="table table-sm">
-        <caption>V4 requirements, each traced to the section of these principles it comes from</caption>
-        <thead>
-          <tr><th scope="col">#</th><th scope="col">Requirement</th><th scope="col">Section</th></tr>
-        </thead>
-        <tbody>
-          <tr><th scope="row">1</th><td>Places modeled as entities defined by clusters of attestations (names, location, feature type)</td><td><a href="#entities">2.1</a></td></tr>
-          <tr><th scope="row">2</th><td>Entities and attestations linked to one another</td><td><a href="#attestations">2.2</a></td></tr>
-          <tr><th scope="row">3</th><td>Ability to author and hard link attestations for coexistence and succession</td><td><a href="#hard-links">2.3</a></td></tr>
-          <tr><th scope="row">4</th><td>Link types captured with a rationale (an ontology of change types)</td><td><a href="#hard-links">2.3</a></td></tr>
-          <tr><th scope="row">5</th><td>Hard links into administrative hierarchies, alongside network relations</td><td><a href="#hard-links">2.3</a></td></tr>
-          <tr><th scope="row">6</th><td>Places situated in context (e.g. ecological setting)</td><td><a href="#context">2.4</a></td></tr>
-          <tr><th scope="row">7</th><td>Support for entities without a precise location (not map-first)</td><td><a href="#not-map-first">2.5</a></td></tr>
-          <tr><th scope="row">8</th><td>Authorship on dataset contributions and on individual attestations</td><td><a href="#scholarship">3</a></td></tr>
-          <tr><th scope="row">9</th><td>Strong, well-structured dataset metadata</td><td><a href="#scholarship">3</a></td></tr>
-          <tr><th scope="row">10</th><td>Contributor pages, with URIs linking to specific entities</td><td><a href="#scholarship">3</a></td></tr>
-          <tr><th scope="row">11</th><td>Workflows for recruiting, editing, and curating published content</td><td><a href="#scholarship">3</a></td></tr>
-          <tr><th scope="row">12</th><td>Open data and open source, with a path to licensing large-scale API use</td><td><a href="#openness">5</a></td></tr>
-          <tr><th scope="row">13</th><td>API positioned and marketed as a primary mode of engagement</td><td><a href="#openness">5</a></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h2 id="summary">9. Summary</h2>
-    <p>WHG is a reference work, infrastructure, publishing platform, and authoring platform for historical place information. It treats places as entities built from linked, authored attestations rather than as dots on a map, which lets it hold ambiguity and index places that resist precise location. Its value comes from curated, well-documented, specialist datasets and from an open API, not from re-linking Wikidata and GeoNames. It is open, scholarly, decolonial in orientation, and aims to be the go-to source for historical place information.</p>
+    <p>WHG's home is the University of Pittsburgh, its principal institutional supporter (see <a href="{% url 'about' %}#funding">Funding and awards</a>), and it faces outward to the world.</p>
 
     <p class="mt-4"><a href="{% url 'about' %}">About WHG</a></p>
   </article>

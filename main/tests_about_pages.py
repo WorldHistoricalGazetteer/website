@@ -118,6 +118,17 @@ class AboutPagesTests(TestCase):
         self.assertNotIn("DRAFT transcription of", html)
         self.assertNotIn("{#", html)
 
+    def test_principles_text_after_review(self):
+        # The reviewed text drops the claims the review found untrue or internal (R1-R18).
+        self.client.force_login(self.staff)
+        html = self.client.get("/principles/").content.decode()
+        for gone in ("Google Maps", "V4 requirements checklist", "Everything is open data", "rechewing",
+                     "reambiguation", "licensing large-scale calls", "cluster of attestations", "Hard links"):
+            self.assertNotIn(gone, html, gone)
+        for kept in ("BSD", "first-class way to use WHG", "without lowering the bar", "plato.pelagios.org",
+                     "/licenses/", "/about/#funding"):
+            self.assertIn(kept, html, kept)
+
     @override_settings(PRINCIPLES_PAGE_ENABLED=True)
     def test_principles_public_when_enabled(self):
         resp = self.client.get("/principles/")
