@@ -1126,8 +1126,8 @@ def beta_status_view(request):
 # ── WHG Analytics (in-house proxy for Plausible) ────────────────────────────────────────────────
 # Staff-only admin tool (dashboard_admin → Tools → "Analytics"). Aggregates all three WHG Plausible
 # sites (main / blog / docs) via the Stats API into one page — top-line metrics, a visitors-over-time
-# chart, and breakdowns (pages/sources/countries/devices/browsers/OS) — plus the Map-your-Data usage
-# funnel (main-site custom events) at the bottom. Replaces both the external Plausible link and the
+# chart, and breakdowns (pages/sources/countries/devices/browsers/OS) — plus the usage funnel of
+# WHG's built-in (beta) Map your Data (main-site custom events) at the bottom. Replaces both the external Plausible link and the
 # CE-absent funnel feature. Multi-site fetches run concurrently.
 PLAUSIBLE_PERIODS = [('7d', 'Last 7 days'), ('30d', 'Last 30 days'), ('month', 'This month'),
                      ('6mo', 'Last 6 months'), ('12mo', 'Last 12 months')]
@@ -1155,7 +1155,18 @@ MYD_OTHER = [
     ('MyD: shared', 'Created a read-only share link'),
     ('MyD: shared open', 'Opened a shared project'),
     ('MyD: conflict', 'Hit a merge conflict'),
+    ('MyD: extract column', 'Extracted places from a text column'),
 ]
+# Map your Data is moving out of WHG into PLATO Tools, which keeps files on the user's computer and
+# looks places up through WHG's API with a beta account's token. The MyD events above come only from
+# WHG's own built-in version (/reconciliation/, beta-gated), so the panel is labelled as that. PLATO
+# Tools runs no tracker that reports here, and WHG cannot yet tell its API calls from any other
+# client's, so nothing on this page measures it. See developer/analytics-map-your-data.md.
+PLATO_TOOLS_URL = 'https://plato.pelagios.org/tools/'
+PLATO_TOOLS_GUIDE_URL = 'https://plato.pelagios.org/guide/tools.html#map-your-data'
+# Below this many importing visitors in a period, step percentages are not shown: with a handful of
+# visitors (often one, and often staff testing) a "100%" or "0%" says nothing about conversion.
+MYD_PCT_MIN_BASE = 20
 
 
 def _plausible_get(path, params, site_id):
@@ -1633,7 +1644,7 @@ def plausible_analyser_view(request):
         {'title': 'Browsers', 'icon': 'fa-window-maximize', 'donut': _svg_donut(merge('browser', 'browser', 6))},
     ]
 
-    # ── Map your Data funnel (main-site custom events) ──
+    # ── Map your Data funnel: WHG's built-in (beta) version only; see PLATO_TOOLS_URL above ──
     by_name = {r['name']: r for r in rows_of(('events', PLAUSIBLE_MAIN))}
 
     def mk(name, label):
@@ -1643,12 +1654,19 @@ def plausible_analyser_view(request):
 
     funnel = [mk(n, l) for n, l in MYD_FUNNEL]
     base_v = funnel[0]['visitors'] if funnel else 0
+    myd_show_pct = base_v >= MYD_PCT_MIN_BASE
     prev_v = None
     for step in funnel:
-        step['pct'] = round(100 * step['visitors'] / base_v, 1) if base_v else 0
-        step['drop'] = round(100 * (prev_v - step['visitors']) / prev_v, 1) if prev_v else None
+        if myd_show_pct:
+            step['pct'] = round(100 * step['visitors'] / base_v, 1)
+            step['drop'] = round(100 * (prev_v - step['visitors']) / prev_v, 1) if prev_v else None
+        else:
+            step['pct'] = step['drop'] = None
         prev_v = step['visitors']
     others = [mk(n, l) for n, l in MYD_OTHER]
+    # Who can open the built-in version at all (users.models.User.can_access_beta, as a query).
+    myd_beta_accounts = reg.filter(Q(is_staff=True) | Q(is_superuser=True)
+                                   | Q(role__in=('beta_tester', 'superuser'))).count()
 
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
@@ -1662,6 +1680,9 @@ def plausible_analyser_view(request):
         'country_map': country_map, 'country_colors': country_colors,
         'coverage': coverage,
         'funnel': funnel, 'others': others, 'base_v': base_v,
+        'myd_show_pct': myd_show_pct, 'myd_pct_min_base': MYD_PCT_MIN_BASE,
+        'myd_beta_accounts': myd_beta_accounts,
+        'plato_tools_url': PLATO_TOOLS_URL, 'plato_tools_guide_url': PLATO_TOOLS_GUIDE_URL,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
     })
