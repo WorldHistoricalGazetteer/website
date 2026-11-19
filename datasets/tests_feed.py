@@ -181,6 +181,42 @@ class FeedReviewTests(FeedTestBase):
         self.assertEqual(self.post({"place": self.ware.pk, "action": "accession"}).status_code, 400)
 
 
+class FeedExportTests(FeedTestBase):
+    def rows(self, client=None):
+        import csv, io
+        r = (client or self.c).get(self.base + "export/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("attachment", r["Content-Disposition"])
+        return list(csv.DictReader(io.StringIO(r.content.decode("utf-8-sig"))))
+
+    def test_earlier_decisions_are_exported_and_the_rest_say_where_they_stand(self):
+        c = self.cand(self.ware, "gn:4")
+        self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk], "note": "parish church"})
+        self.post({"place": self.brox.pk, "action": "later"})
+        rows = {r["src_id"]: r for r in self.rows()}
+        self.assertEqual(set(rows), {"f1", "f2"})           # every record the feed holds, linked or not
+        w = rows["f1"]
+        self.assertEqual((w["review_state"], w["relation"], w["matched_id"], w["matched_title"],
+                          w["matched_source"], w["note"]),
+                         ("linked", "closeMatch", "gn:4", "Ware", "gn", "parish church"))
+        self.assertEqual((float(w["matched_lon"]), float(w["matched_lat"])), (0.03, 51.811))
+        b = rows["f2"]
+        self.assertEqual((b["review_state"], b["relation"], b["matched_id"]), ("later", "", ""))
+
+    def test_undone_links_are_not_exported_and_strangers_get_404(self):
+        c = self.cand(self.ware, "gn:4")
+        self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk]})
+        self.post({"place": self.ware.pk, "action": "reopen"})
+        self.assertEqual({r["matched_id"] for r in self.rows()}, {""})
+        User = get_user_model()
+        stranger = User.objects.create_user(username="feed_exp", email="fe@example.org", password="pw",
+                                            given_name="F", surname="E", role="beta_tester")
+        cl = Client()
+        cl.force_login(stranger)
+        self.assertEqual(cl.get(self.base + "export/").status_code, 404)
+        self.assertEqual(Client().get(self.base + "export/").status_code, 302)
+
+
 class FeedSearchTests(FeedTestBase):
     def test_hand_search_relaxes_chips_and_reports_silence_as_silence(self):
         self.gen.recipe = candidates.build_recipe(self.ds, countries=["GB"])

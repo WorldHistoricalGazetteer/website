@@ -71,6 +71,7 @@ urlpatterns = [
   path('<int:id>/matches/location/', views_feed.feed_location, name='ds_matches_location'),
   path('<int:id>/matches/search/', views_feed.feed_search, name='ds_matches_search'),
   path('<int:id>/matches/progress/', views_feed.feed_progress, name='ds_matches_progress'),
+  path('<int:id>/matches/export/', views_feed.feed_export, name='ds_matches_export'),
   path('<int:id>/matches/regenerate/', views_feed.feed_regenerate, name='ds_matches_regenerate'),
 
   # public dataset pages (tabs): metadata, browse

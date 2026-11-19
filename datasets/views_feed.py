@@ -13,7 +13,9 @@ One page (``/datasets/<id>/matches/``) and its JSON:
   decision arose: ``explicit``, ``prefilled`` or ``default``);
 * ``GET  matches/search/?place=&q=&relax=`` a hand search under the run's constraints, each a
   relaxable chip as in Map your Data's review (place#208);
-* ``GET  matches/progress/`` and ``POST matches/regenerate/``.
+* ``GET  matches/progress/`` and ``POST matches/regenerate/``;
+* ``GET  matches/export/`` the viewer's own decisions as a CSV (one row per Link; a record with
+  none has one row stating where its review stands).
 
 Every Link is written by ``api.attestations.create`` with its visibility and cap rules; nothing
 here writes an attestation any other way. Access: signed in, ``can_access_beta`` (or, with the v4
@@ -638,6 +640,67 @@ def feed_search(request, id):
     _tier, scored, _rec = candidates.assess(place, data, request.user)
     results = hand_results(scored[:20], request.user)
     return JsonResponse({"answered": True, "q": q, "constraints": chips, "results": results})
+
+
+EXPORT_COLUMNS = ["src_id", "title", "review_state", "relation", "certainty", "link_status",
+                  "matched_id", "matched_title", "matched_source", "matched_lon", "matched_lat",
+                  "matched_types", "matched_names", "confidence", "decided_at", "note"]
+
+
+@login_required
+@require_GET
+def feed_export(request, id):
+    """The viewer's own decisions in this feed as CSV: every record the feed holds, with one row
+    per Link made from it (``active`` or ``pending``; ``distinct`` statements are not matches and
+    withdrawn or rejected Links are no longer standing). Records without a Link have one row that
+    says where their review stands. The matched place's coordinates are withheld, as in the feed,
+    when it is a contributed record the viewer may not see now."""
+    import csv
+    from api.models import ContributorAttestation
+    from django.http import HttpResponse
+    ds = _dataset_for(request, id)
+    atts = (ContributorAttestation.objects
+            .filter(user=request.user, status__in=("active", "pending"), evidence__feed_dataset=ds.pk)
+            .exclude(relation_type="distinct").select_related("candidate").order_by("asserted_at"))
+    by_place = {}
+    for a in atts:
+        pk = a.evidence.get("feed_place")
+        if pk is not None:
+            by_place.setdefault(int(pk), []).append(a)
+    cands = [a.candidate for rows in by_place.values() for a in rows if a.candidate_id]
+    visible = visible_contributed_pks(request.user, cands)
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="whg-matches-dataset-{ds.pk}.csv"'
+    response.write("\ufeff")   # so Excel reads it as UTF-8
+    out = csv.writer(response)
+    out.writerow(EXPORT_COLUMNS)
+    states = RecordReviewState.objects.filter(dataset=ds).select_related("place").order_by("place_id")
+    for st in states.iterator():
+        p = st.place
+        base = [p.src_id, p.title, st.state]
+        rows = by_place.get(p.pk) or []
+        if not rows:
+            out.writerow(base + [""] * 12 + [st.note])
+            continue
+        for a in rows:
+            subject = f"whg:{p.pk}"
+            matched = a.place_b if a.place_a == subject else a.place_a
+            c = a.candidate
+            card, loc = {}, None
+            if c is not None and candidate_visible(c, visible):
+                card = c.card or {}
+                loc, _ = candidate_location(c, visible)
+            out.writerow(base + [
+                a.relation_type, a.certainty, a.status, matched,
+                c.candidate_title if c is not None and candidate_visible(c, visible) else "",
+                (c.namespace if c is not None else matched.split(":", 1)[0]),
+                loc[0] if loc else "", loc[1] if loc else "",
+                "; ".join(card.get("types") or []),
+                "; ".join(n.get("label", "") for n in card.get("names") or []),
+                c.gateway_confidence if c is not None and c.gateway_confidence is not None else "",
+                a.asserted_at.date().isoformat(), a.justification or st.note])
+    return response
 
 
 @login_required
