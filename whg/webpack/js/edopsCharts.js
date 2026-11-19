@@ -79,7 +79,7 @@ function timeline(years, values, { id, title, unit, events, caveats, source }) {
     const zero = `<line class="ec-zero" x1="${M.l}" x2="${W - M.r}" y1="${y(0)}" y2="${y(0)}"/>`;
     const ev = (events || []).filter((e) => e.year >= years[0] && e.year <= years[years.length - 1])
         .map((e) => `<line class="ec-event" x1="${x(e.year)}" x2="${x(e.year)}" y1="${M.t}" y2="${H - M.b}"><title>${e.year} CE: volcanic event, ${esc(fmt(e.vssi_tg))} Tg sulphate${e.location ? ', ' + esc(e.location) : ''}</title></line>`).join('');
-    const xAxis = x.ticks(6).map((t) => `<text class="ec-tick" x="${x(t)}" y="${H - M.b + 14}" text-anchor="middle">${t}</text>`).join('');
+    const xAxis = x.ticks(Math.min(6, years.length - 1 || 1)).filter(Number.isInteger).map((t) => `<text class="ec-tick" x="${x(t)}" y="${H - M.b + 14}" text-anchor="middle">${t}</text>`).join('');
     const desc = `Line chart of ${pts.length} yearly values, ${years[0]} to ${years[years.length - 1]} CE, ranging ${fmt(lo)} to ${fmt(hi)} ${unit}.`;
     return figure({
         id, title, desc, head: ['Year (CE)', unit],

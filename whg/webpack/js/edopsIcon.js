@@ -1,18 +1,18 @@
 // whg/webpack/js/edopsIcon.js
 //
-// The icon for EDOPS buttons and headings (the beta Environment card and Locus button).
+// The EDOPS mark for buttons and headings (the beta Environment card, modal and Locus button).
 //
-// 🛑 PLACEHOLDER. This is NOT the EDOPS logo: it is a deliberately plain stand-in (a
-// dashed outline with a small wave) so that no one mistakes it for, or ships it as, the
-// real mark. Karl Grossner has agreed in principle that WHG may use the EDOPS logo here;
-// still needed from him: a transparent SVG (or PNG) that reads at 16-24 px, and the
-// terms of use. When it arrives, put the file in whg/webpack/images/ and change ONLY the
-// body of edopsIconHTML() (everything that shows the icon calls it).
+// Source: the EDOPS header logo (edops.computingplace.org/static/images/edops_header_400.jpg,
+// also kgeographer/edops app/static/images/), cropped to the pin and embedded as a 74x96 JPEG.
+// Used at Stephen Gadd's direction; Karl Grossner agreed in principle (email, 2026-11-16).
+// STILL OPEN: terms of use / attribution wording, and a transparent SVG or PNG (no vector
+// version exists in his repo). When one arrives, change ONLY the body of edopsIconHTML().
+// The JPEG has a near-white background, so .edops-icon uses mix-blend-mode: multiply to let
+// the page colour show through.
 
-/** @param {string} [cls] extra class names. Decorative: aria-hidden, the label beside it names it. */
+const PIN = 'data:image/jpeg;base64,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';
+
+/** @param {string} [cls] extra class names. Decorative: alt is empty, the label beside it names it. */
 export function edopsIconHTML(cls = '') {
-    return `<svg class="edops-icon ${cls}" data-placeholder="true" viewBox="0 0 24 24" width="1.15em" height="1.15em"
-        aria-hidden="true" focusable="false"><rect x="2" y="2" width="20" height="20" rx="5" fill="none"
-        stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.2"/><path d="M5.5 14.5c2-3.2 3.7-3.2 5.7 0s3.7 3.2 5.7 0"
-        fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    return `<img class="edops-icon ${cls}" src="${PIN}" alt="" width="19" height="24" aria-hidden="true">`;
 }

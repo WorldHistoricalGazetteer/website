@@ -1,8 +1,9 @@
 /* The beta EDOPS modal: Profile / Signature / Charts (edopsModal.js, edopsCharts.js). */
-.edops-icon { vertical-align: -0.2em; color: var(--rs-accent, #2f6b34); }
+.edops-icon { height: 1.3em; width: auto; vertical-align: -0.3em; mix-blend-mode: multiply; }
 .em-nav { margin-bottom: .75rem; }
 .em-nav .nav-link { color: #2f6b34; }
 .em-nav .nav-link.active { font-weight: 600; }
+.em-pane { padding-top: .9rem; }
 .em-picker { display: block; margin-bottom: .6rem; max-width: 22rem; }
 .em-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .35rem; }
 .em-generated { background: #eef3f8; border: 1px solid #c9d8e6; border-radius: 10px; padding: 1px 9px; font-size: .78rem; font-weight: 600; }

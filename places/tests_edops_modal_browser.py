@@ -10,12 +10,22 @@ Opt-in, like ``places.tests_enrichment_browser`` whose fixtures and helpers it r
 never called (recorded fixtures through a fake transport). ``test_edops_modal_harness_can_fail`` runs
 the same checks with the page's bundle blocked and requires them to fail.
 """
+import json
 from unittest.mock import patch
 
 from api.tests_edop_client import AREA, BASIN_T8, FakeTransport
 from places import tests_enrichment_browser as base
 
 fake_fetch = base.fake_fetch
+
+
+def _three_years(resp):
+    """BASIN_T8 with every per-year series cut to its first three years (the Heleneborg shape)."""
+    def cut(o):
+        if isinstance(o, dict):
+            return {k: (v[:3] if k.endswith("_series") and isinstance(v, list) else cut(v)) for k, v in o.items()}
+        return [cut(x) for x in o] if isinstance(o, list) else o
+    return resp[0], json.dumps(cut(json.loads(resp[1])))
 
 
 class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
@@ -26,14 +36,18 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
         r = {}
         r["gloss_ready"] = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", 30000)
         _idle, r["env_ready"] = self.show_environment(page)
-        r["icon"] = page.evaluate("""() => !!document.querySelector('#record_environment .enr-env-show .edops-icon[data-placeholder="true"]')
-            && !!document.querySelector('#record_environment .rs-card-title .edops-icon')""")
+        r["icon"] = page.evaluate("""() => !!document.querySelector('#record_environment .enr-env-show img.edops-icon[src^="data:image/jpeg"]')
+            && !!document.querySelector('#record_environment .rs-card-title img.edops-icon')
+            && Array.from(document.querySelectorAll('img.edops-icon')).every(i => i.complete && i.naturalWidth > 0)""")
         r["three_tabs"] = page.evaluate("""() => Array.from(document.querySelectorAll('.enr-env-modal [role="tab"]')).map(b => b.dataset.tab).join()""") == "profile,signature,charts"
         # Placeholder prose: the Signature tab is the default and shows the existing display.
         r["default_signature"] = page.evaluate("""() => {
             const p = document.querySelector('.enr-env-modal [data-pane="signature"]');
             return !!p && !p.hidden && p.querySelector('.enr-band[data-band="B"]') !== null
                 && document.querySelector('.enr-env-modal [data-pane="profile"]').hidden === true; }""")
+        r["modal_visible"] = self.wait_for(page, "!!document.querySelector('.enr-env-modal.show .em-nav') && document.querySelector('.enr-env-modal .em-nav').getBoundingClientRect().height > 0", 10000)
+        r["gap_signature"] = page.evaluate("""() => { const n = document.querySelector('.enr-env-modal .em-nav'); const p = document.querySelector('.enr-env-modal [data-pane="signature"]');
+            const c = p && !p.hidden && p.firstElementChild; return c ? Math.round(c.getBoundingClientRect().top - n.getBoundingClientRect().bottom) : -1; }""") >= 8   # first content clears the tab border
         try:
             page.click(".enr-env-modal [data-tab='profile']", timeout=5000)
             prof = page.evaluate("""() => { const p = document.querySelector('.enr-env-modal [data-pane="profile"]');
@@ -41,6 +55,8 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
                         scales: Array.from(p.querySelectorAll('.em-section')).map(s => s.dataset.scale)}; }""")
         except Exception:  # noqa: BLE001 — a missing tab is a finding
             prof = {"hidden": True, "text": "", "scales": []}
+        r["gap_profile"] = page.evaluate("""() => { const n = document.querySelector('.enr-env-modal .em-nav'); const p = document.querySelector('.enr-env-modal [data-pane="profile"]');
+            const c = p && !p.hidden && p.firstElementChild; return c ? Math.round(c.getBoundingClientRect().top - n.getBoundingClientRect().bottom) : -1; }""") >= 8
         r["profile_generated_label"] = (not prof["hidden"]) and "Generated text" in prof["text"] and "not by a language model" in prof["text"]
         r["profile_scales"] = "place" in prof["scales"] and "basin" in prof["scales"]
         r["profile_scale_labels"] = "this place" in prof["text"].lower() and "whole basin" in prof["text"].lower()   # CSS upper-cases the badge
@@ -57,13 +73,18 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
                     sized: figs.every(f => { const b = f.querySelector('svg').getBoundingClientRect(); return b.width > 200 && b.height > 80; }),
                     cap: (p.querySelector('[data-chart="timeline_pdsi"] figcaption') || {}).innerText || '',
                     events: p.querySelectorAll('[data-chart="timeline_pdsi"] .ec-event').length}; }""")
+            ch["gap"] = page.evaluate("""() => { const n = document.querySelector('.enr-env-modal .em-nav'); const p = document.querySelector('.enr-env-modal [data-pane="charts"]');
+            const c = p && !p.hidden && p.firstElementChild; return c ? Math.round(c.getBoundingClientRect().top - n.getBoundingClientRect().bottom) : -1; }""")
+            ch["xticks"] = page.evaluate("""() => Array.from(document.querySelectorAll('[data-chart="timeline_pdsi"] .ec-tick')).map(t => t.textContent).filter(t => /^[0-9.]+$/.test(t) && t.length >= 4)""")
             self.shot(page, "edops_modal_charts", ".enr-env-modal .modal-content")
         except Exception:  # noqa: BLE001
-            ch = {"hidden": True, "ids": [], "bars": 0, "lineLens": [], "roles": False, "tables": False, "sized": False, "cap": "", "events": 0}
+            ch = {"gap": -1, "xticks": [], "hidden": True, "ids": [], "bars": 0, "lineLens": [], "roles": False, "tables": False, "sized": False, "cap": "", "events": 0}
         r["charts_all_drawn"] = (not ch["hidden"]) and set(ch["ids"]) == {
             "monthly_precipitation", "monthly_temperature", "timeline_pdsi", "timeline_temperature",
             "timeline_precipitation", "land_use"}
         r["charts_data_drawn"] = ch["bars"] == 12 and len(ch["lineLens"]) >= 4 and min(ch["lineLens"] or [0]) >= 12 and ch["events"] == 3
+        r["gap_charts"] = ch["gap"] >= 8
+        r["timeline_year_ticks_are_whole_years"] = len(ch["xticks"]) >= 2 and all(t.isdigit() for t in ch["xticks"])
         r["charts_accessible"] = ch["roles"] and ch["tables"] and ch["sized"]
         r["charts_scale_and_hedge"] = "Scale:" in ch["cap"] and "Reconstructed" in ch["cap"]
         return r
@@ -96,6 +117,24 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
         self.assertEqual(d["figs"], 0)                                    # ... and draws nothing, saying why
         self.assertIn("distribution summaries", d["text"])
 
+    def test_three_year_timeline_has_whole_year_ticks(self):
+        """A 3-year span once got 1862.5 / 1863.5 ticks. Presence first: ticks exist and the
+        series really is 3 points; then none of them is fractional."""
+        page = self.new_page()
+        with patch("api.edop_client._requests_transport", side_effect=FakeTransport(_three_years(BASIN_T8))), \
+                patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/#record_environment")
+            self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", 30000)
+            _idle, ok = self.show_environment(page)
+            page.click(".enr-env-modal [data-tab='charts']", timeout=5000)
+            d = page.evaluate("""() => { const f = document.querySelector('[data-chart="timeline_pdsi"]');
+                return {pts: (f.querySelector('.ec-line').getAttribute('d') || '').split('L').length,
+                        ticks: Array.from(f.querySelectorAll('.ec-tick')).map(t => t.textContent).filter(t => /^[0-9.]+$/.test(t) && t.length >= 4)}; }""")
+        self.assertTrue(ok)
+        self.assertEqual(d["pts"], 3)
+        self.assertGreaterEqual(len(d["ticks"]), 2)
+        self.assertTrue(all(t.isdigit() for t in d["ticks"]), d["ticks"])
+
     def test_edops_modal_harness_can_fail(self):
         page = self.new_page(block="/atlas_record.bundle.")
         with patch("api.edop_client._requests_transport", side_effect=FakeTransport(BASIN_T8)), \
@@ -108,5 +147,5 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
 for _name in dir(base.EnrichmentBrowserTests):
     if _name.startswith("test"):
         setattr(EdopsModalBrowserTests, _name, None)
-for _name in ("test_modal_tabs_and_charts", "test_area_scope_has_no_charts_and_says_why", "test_edops_modal_harness_can_fail"):
+for _name in ("test_modal_tabs_and_charts", "test_area_scope_has_no_charts_and_says_why", "test_three_year_timeline_has_whole_year_ticks", "test_edops_modal_harness_can_fail"):
     setattr(EdopsModalBrowserTests, _name, EdopsModalBrowserTests.__dict__[_name])
