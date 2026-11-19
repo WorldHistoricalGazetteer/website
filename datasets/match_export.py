@@ -12,14 +12,19 @@ Three rules, because the file leaves WHG:
 * silence is never absence: ``matched_detail`` says ``full`` (the gateway answered), ``card only``
   (it did not, so the stored suggestion is used), ``not found`` (it answered without that id) or
   ``gateway unavailable`` (nothing could be said), so an empty cell is never ambiguous;
+* a download never waits on a gateway that is not answering: after the first failed request it
+  stops asking, and it stops after ``BUDGET_SECONDS`` however well the gateway is doing; every row
+  it did not get is marked (``gateway unavailable`` / ``time limit reached``), never left blank;
 * every row that carries attributes also carries its source's licence and citation.
 """
 import logging
+import time
 from types import SimpleNamespace
 
 logger = logging.getLogger(__name__)
 
 CHUNK = 40
+BUDGET_SECONDS = 60   # the most a download spends asking the gateway, in total
 CELL_MAX = 30000   # Excel's cell limit is 32,767 characters
 
 COLUMNS = ["matched_id", "matched_title", "matched_source", "matched_source_name",
@@ -159,9 +164,16 @@ def details_for(user, matches, fetch=None):
             out[pid] = base
             to_fetch.append(pid)
 
-    got, failed = {}, set()
+    got, failed, late = {}, set(), set()
+    started, down = time.monotonic(), False
     for i in range(0, len(to_fetch), CHUNK):
         chunk = to_fetch[i:i + CHUNK]
+        if down:
+            failed.update(chunk)
+            continue
+        if time.monotonic() - started >= BUDGET_SECONDS:
+            late.update(chunk)
+            continue
         meta = {}
         try:
             res = fetch(chunk, user=user, meta=meta)
@@ -170,6 +182,7 @@ def details_for(user, matches, fetch=None):
             res, meta = {}, {"error": "unexpected"}
         if meta.get("error") or meta.get("disabled"):
             failed.update(chunk)
+            down = True
         got.update(res or {})
 
     for pid in to_fetch:
@@ -179,8 +192,10 @@ def details_for(user, matches, fetch=None):
         elif c is not None:
             out[pid].update(from_card(c.card, c.candidate_title),
                             matched_detail="card only: the gateway could not be asked" if pid in failed
+                            else "card only: time limit reached, download again for the full record" if pid in late
                             else "card only: the gateway no longer returns this place")
         else:
             out[pid]["matched_detail"] = ("gateway unavailable: download again later" if pid in failed
+                                          else "not fetched: time limit reached, download again" if pid in late
                                           else "not found: the gateway returns no such place")
     return out

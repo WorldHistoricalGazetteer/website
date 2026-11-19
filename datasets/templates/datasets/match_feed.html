@@ -23,9 +23,7 @@
       · <a href="{% url 'datasets:ds_status' ds.id %}">{{ ds.title }}</a></h1>
     <div class="small text-secondary">
     <button type="button" class="btn btn-sm btn-outline-secondary py-0 me-2" id="mf_tour_button" data-act="tour">Tour</button>
-    <a class="btn btn-sm btn-outline-secondary py-0 me-2" id="mf_export_button" data-testid="mf-export"
-       href="{% url 'datasets:ds_matches_export' ds.id %}" download
-       title="Download your matches so far (CSV): each record, the places you linked it to, and what WHG knows about them">Download matches</a>
+    {% include "datasets/_download_matches_button.html" with cls="btn btn-sm btn-outline-secondary py-0 me-2" bid="mf_export_button" %}
     <span id="mf_progress">
       {{ progress.reviewed }} / {{ progress.records }} reviewed · {{ progress.links }} match{{ progress.links|pluralize:"es" }}
     </span></div>

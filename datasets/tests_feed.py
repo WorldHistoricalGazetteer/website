@@ -273,6 +273,27 @@ class FeedExportDetailTests(ExportBase):
             return {}
         self.assertTrue(self.export(silent)["f1"]["matched_detail"].startswith("not found"))
 
+    def test_a_failing_gateway_is_asked_once_and_a_slow_one_for_a_minute_at_most(self):
+        from unittest import mock
+        from datasets import match_export
+        pairs = [(f"gn:{n}", None) for n in range(5)]
+        calls = []
+
+        def down(ids, user=None, meta=None, **k):
+            calls.append(ids)
+            meta["error"] = "timeout"
+            return {}
+        with mock.patch.object(match_export, "CHUNK", 2):
+            d = match_export.details_for(self.owner, pairs, fetch=down)
+        self.assertEqual(len(calls), 1)                     # one failure, then no more asking
+        self.assertTrue(all(r["matched_detail"].startswith("gateway unavailable") for r in d.values()))
+
+        calls.clear()
+        with mock.patch.object(match_export, "CHUNK", 2), mock.patch.object(match_export, "BUDGET_SECONDS", 0):
+            d = match_export.details_for(self.owner, pairs, fetch=down)
+        self.assertEqual(calls, [])                         # out of time: nothing asked
+        self.assertTrue(all("time limit" in r["matched_detail"] for r in d.values()))
+
     def test_a_source_whose_licence_forbids_redistribution_is_withheld(self):
         from api.models import GazetteerRegistryEntry
         GazetteerRegistryEntry.objects.update_or_create(
