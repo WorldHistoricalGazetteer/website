@@ -37,7 +37,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from datasets import candidates, location_adoption
+from datasets import candidates, location_adoption, match_export
 from datasets.models import Dataset
 from datasets.models_matching import CandidateGeneration, MatchCandidate, RecordReviewState
 from places.v4_landing import linking_open_to
@@ -642,9 +642,8 @@ def feed_search(request, id):
     return JsonResponse({"answered": True, "q": q, "constraints": chips, "results": results})
 
 
-EXPORT_COLUMNS = ["src_id", "title", "review_state", "relation", "certainty", "link_status",
-                  "matched_id", "matched_title", "matched_source", "matched_lon", "matched_lat",
-                  "matched_types", "matched_names", "confidence", "decided_at", "note"]
+EXPORT_COLUMNS = (["src_id", "title", "review_state", "relation", "certainty", "link_status"]
+                  + match_export.COLUMNS + ["confidence", "decided_at", "note"])
 
 
 @login_required
@@ -653,8 +652,10 @@ def feed_export(request, id):
     """The viewer's own decisions in this feed as CSV: every record the feed holds, with one row
     per Link made from it (``active`` or ``pending``; ``distinct`` statements are not matches and
     withdrawn or rejected Links are no longer standing). Records without a Link have one row that
-    says where their review stands. The matched place's coordinates are withheld, as in the feed,
-    when it is a contributed record the viewer may not see now."""
+    says where their review stands. Every matched place carries its full record, read from the
+    gateway now (``datasets.match_export``), so a hand-search Link is as complete as a suggestion;
+    what may not leave WHG (a licence that forbids re-distribution, an embargo, a contributed record
+    the viewer may not see) is withheld and ``matched_detail`` says so."""
     import csv
     from api.models import ContributorAttestation
     from django.http import HttpResponse
@@ -662,13 +663,17 @@ def feed_export(request, id):
     atts = (ContributorAttestation.objects
             .filter(user=request.user, status__in=("active", "pending"), evidence__feed_dataset=ds.pk)
             .exclude(relation_type="distinct").select_related("candidate").order_by("asserted_at"))
-    by_place = {}
+    by_place, matches = {}, []
     for a in atts:
         pk = a.evidence.get("feed_place")
-        if pk is not None:
-            by_place.setdefault(int(pk), []).append(a)
-    cands = [a.candidate for rows in by_place.values() for a in rows if a.candidate_id]
-    visible = visible_contributed_pks(request.user, cands)
+        if pk is None:
+            continue
+        subject = f"whg:{int(pk)}"
+        matched = a.place_b if a.place_a == subject else a.place_a
+        by_place.setdefault(int(pk), []).append((a, matched))
+        matches.append((matched, a.candidate))
+    detail = match_export.details_for(request.user, matches)
+    blank = [""] * len(match_export.COLUMNS)
 
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="whg-matches-dataset-{ds.pk}.csv"'
@@ -678,28 +683,17 @@ def feed_export(request, id):
     states = RecordReviewState.objects.filter(dataset=ds).select_related("place").order_by("place_id")
     for st in states.iterator():
         p = st.place
-        base = [p.src_id, p.title, st.state]
         rows = by_place.get(p.pk) or []
         if not rows:
-            out.writerow(base + [""] * 12 + [st.note])
+            out.writerow([p.src_id, p.title, st.state, "", "", ""] + blank + ["", "", st.note])
             continue
-        for a in rows:
-            subject = f"whg:{p.pk}"
-            matched = a.place_b if a.place_a == subject else a.place_a
+        for a, matched in rows:
+            d = detail.get(matched, {})
             c = a.candidate
-            card, loc = {}, None
-            if c is not None and candidate_visible(c, visible):
-                card = c.card or {}
-                loc, _ = candidate_location(c, visible)
-            out.writerow(base + [
-                a.relation_type, a.certainty, a.status, matched,
-                c.candidate_title if c is not None and candidate_visible(c, visible) else "",
-                (c.namespace if c is not None else matched.split(":", 1)[0]),
-                loc[0] if loc else "", loc[1] if loc else "",
-                "; ".join(card.get("types") or []),
-                "; ".join(n.get("label", "") for n in card.get("names") or []),
-                c.gateway_confidence if c is not None and c.gateway_confidence is not None else "",
-                a.asserted_at.date().isoformat(), a.justification or st.note])
+            out.writerow([p.src_id, p.title, st.state, a.relation_type, a.certainty, a.status]
+                         + [d.get(k, "") for k in match_export.COLUMNS]
+                         + [c.gateway_confidence if c is not None and c.gateway_confidence is not None else "",
+                            a.asserted_at.date().isoformat(), a.justification or st.note])
     return response
 
 

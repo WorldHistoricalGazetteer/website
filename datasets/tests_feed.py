@@ -181,7 +181,15 @@ class FeedReviewTests(FeedTestBase):
         self.assertEqual(self.post({"place": self.ware.pk, "action": "accession"}).status_code, 400)
 
 
-class FeedExportTests(FeedTestBase):
+class ExportBase(FeedTestBase):
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        # No test may reach the real gateway: by default it answers with nothing.
+        p = mock.patch("api.crc_client.crc_fetch_places", lambda ids, user=None, meta=None, **k: {})
+        p.start()
+        self.addCleanup(p.stop)
+
     def rows(self, client=None):
         import csv, io
         r = (client or self.c).get(self.base + "export/")
@@ -189,6 +197,8 @@ class FeedExportTests(FeedTestBase):
         self.assertIn("attachment", r["Content-Disposition"])
         return list(csv.DictReader(io.StringIO(r.content.decode("utf-8-sig"))))
 
+
+class FeedExportTests(ExportBase):
     def test_earlier_decisions_are_exported_and_the_rest_say_where_they_stand(self):
         c = self.cand(self.ware, "gn:4")
         self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk], "note": "parish church"})
@@ -215,6 +225,68 @@ class FeedExportTests(FeedTestBase):
         cl.force_login(stranger)
         self.assertEqual(cl.get(self.base + "export/").status_code, 404)
         self.assertEqual(Client().get(self.base + "export/").status_code, 302)
+
+
+class FeedExportDetailTests(ExportBase):
+    """The matched place's full record is read back from the gateway at download time, so a
+    hand-search Link (which stores nothing but an id) is as complete as a suggestion."""
+    PLACE = {"place_id": "gn:44", "namespace": "gn", "title": "Pazundaung",
+             "names": [{"label": "Pazundaung", "lang": None, "timespans": []},
+                       {"label": "Pazundaung Tsp", "lang": "my", "timespans": []}],
+             "ccodes": ["MM"], "types": [{"identifier": "PPLX", "label": "P", "sourceLabel": "P.PPLX", "aat_ids": [300008347]}],
+             "geometries": [{"repr_point": [96.17493, 16.79574]}], "repr_point": [96.17493, 16.79574],
+             "links": [{"type": "seeAlso", "identifier": "https://en.wikipedia.org/wiki/Pazundaung"}],
+             "descriptions": [], "relations": [], "population": 40690, "elevation": 19, "timespans": []}
+
+    def export(self, fetch):
+        from unittest import mock
+        with mock.patch("api.crc_client.crc_fetch_places", fetch):
+            return {r["src_id"]: r for r in self.rows()}
+
+    def test_a_hand_search_link_carries_every_attribute(self):
+        self.post({"place": self.ware.pk, "action": "link", "target": "gn:44", "note": "same town"})
+        w = self.export(lambda ids, user=None, meta=None, **k: {"gn:44": self.PLACE})["f1"]
+        self.assertEqual((w["matched_id"], w["matched_title"], w["matched_source"], w["matched_detail"]),
+                         ("gn:44", "Pazundaung", "gn", "full"))
+        self.assertEqual((w["matched_lon"], w["matched_lat"]), ("96.17493", "16.79574"))
+        self.assertEqual((w["matched_ccodes"], w["matched_types"], w["matched_aat_ids"]), ("MM", "P.PPLX", "300008347"))
+        self.assertEqual(w["matched_names"], "Pazundaung; Pazundaung Tsp (my)")
+        self.assertIn("wikipedia.org/wiki/Pazundaung", w["matched_links"])
+        self.assertEqual((w["matched_population"], w["matched_elevation"], w["note"]), ("40690", "19", "same town"))
+
+    def test_a_silent_gateway_is_said_not_left_blank(self):
+        self.post({"place": self.ware.pk, "action": "link", "target": "gn:44"})
+        c = self.cand(self.brox, "gn:6")
+        self.post({"place": self.brox.pk, "action": "link", "candidates": [c.pk]})
+
+        def down(ids, user=None, meta=None, **k):
+            meta["error"] = "timeout"
+            return {}
+        rows = self.export(down)
+        self.assertTrue(rows["f1"]["matched_detail"].startswith("gateway unavailable"))
+        self.assertTrue(rows["f2"]["matched_detail"].startswith("card only"))      # falls back to what was stored
+        self.assertEqual(rows["f2"]["matched_title"], "Broxbourne")
+
+        def silent(ids, user=None, meta=None, **k):
+            return {}
+        self.assertTrue(self.export(silent)["f1"]["matched_detail"].startswith("not found"))
+
+    def test_a_source_whose_licence_forbids_redistribution_is_withheld(self):
+        from api.models import GazetteerRegistryEntry
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="gn", defaults=dict(name="GeoNames", namespace="gn", entry_class="authority",
+                                   status="published", redistributable=False, downloadable=False))
+        self.post({"place": self.ware.pk, "action": "link", "target": "gn:44"})
+        called = []
+
+        def fetch(ids, user=None, meta=None, **k):
+            called.append(ids)
+            return {"gn:44": self.PLACE}
+        w = self.export(fetch)["f1"]
+        self.assertEqual((w["matched_id"], w["matched_source"], w["matched_source_name"]), ("gn:44", "gn", "GeoNames"))
+        self.assertTrue(w["matched_detail"].startswith("withheld"))
+        self.assertEqual((w["matched_lon"], w["matched_names"], w["matched_population"]), ("", "", ""))
+        self.assertEqual(called, [])                         # nothing was even asked for
 
 
 class FeedSearchTests(FeedTestBase):
