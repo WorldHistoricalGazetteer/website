@@ -148,7 +148,12 @@ def collect_python():
         # Some projects put the entire licence text in the License field.
         if len(declared) > 90:
             declared = ''
-        lic = classifiers[0] if classifiers else declared
+        # PEP 639 (`License-Expression`) is what current releases of Django, DRF, dnspython,
+        # frozendict, narwhals, regex, setuptools and threadpoolctl use INSTEAD of the older
+        # `License` field, so before this was read they all looked undeclared. It only fills a
+        # gap: a classifier or a `License` field still wins, so existing rows cannot change.
+        expression = (m['License-Expression'] or '').strip()
+        lic = classifiers[0] if classifiers else (declared or expression)
         election = ELECTIONS.get(name.lower())
         if election:
             lic = election['elected']
