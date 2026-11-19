@@ -49,7 +49,7 @@ function steps() {
     { element: '[data-tour="later"]', popover: { side: 'top', title: 'Not sure yet',
       description: 'Not ready to decide? Move the record to <strong>Not sure yet</strong>. Nothing expires.' } },
     { element: '[data-tour="search"]', popover: { side: 'top', title: 'Search by hand',
-      description: 'If you know another spelling, search for it here. The results appear on the map as well.' } },
+      description: 'If you know another spelling, search for it here. Results that are already suggestions above are not offered again, and the rest appear on the map as well.' } },
     { element: '#mf_shortcuts', popover: { side: 'top', title: 'Keyboard shortcuts',
       description: 'The keyboard shortcuts are off. Switch them on if you want to work fast without the mouse.' } },
     { element: '#mf_tour_button', popover: { side: 'bottom', title: 'See this again',

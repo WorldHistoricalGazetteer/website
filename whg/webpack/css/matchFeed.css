@@ -120,3 +120,10 @@
 /* Key hints on buttons are clutter until the person turns the keyboard shortcuts on. */
 .mf-page:not(.mf-keys-on) .mf-bar kbd,
 .mf-page:not(.mf-keys-on) #mf_search kbd { display: none; }
+
+/* Weak suggestions folded behind one line; same-title ones fold again; search results already listed are muted. */
+.mf-weak-wrap, .mf-fold, .mf-hand-listed-wrap { list-style: none; }
+.mf-weak > summary, .mf-fold > summary, .mf-hand-listed > summary { cursor: pointer; }
+.mf-weak { border-top: 1px dashed #ced4da; padding-top: .35rem; margin-top: .25rem; }
+.mf-fold { margin: .2rem 0 .2rem .25rem; }
+.mf-hand--listed { opacity: .75; padding: .15rem 0; }

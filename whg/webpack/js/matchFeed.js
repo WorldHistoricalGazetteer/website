@@ -30,7 +30,7 @@ const S = {
   tab: root.dataset.tab, records: [], idx: 0, offset: 0, next: null,
   dec: new Map(),            // row index -> { d: 'same'|'not'|'unsure', src: 'explicit'|'prefilled'|'default' }
   focus: null,               // the row with the focus (roving tabindex, map highlight)
-  undo: [], relaxed: new Set(), searchResults: null, handSel: null, handChecked: new Set(), searchChips: [],
+  undo: [], relaxed: new Set(), searchResults: null, handSel: null, handChecked: new Set(), weakOpen: new Set(), searchChips: [],
   shortcuts: store('local', 'mf.shortcuts') === 'on',   // off until the person switches them on
   publish: store('session', 'mf.publish') === '1',
   note: '', relation: 'closeMatch',   // kept across redraws; both reset when the record changes
@@ -282,22 +282,79 @@ function rowHTML(c, i, r) {
 }
 
 // Rows in display order: a place described by more than one source sits together under one heading.
+//
+// Weak suggestions (nothing about them is name-confident) go behind one closed "weak suggestions"
+// line when the record also has better ones: they are what a search returns when it has nothing
+// more to say, and listing eighteen of them under the two good ones buries the good ones. Those that
+// share a title fold again into "7 places named X". Nothing is hidden for good: every row keeps its
+// number and its decision, the line says how many, and opening it (or the keyboard, or a marker)
+// shows them. A row the person has decided, or a record whose every suggestion is weak, is never folded.
+function foldedSet(r) {
+  const cs = r.candidates || [];
+  const folded = new Set();
+  if (!cs.some((c) => c.tier !== 'weak')) return folded;
+  const can = (c, i) => c.tier === 'weak' && !settled(c) && !S.dec.has(i);
+  const groupOk = new Map();
+  cs.forEach((c, i) => { if (c.group != null) groupOk.set(c.group, (groupOk.get(c.group) !== false) && can(c, i)); });
+  cs.forEach((c, i) => { if (can(c, i) && (c.group == null || groupOk.get(c.group))) folded.add(i); });
+  return folded;
+}
+const titleKey = (c) => String((c.card && c.card.title) || c.title || '').trim().toLocaleLowerCase();
+
+function groupHTML(g, cs, r) {
+  const members = cs.map((m, j) => [m, j]).filter(([m]) => m.group === g);
+  const open = members.filter(([m]) => !settled(m));
+  return `<li class="mf-group" data-group="${g}" role="group" aria-label="The same place in ${members.length} sources">
+      <div class="mf-group-head small"><i class="fas fa-link me-1" aria-hidden="true"></i>
+        Probably one place, described by ${members.length} sources
+        ${open.length ? `<button type="button" class="btn btn-sm btn-outline-success ms-2 py-0" data-act="group" data-g="${g}" data-d="same">All same place</button>` : ''}</div>
+      <ol class="list-unstyled mb-0">${members.map(([m, j]) => rowHTML(m, j, r)).join('')}</ol></li>`;
+}
+
+function weakHTML(r, folded) {
+  const cs = r.candidates;
+  const seen = new Set();
+  const items = [];   // { key, html, n }
+  cs.forEach((c, i) => {
+    if (!folded.has(i)) return;
+    if (c.group != null) {
+      if (seen.has(`g${c.group}`)) return;
+      seen.add(`g${c.group}`);
+      items.push({ key: null, html: groupHTML(c.group, cs, r), n: cs.filter((m) => m.group === c.group).length });
+    } else items.push({ key: titleKey(c), html: rowHTML(c, i, r), n: 1 });
+  });
+  const byTitle = new Map();
+  items.forEach((it) => { if (it.key) byTitle.set(it.key, (byTitle.get(it.key) || 0) + 1); });
+  const done = new Set();
+  const body = [];
+  items.forEach((it) => {
+    if (!it.key || byTitle.get(it.key) < 2) { body.push(it.html); return; }
+    if (done.has(it.key)) return;
+    done.add(it.key);
+    const same = items.filter((x) => x.key === it.key);
+    const label = (cs.find((c, i) => folded.has(i) && titleKey(c) === it.key) || {}).card;
+    body.push(`<li class="mf-fold"><details><summary class="small">${same.length} places named
+        <span dir="auto">${esc((label && label.title) || it.key)}</span></summary>
+        <ol class="list-unstyled mb-0">${same.map((x) => x.html).join('')}</ol></details></li>`);
+  });
+  return `<li class="mf-weak-wrap"><details class="mf-weak" data-place="${r.place}"${S.weakOpen.has(r.place) ? ' open' : ''}>
+      <summary class="small text-secondary">${folded.size} weak suggestion${folded.size === 1 ? '' : 's'}: probably not the same place</summary>
+      <ol class="list-unstyled mb-0 mt-1">${body.join('')}</ol></details></li>`;
+}
+
 function rowsHTML(r) {
   const cs = r.candidates;
+  const folded = foldedSet(r);
   const seen = new Set();
   const out = [];
   cs.forEach((c, i) => {
+    if (folded.has(i)) return;
     if (c.group == null) { out.push(rowHTML(c, i, r)); return; }
     if (seen.has(c.group)) return;
     seen.add(c.group);
-    const members = cs.map((m, j) => [m, j]).filter(([m]) => m.group === c.group);
-    const open = members.filter(([m]) => !settled(m));
-    out.push(`<li class="mf-group" data-group="${c.group}" role="group" aria-label="The same place in ${members.length} sources">
-      <div class="mf-group-head small"><i class="fas fa-link me-1" aria-hidden="true"></i>
-        Probably one place, described by ${members.length} sources
-        ${open.length ? `<button type="button" class="btn btn-sm btn-outline-success ms-2 py-0" data-act="group" data-g="${c.group}" data-d="same">All same place</button>` : ''}</div>
-      <ol class="list-unstyled mb-0">${members.map(([m, j]) => rowHTML(m, j, r)).join('')}</ol></li>`);
+    out.push(groupHTML(c.group, cs, r));
   });
+  if (folded.size) out.push(weakHTML(r, folded));
   return out.join('');
 }
 
@@ -460,7 +517,8 @@ function searchHTML(r) {
   return `<div class="mt-3" id="mf_search" data-tour="search">
       <label class="small text-secondary" for="mf_search_q">Search for another name <kbd>/</kbd></label>
       <div class="input-group input-group-sm">
-        <input type="text" class="form-control" id="mf_search_q" value="${esc(r.title)}" dir="auto">
+        <input type="text" class="form-control" id="mf_search_q" value="" dir="auto"
+               placeholder="Another name or spelling (left empty: this record's own name)">
         <button type="button" class="btn btn-outline-secondary" data-act="search">Search</button>
       </div>
       <div id="mf_search_cx"></div>
@@ -502,6 +560,7 @@ function focusRow(i) {
   const li = document.querySelector(`#mf_cands .mf-row[data-i="${i}"]`);
   if (!li) return;
   S.focus = i;
+  for (let d = li.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true;   // a folded row opens its fold
   document.querySelectorAll('#mf_cands .mf-row').forEach((x) => {
     const on = Number(x.dataset.i) === i;
     x.classList.toggle('is-focus', on);
@@ -525,7 +584,10 @@ function mapView(r) {
   const points = [];
   const missing = [];
   const withheld = [];
+  // A folded weak suggestion has no pin (a numbered pin with no visible row would be an orphan) until its fold is open.
+  const folded = S.weakOpen.has(r.place) ? new Set() : foldedSet(r);
   cands.forEach((c, i) => {
+    if (folded.has(i)) return;
     if (Array.isArray(c.location)) {
       const v = S.dec.get(i);
       points.push({
@@ -540,6 +602,7 @@ function mapView(r) {
   const hand = [];
   const handMissing = [];
   (S.searchResults || []).forEach((c, i) => {
+    if (listedAt(c) !== undefined) return;   // already a numbered suggestion: not a second pin
     if (Array.isArray(c.location)) hand.push({ i, title: (c.card && c.card.title) || c.title, location: c.location, focus: S.handSel === i });
     else handMissing.push(`s${i + 1}`);
   });
@@ -825,7 +888,31 @@ function onPlaceClick(location, zoom) {
 }
 
 // ── Hand search (unchanged in behaviour) ──────────────────────────────────────────────────────────
+// A search result that is already one of this record's suggestions (the search for the record's own
+// name finds them again, inevitably) is not offered a second time: it says where it already is.
+function listedAt(c) {
+  const r = current();
+  if (!r) return undefined;
+  const at = r.candidates.findIndex((x) => x.candidate_id === c.candidate_id);
+  return at < 0 ? undefined : at;
+}
+
+function handListedHTML(c, i) {
+  const card = c.card || {};
+  const at = listedAt(c);
+  const st = r_status(at);
+  return `<li class="mf-cand mf-hand mf-hand--listed small text-secondary" data-i="${i}" data-candidate="${esc(c.candidate_id)}">
+      <span class="mf-key">s${i + 1}</span> <span dir="auto">${esc(card.title || c.title)}</span>
+      <span class="badge text-bg-light border ms-1">${esc(nsLabel(card.namespace || c.namespace))}</span>
+      already suggested above as <b>${at + 1}</b>${st ? ` (${st})` : ''}</li>`;
+}
+function r_status(at) {
+  const c = current() && current().candidates[at];
+  return c && c.status === 'accepted' ? 'matched' : c && c.status === 'rejected' ? 'not this one' : '';
+}
+
 function handHTML(c, i) {
+  if (listedAt(c) !== undefined) return handListedHTML(c, i);
   const card = c.card || {};
   const kind = kindOf(card);
   const where = [card.ccodes && card.ccodes.length ? esc(card.ccodes.join(', ')) : '',
@@ -868,8 +955,23 @@ async function search() {
   S.searchResults = res.data.results || [];
   S.handSel = null;
   S.handChecked = new Set();
-  out.innerHTML = (S.searchResults.length ? handBarHTML() : '') + S.searchResults.map((c, i) => handHTML(c, i)).join('')
-    || '<li class="text-secondary small">Nothing found for that name.</li>';
+  const fresh = [];
+  const listed = [];
+  S.searchResults.forEach((c, i) => (listedAt(c) === undefined ? fresh : listed).push([c, i]));
+  const asked = (q || '').trim().toLocaleLowerCase();
+  const sameSearch = (asked === '' || asked === String(r.title || '').trim().toLocaleLowerCase()) && S.relaxed.size === 0;
+  let html = '';
+  if (sameSearch) {
+    html += '<li class="text-secondary small" id="mf_search_same">This is the search already done for this record, so its results are the suggestions above. Try another name or spelling, or relax a filter.</li>';
+  } else if (S.searchResults.length && !fresh.length) {
+    html += `<li class="text-secondary small" id="mf_search_nothing_new">Nothing new: every result is already one of the suggestions above.</li>`;
+  }
+  if (fresh.length) html += handBarHTML() + fresh.map(([c, i]) => handHTML(c, i)).join('');
+  if (listed.length) {
+    html += `<li class="mf-hand-listed-wrap"><details class="mf-hand-listed"><summary class="small text-secondary">${listed.length} result${listed.length === 1 ? ' is' : 's are'} already suggested above</summary>
+      <ol class="list-unstyled mb-0 mt-1">${listed.map(([c, i]) => handListedHTML(c, i)).join('')}</ol></details></li>`;
+  }
+  out.innerHTML = html || '<li class="text-secondary small">Nothing found for that name.</li>';
   updateHandBar();
   try { renderMap(false); } catch (err) { console.warn('The feed map could not show the search results:', err); }
 }
@@ -907,6 +1009,15 @@ function pickHand(i) {
 }
 
 // ── Events ───────────────────────────────────────────────────────────────────────────────────────
+// A fold opening or closing changes which suggestions have a pin on the map (toggle does not bubble).
+root.addEventListener('toggle', (e) => {
+  const d = e.target;
+  if (!d || !d.matches || !d.matches('details.mf-weak')) return;
+  const place = Number(d.dataset.place);
+  if (d.open) S.weakOpen.add(place); else S.weakOpen.delete(place);
+  try { renderMap(false); } catch (err) { console.warn('The feed map could not be updated:', err); }
+}, true);
+
 root.addEventListener('click', (e) => {
   const tabBtn = e.target.closest('.mf-tabs [data-tab]');
   if (tabBtn) { load(tabBtn.dataset.tab); return; }

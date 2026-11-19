@@ -607,6 +607,106 @@ class FeedMapBrowserTests(MapBrowserBase):
         self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
         self.assertFalse(ContributorAttestation.objects.filter(user=self.user).exists())
 
+    CHOR_XY = (60.0, 41.0)
+
+    def chorasmia(self):
+        """A record like the one that was reported: one good suggestion, then weak noise. Three
+        "Worsham Creek"s lie close together (one per source: one place in three sources), two more
+        far apart (two places), and an unrelated name."""
+        from datasets.models_matching import MatchCandidate
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        from places.models import Place, PlaceGeom
+        pl = Place.objects.create(title="Chorasmia", src_id="m9", dataset=self.ds, ccodes=[])
+        PlaceGeom.objects.create(place=pl, geom=Point(*self.CHOR_XY, srid=4326),
+                                 jsonb={"type": "Point", "coordinates": list(self.CHOR_XY)})
+        near = (-77.0, 38.0)
+        self.fake.by_query["Chorasmia"] = response(
+            hit("wd:Q182647", "Chorasmia", (60.01, 41.01), types=[GN_TOWN]),
+            hit("tgn:1", "Worsham Creek", near, conf=21.2, score=21.2, types=[GN_TOWN]),
+            hit("osm:w1", "Worsham Creek", (-77.001, 38.001), conf=21.2, score=21.2, types=[GN_TOWN]),
+            hit("gn:5", "Worsham Creek", (-77.002, 38.0), conf=21.2, score=21.2, types=[GN_TOWN]),
+            hit("tgn:2", "Worsham Creek", (-90.0, 35.0), conf=21.2, score=21.2, types=[GN_TOWN]),
+            hit("gn:6", "Worsham Creek", (-100.0, 40.0), conf=21.2, score=21.2, types=[GN_TOWN]),
+            hit("wd:Q21", "Ogresmuiza", (24.6, 56.8), conf=21.2, score=21.2, types=[GN_TOWN]))
+        tier = candidates.record_candidates(pl, self.gen, self.user)
+        cands = list(MatchCandidate.objects.filter(place=pl, generation=self.gen).order_by("rank"))
+        return pl, tier, cands
+
+    def open_record(self, page, title, tier):
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier={tier}")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true"))
+        if not page.evaluate("(t) => (document.getElementById('mf_record_title') || {}).textContent.startsWith(t)", title):
+            page.click(f"[data-qi]:has-text('{title}')")
+        self.assertTrue(self.wait_for(page, "(t) => (document.getElementById('mf_record_title') || {}).textContent.startsWith(t)", 10000, title))
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.map.state === 'ok' && window.__whgMatchFeed.map.renders >= 1"))
+
+    VISIBLE_ROWS = "() => [...document.querySelectorAll('#mf_cands .mf-row')].filter((x) => x.checkVisibility()).length"
+    PINS = "() => document.querySelectorAll('#mf_map .mf-map-pin--cand').length"
+
+    def test_weak_suggestions_are_folded_and_open_on_demand(self):
+        pl, tier, cands = self.chorasmia()
+        weak = [c for c in cands if c.tier == "weak"]
+        self.assertEqual(len(weak), 6, [(c.candidate_id, c.tier) for c in cands])
+        self.assertEqual(cands[0].candidate_id, "wd:Q182647")
+        page = self.new_page()
+        self.open_record(page, "Chorasmia", tier)
+        self.assertEqual(page.text_content("details.mf-weak > summary").strip(), "6 weak suggestions: probably not the same place")
+        self.assertFalse(page.evaluate("document.querySelector('details.mf-weak').open"))
+        self.assertEqual(page.evaluate(self.VISIBLE_ROWS), 1)               # only the good one is listed
+        self.assertTrue(self.wait_for(page, f"({self.PINS})() === 1", 10000))   # and only it has a pin: no orphan numbers
+        page.click("details.mf-weak > summary")
+        self.assertTrue(self.wait_for(page, f"({self.VISIBLE_ROWS})() >= 5", 5000))
+        self.assertEqual(page.text_content("li.mf-fold > details > summary").split()[:2], ["2", "places"])   # two far-apart creeks fold
+        self.assertIn("Worsham Creek", page.text_content("li.mf-fold > details > summary"))
+        self.assertIn("Probably one place, described by 3 sources", page.text_content("details.mf-weak"))
+        self.assertTrue(self.wait_for(page, f"({self.PINS})() > 1", 10000))     # opening the fold puts its pins on the map
+        if os.environ.get("WHG_FEED_SHOT"):      # optional: a picture to look at, never compared
+            page.set_viewport_size({"width": 1300, "height": 1100})
+            page.wait_for_timeout(800)
+            page.screenshot(path=os.environ["WHG_FEED_SHOT"])
+        # The keyboard reaches a folded row by opening its fold: close it, then ask for suggestion 7.
+        page.click("details.mf-weak > summary")
+        self.assertFalse(page.evaluate("document.querySelector('details.mf-weak').open"))
+        page.focus("#mf_cands .mf-row")
+        page.keyboard.press("7")
+        self.assertTrue(self.wait_for(page, "document.querySelector('details.mf-weak').open", 5000))
+
+    def test_weak_folding_harness_can_fail(self):
+        # A record whose every suggestion is weak is not folded (they are all there is): the fold
+        # check above must not pass for it.
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        from places.models import Place
+        pl = Place.objects.create(title="Qzxv", src_id="m8", dataset=self.ds, ccodes=[])
+        self.fake.by_query["Qzxv"] = response(hit("tgn:7", "Worsham Creek", (-77.0, 38.0), conf=21.2, score=21.2, types=[GN_TOWN]),
+                                              hit("gn:8", "Ogresmuiza", (24.6, 56.8), conf=21.2, score=21.2, types=[GN_TOWN]))
+        tier = candidates.record_candidates(pl, self.gen, self.user)
+        page = self.new_page()
+        self.open_record(page, "Qzxv", tier)
+        self.assertEqual(page.evaluate("document.querySelectorAll('details.mf-weak').length"), 0)
+        self.assertEqual(page.evaluate(self.VISIBLE_ROWS), 2)
+
+    def test_search_results_already_suggested_are_not_offered_again(self):
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        pl, tier, cands = self.chorasmia()
+        self.fake.by_query["Khwarazm"] = response(hit("wd:Q182647", "Chorasmia", (60.01, 41.01), types=[GN_TOWN]),
+                                                  hit("gn:900", "Khwarazm Region", (60.1, 41.1), types=[GN_TOWN]))
+        page = self.new_page()
+        self.open_record(page, "Chorasmia", tier)
+        # The record's own name, nothing relaxed: the same search again. Said so; nothing to tick.
+        page.click("[data-act=search]")
+        self.assertTrue(self.wait_for(page, "document.getElementById('mf_search_same')", 15000))
+        self.assertEqual(page.evaluate("document.querySelectorAll('#mf_search_results .mf-hand-check').length"), 0)
+        self.assertIn("already suggested above", page.text_content("#mf_search_results"))
+        # Another name that finds the same place and a new one: only the new one can be ticked.
+        page.fill("#mf_search_q", "Khwarazm")
+        page.click("[data-act=search]")
+        self.assertTrue(self.wait_for(page, "document.querySelectorAll('#mf_search_results .mf-hand-check').length === 1", 15000))
+        self.assertIsNone(page.query_selector("#mf_search_same"))
+        listed = page.text_content("#mf_search_results .mf-hand-listed")
+        self.assertIn("1 result is already suggested above", listed)
+        self.assertIn("already suggested above as 1", listed)
+        self.assertEqual(page.evaluate("document.querySelectorAll('#mf_search_results .mf-hand--listed').length"), 1)
+
     def test_hand_search_works_when_the_map_cannot_load(self):
         """With the map chunk blocked, searching and linking by hand still work."""
         from datasets.tests_candidates import GN_TOWN, hit, response
