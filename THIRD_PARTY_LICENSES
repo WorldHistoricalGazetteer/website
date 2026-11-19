@@ -10,20 +10,20 @@ Each package remains under its own licence and its own copyright. Nothing
 here alters those terms; the WHG licence in LICENSE covers only WHG's own
 code. The same audit is published at https://whgazetteer.org/licenses/software/
 
-Audited:     2026-09-04
-Revision:    0e259d4ef
+Audited:     2026-11-19
+Revision:    36e0ebc8c
 App version: 3.2
 
 ========================================================================
-PYTHON PACKAGES (server-side) — 175
+PYTHON PACKAGES (server-side) — 179
 ========================================================================
 
 amqp 5.1.1
     Licence: BSD License
     http://github.com/celery/py-amqp
 
-asgiref 3.6.0
-    Licence: BSD License
+asgiref 3.13.0
+    Licence: BSD-3-Clause
     https://github.com/django/asgiref/
 
 async-timeout 4.0.2
@@ -38,7 +38,7 @@ beautifulsoup4 4.11.2
     Licence: MIT License
     https://www.crummy.com/software/BeautifulSoup/bs4/
 
-billiard 4.2.4
+billiard 4.3.2
     Licence: BSD License
     https://github.com/celery/billiard
 
@@ -58,7 +58,7 @@ cached-property 1.5.2
     Licence: BSD License
     https://github.com/pydanny/cached-property
 
-cachetools 7.1.4
+cachetools 8.0.0
     Licence: MIT
 
 celery 5.3.4
@@ -74,7 +74,7 @@ certifi 2026.6.17
     https://github.com/certifi/python-certifi
 
 cffi 2.1.0
-    Licence: MIT
+    Licence: MIT-0
 
 chardet 3.0.4
     Licence: GNU Library or Lesser General Public License (LGPL)
@@ -102,6 +102,10 @@ click-repl 0.2.0
     Licence: MIT
     https://github.com/untitaker/click-repl
 
+cloudpickle 3.1.2
+    Licence: BSD License
+    https://github.com/cloudpipe/cloudpickle
+
 colorama 0.4.6
     Licence: BSD License
 
@@ -113,7 +117,7 @@ cron-descriptor 1.4.5
     Licence: MIT License
     https://github.com/Salamek/cron-descriptor
 
-cryptography 49.0.0
+cryptography 50.0.0
     Licence: Apache-2.0 OR BSD-3-Clause
 
 datapackage 1.15.2
@@ -131,8 +135,8 @@ defusedxml 0.7.1
     Licence: Python Software Foundation License
     https://github.com/tiran/defusedxml
 
-Django 4.2.30
-    Licence: BSD License
+Django 5.2.19
+    Licence: BSD-3-Clause
 
 django-bootstrap-breadcrumbs 0.9.1
     Licence: MIT License
@@ -145,10 +149,6 @@ django-bootstrap-modal-forms 1.4.1
 django-celery-beat 2.9.0
     Licence: BSD License
     https://github.com/celery/django-celery-beat
-
-django-cors-headers 2.4.0
-    Licence: MIT License
-    https://github.com/ottoyiu/django-cors-headers
 
 django-datatables-view 1.17.0
     Licence: BSD License
@@ -173,7 +173,7 @@ django-fontawesome 1.0
     Licence: BSD License
     https://www.github.com/redouane/django-fontawesome
 
-django-geojson 4.0.0
+django-geojson 4.2.0
     Licence: LPGL, see LICENSE file.
     https://github.com/makinacorpus/django-geojson
 
@@ -181,7 +181,7 @@ django-guardian 2.3.0
     Licence: BSD License
     http://github.com/django-guardian/django-guardian
 
-django-health-check 3.24.0
+django-health-check 4.8.0
     Licence: MIT License
 
 django-leaflet 0.28.3
@@ -245,9 +245,8 @@ django_celery_results 2.6.0
     Licence: BSD License
     https://github.com/celery/django-celery-results
 
-djangorestframework 3.15.2
-    Licence: BSD License
-    https://www.django-rest-framework.org/
+djangorestframework 3.17.2
+    Licence: BSD-3-Clause
 
 djangorestframework-datatables 0.7.0
     Licence: MIT License
@@ -257,6 +256,9 @@ djangorestframework-gis 1.0
     Licence: BSD License
     https://github.com/openwisp/django-rest-framework-gis
 
+dnspython 2.9.2
+    Licence: ISC
+
 docutils 0.19
     Licence: Public Domain
     https://docutils.sourceforge.io/
@@ -265,11 +267,14 @@ drf-spectacular 0.28.0
     Licence: BSD License
     https://github.com/tfranzel/drf-spectacular
 
+editdistance 0.8.1
+    Licence: MIT
+
 edtf 4.0.1
     Licence: MIT License
     https://github.com/ixc/python-edtf
 
-elastic-transport 8.19.0
+elastic-transport 8.19.1
     Licence: Apache Software License
     https://github.com/elastic/elastic-transport-python
 
@@ -281,7 +286,7 @@ et-xmlfile 1.1.0
     Licence: MIT License
     https://foss.heptapod.net/openpyxl/et_xmlfile
 
-flower 2.0.1
+flower 2.2.0
     Licence: BSD License
     https://github.com/mher/flower
 
@@ -293,8 +298,8 @@ frictionless 3.31.0
     Licence: MIT License
     https://github.com/frictionlessdata/frictionless-py
 
-frozendict 2.4.7
-    Licence: GNU Lesser General Public License v3 (LGPLv3)
+frozendict 2.5.1
+    Licence: LGPL-3.0-only
     https://github.com/Marco-Sulla/python-frozendict
 
 fsspec 2024.6.1
@@ -316,7 +321,7 @@ goodtables 2.5.4
     Licence: MIT License
     https://github.com/frictionlessdata/goodtables
 
-greenlet 2.0.2
+greenlet 3.1.1
     Licence: MIT License
     https://greenlet.readthedocs.io/
 
@@ -347,10 +352,10 @@ jmespath 1.0.1
     Licence: MIT License
     https://github.com/jmespath/jmespath.py
 
-joblib 1.5.3
+joblib 1.6.0
     Licence: BSD-3-Clause
 
-josepy 2.2.0
+josepy 2.3.0
     Licence: Apache-2.0
 
 jsonlines 3.1.0
@@ -372,20 +377,27 @@ linear-tsv 1.1.0
     Licence: Apache Software License
     https://github.com/solidsnack/tsv
 
-lxml 6.1.1
+lxml 6.1.3
     Licence: BSD-3-Clause
     https://lxml.de/
 
-MarkupSafe 3.0.3
+MarkupSafe 3.0.4
     Licence: BSD-3-Clause
 
 mozilla-django-oidc 4.0.1
     Licence: Mozilla Public License 2.0 (MPL 2.0)
     https://github.com/mozilla/mozilla-django-oidc
 
+munkres 1.1.4
+    Licence: Apache Software License
+    https://software.clapper.org/munkres/
+
 nameparser 1.1.3
     Licence: GNU Library or Lesser General Public License (LGPL)
     https://github.com/derek73/python-nameparser
+
+narwhals 2.29.0
+    Licence: MIT
 
 networkx 3.2.1
     Licence: BSD License
@@ -413,12 +425,16 @@ ordered-set 4.1.0
 orderly-set 5.5.0
     Licence: MIT License
 
-packaging 26.2
+packaging 26.3
     Licence: Apache-2.0 OR BSD-2-Clause
 
-pandas 1.4.1
+pandas 2.2.3
     Licence: BSD License
     https://pandas.pydata.org
+
+panphon 0.22.0
+    Licence: MIT
+    https://github.com/dmort27/panphon
 
 parameterized 0.7.4
     Licence: BSD License
@@ -431,7 +447,7 @@ petl 1.7.12
 pillow 12.3.0
     Licence: MIT-CMU
 
-pip 26.1.2
+pip 26.3
     Licence: MIT
 
 pip-search 0.0.12
@@ -446,11 +462,7 @@ prompt-toolkit 3.0.38
     Licence: BSD License
     https://github.com/prompt-toolkit/python-prompt-toolkit
 
-psutil 7.2.2
-    Licence: BSD-3-Clause
-    https://github.com/giampaolo/psutil
-
-psycopg2-binary 2.9.5
+psycopg2-binary 2.9.10
     Licence: GNU Library or Lesser General Public License (LGPL)
     https://psycopg.org/
 
@@ -460,14 +472,14 @@ pycparser 3.0
 Pygments 2.20.0
     Licence: BSD-2-Clause
 
-PyJWT 2.13.0
+PyJWT 2.14.0
     Licence: MIT
 
 PyLD 2.0.4
     Licence: BSD License
     https://github.com/digitalbazaar/pyld
 
-pyparsing 3.3.2
+pyparsing 3.3.3
     Licence: MIT
 
 pyproj 3.7.1
@@ -478,7 +490,7 @@ pyrsistent 0.19.3
     Licence: MIT License
     https://github.com/tobgu/pyrsistent/
 
-python-crontab 3.3.0
+python-crontab 3.4.0
     Licence: LGPLv3
     https://gitlab.com/doctormo/python-crontab/
 
@@ -489,7 +501,7 @@ python-dateutil 2.8.2
 python-dotenv 1.2.2
     Licence: BSD-3-Clause
 
-python-fsutil 0.17.0
+python-fsutil 0.18.0
     Licence: MIT License
 
 python-http-client 3.3.7
@@ -508,7 +520,7 @@ pytz 2022.7
     Licence: MIT License
     http://pythonhosted.org/pytz
 
-PyYAML 6.0
+PyYAML 6.0.2
     Licence: MIT License
     https://pyyaml.org/
 
@@ -527,6 +539,9 @@ rdflib-jsonld 0.6.2
 redis 4.6.0
     Licence: MIT License
     https://github.com/redis/redis-py
+
+regex 2026.9.3
+    Licence: Apache-2.0 AND CNRI-Python
 
 requests 2.34.2
     Licence: Apache Software License
@@ -547,23 +562,22 @@ s3transfer 0.19.1
     Licence: Apache Software License
     https://github.com/boto/s3transfer
 
-scikit-learn 1.7.2
+scikit-learn 1.9.1
     Licence: BSD-3-Clause
 
-scipy 1.15.3
+scipy 1.17.1
     Licence: BSD License
 
 sendgrid 6.11.0
     Licence: MIT
     https://github.com/sendgrid/sendgrid-python/
 
-sentry-sdk 2.65.0
+sentry-sdk 2.75.0
     Licence: MIT
     https://github.com/getsentry/sentry-python
 
-setuptools 63.2.0
-    Licence: MIT License
-    https://github.com/pypa/setuptools
+setuptools 80.10.2
+    Licence: MIT
 
 shapely 2.0.6
     Licence: BSD License
@@ -583,14 +597,14 @@ six 1.16.0
     Licence: MIT License
     https://github.com/benjaminp/six
 
-soupsieve 2.8.4
+soupsieve 2.9
     Licence: MIT License
 
-SQLAlchemy 1.4.46
+SQLAlchemy 1.4.54
     Licence: MIT License
     https://www.sqlalchemy.org
 
-sqlparse 0.5.5
+sqlparse 0.6.0
     Licence: BSD License
 
 starkbank-ecdsa 2.3.1
@@ -618,11 +632,10 @@ text-unidecode 1.3
     Elected: Artistic-1.0 (offered: Artistic-1.0 OR GPL-2.0-or-later)
     https://github.com/kmike/text-unidecode/
 
-threadpoolctl 3.6.0
-    Licence: BSD License
-    https://github.com/joblib/threadpoolctl
+threadpoolctl 3.8.0
+    Licence: BSD-3-Clause
 
-tornado 6.5.7
+tornado 6.5.8
     Licence: Apache Software License
     http://www.tornadoweb.org/
 
@@ -630,10 +643,7 @@ typer 0.7.0
     Licence: MIT License
     https://github.com/tiangolo/typer
 
-typing_extensions 4.16.0
-    Licence: PSF-2.0
-
-tzdata 2026.3
+tzdata 2026.6
     Licence: Apache-2.0
     https://github.com/python/tzdata
 
@@ -677,7 +687,7 @@ xlwt 1.3.0
     http://www.python-excel.org/
 
 ========================================================================
-JAVASCRIPT PACKAGES (delivered to the browser) — 45
+JAVASCRIPT PACKAGES (delivered to the browser) — 71
 ========================================================================
 
 @citation-js/core 0.7.18
@@ -716,6 +726,10 @@ JAVASCRIPT PACKAGES (delivered to the browser) — 45
     Licence: MIT
     https://github.com/citation-js/citation-js
 
+@hocuspocus/common 2.15.3
+    Licence: MIT
+    https://hocuspocus.dev
+
 @hocuspocus/provider 2.15.3
     Licence: MIT
     https://hocuspocus.dev
@@ -727,6 +741,10 @@ JAVASCRIPT PACKAGES (delivered to the browser) — 45
 @larsgw/wikibase-sdk 10.2.1
     Licence: MIT
     https://github.com/maxlath/wikibase-sdk
+
+@lifeomic/attempt 3.1.0
+    Licence: MIT
+    https://github.com/lifeomic/attempt
 
 @mapbox/geojson-area 0.2.2
     Licence: BSD-2-Clause
@@ -740,9 +758,53 @@ JAVASCRIPT PACKAGES (delivered to the browser) — 45
     Licence: ISC
     https://github.com/mapbox/mapbox-gl-draw
 
+@mapbox/point-geometry 1.1.0
+    Licence: ISC
+    git@github.com:mapbox/point-geometry
+
+@sentry-internal/browser-utils 10.23.0
+    Licence: MIT
+    https://github.com/getsentry/sentry-javascript
+
+@sentry-internal/feedback 10.23.0
+    Licence: MIT
+    https://github.com/getsentry/sentry-javascript
+
+@sentry-internal/replay 10.23.0
+    Licence: MIT
+    https://github.com/getsentry/sentry-javascript
+
+@sentry-internal/replay-canvas 10.23.0
+    Licence: MIT
+    https://github.com/getsentry/sentry-javascript
+
+@sentry/browser 10.23.0
+    Licence: MIT
+    https://github.com/getsentry/sentry-javascript
+
+@sentry/core 10.23.0
+    Licence: MIT
+    https://github.com/getsentry/sentry-javascript
+
+@turf/bbox 6.5.0
+    Licence: MIT
+    https://github.com/Turfjs/turf
+
+@turf/helpers 6.5.0
+    Licence: MIT
+    https://github.com/Turfjs/turf
+
+@turf/meta 6.5.0
+    Licence: MIT
+    https://github.com/Turfjs/turf
+
 ajv 8.20.0
     Licence: MIT
     ajv-validator/ajv
+
+any-ascii 0.3.3
+    Licence: ISC
+    https://github.com/anyascii/anyascii
 
 base64-js 1.5.1
     Licence: MIT
@@ -765,6 +827,46 @@ css-loader 6.11.0
     Licence: MIT
     webpack-contrib/css-loader
 
+d3-array 1.2.4
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-array
+
+d3-collection 1.0.4
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-collection
+
+d3-color 3.1.0
+    Licence: ISC
+    https://github.com/d3/d3-color
+
+d3-format 1.2.2
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-format
+
+d3-interpolate 1.1.6
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-interpolate
+
+d3-path 1.0.5
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-path
+
+d3-scale 1.0.7
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-scale
+
+d3-shape 1.3.7
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-shape
+
+d3-time 1.0.8
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-time
+
+d3-time-format 2.1.1
+    Licence: BSD-3-Clause
+    https://github.com/d3/d3-time-format
+
 driver.js 1.6.0
     Licence: MIT
     https://github.com/nilbuild/driver.js
@@ -773,7 +875,7 @@ fast-deep-equal 3.1.3
     Licence: MIT
     https://github.com/epoberezkin/fast-deep-equal
 
-fast-uri 3.1.3
+fast-uri 3.1.8
     Licence: BSD-3-Clause
     https://github.com/fastify/fast-uri
 
@@ -809,19 +911,27 @@ mammoth 1.12.0
     Licence: BSD-2-Clause
     https://github.com/mwilliamson/mammoth.js
 
-maplibre-gl 5.3.1
+maplibre-gl 5.24.0
     Licence: BSD-3-Clause
     https://github.com/maplibre/maplibre-gl-js
+
+mgrs 1.0.0
+    Licence: MIT
+    https://github.com/proj4js/mgrs
 
 moo 0.5.2
     Licence: BSD-3-Clause
     https://github.com/tjvr/moo
 
+nanoid 5.1.16
+    Licence: MIT
+    ai/nanoid
+
 onnxruntime-web 1.27.0
     Licence: MIT
     https://github.com/Microsoft/onnxruntime
 
-pdfjs-dist 6.1.200
+pdfjs-dist 6.3.289
     Licence: Apache-2.0
     https://github.com/mozilla/pdf.js
 
@@ -848,6 +958,10 @@ sync-fetch 0.4.5
 wgs84 0.0.0
     Licence: BSD-2-Clause
     git@github.com:mapbox/wgs84
+
+wkt-parser 1.5.5
+    Licence: MIT
+    https://github.com/proj4js/wkt-parser
 
 xlsx 0.20.3
     Licence: Apache-2.0
