@@ -69,6 +69,10 @@ configs.forEach((c) => {
   // the audit would silently conclude that WHG bundles no third-party code at all.
   // Slower, but the whole point of this script is that its output is trustworthy.
   c.cache = false;
+  // webpack.config.js sets `watch: !isProduction`, and this script does not run with
+  // ENV_CONTEXT=whgazetteer-org, so without this the compiler re-runs forever and the
+  // process never exits (it just rewrites the same file every few seconds).
+  c.watch = false;
 });
 
 console.log('Compiling to discover bundled modules (this takes a minute)…');
@@ -80,7 +84,14 @@ webpack(configs, (err, stats) => {
   }
 
   const bundled = new Set();
-  const json = stats.toJson({ all: false, modules: true, chunks: false });
+  const json = stats.toJson({
+    all: false, modules: true, chunks: false,
+    // Stats output TRUNCATES by default (modulesSpace 15, nestedModulesSpace 10), which
+    // silently drops modules folded into a concatenated module: an audit that lists fewer
+    // packages than ship is the worst failure this script can have. Ask for everything.
+    nestedModules: true, modulesSpace: Infinity, nestedModulesSpace: Infinity,
+    orphanModules: true, runtimeModules: false, cachedModules: true, dependentModules: true,
+  });
   const walk = (mods) => (mods || []).forEach((m) => {
     if (m.identifier) {
       const pkg = packageOf(m.identifier);

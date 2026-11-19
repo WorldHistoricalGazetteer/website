@@ -437,6 +437,9 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         page = self.new_page(anonymous=True)
         r, d = self.public_page_checks(page, f"/atlas/place/{self.A.pk}/", t)
         self.shot(page, "record_public_anonymous", ".enr-env-modal .modal-content")
+        # SG 2026-11-19: the public page gets the new Profile / Signature / Charts modal too.
+        tabs = page.evaluate("""() => Array.from(document.querySelectorAll('.enr-env-modal [role="tab"]')).map(b => b.dataset.tab).join()""")
+        self.assertEqual(tabs, "profile,signature,charts")
         failed = {k: v for k, v in r.items() if not v}
         self.assertEqual(failed, {}, f"{failed}; dom={d}; errors={self.errors}")
         self.assertEqual((d["navAbout"], d["publicAttr"]), (True, "public"))

@@ -1,7 +1,7 @@
 # Proposed payload for EDOPS `/whgmodal` (provisional, from WHG)
 
 Status: **a proposal for discussion, not an agreement.** WHG has built a prototype modal
-(beta only) against this shape, filled today by adapting `/api/signature` responses
+(visible to beta testers, and on the public Record page once WHG's v4 release switch is on) against this shape, filled today by adapting `/api/signature` responses
 (`api/edops_whgmodal.py`). If your endpoint's shape differs, only that one adapter
 function changes. A worked example for a level-8 basin (London, 1600-1700) is in
 `scripts/fixtures/edop/whgmodal_basin_london_L8_provisional.json`.
@@ -76,3 +76,7 @@ data, and will not.
    or is "summaries only" right?
 5. Do you want a `citation` string from you, rather than WHG composing one from
    `version`?
+6. **Logo.** WHG now shows the EDOPS pin on its Environment buttons and modal header,
+   cropped from `edops_header_400.jpg` (there is no vector version in the `edops` repo).
+   Could you send a transparent SVG (or PNG) that reads at 16-24 px, and say what terms
+   and attribution wording you want with it?

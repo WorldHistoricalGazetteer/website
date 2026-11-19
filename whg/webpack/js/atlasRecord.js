@@ -744,8 +744,9 @@ function initEnrichment() {
             invitation: 'River basin, climate and land-use figures for where this group of records lies, from EDOPS, '
                 + 'a research service outside WHG. Nothing is looked up or sent until you ask.',
             headingTag: 'h2',
-            // Beta only: the server marks the public Record page data-enrichment="public".
-            edopsModal: env.dataset.enrichment !== 'public' });
+            // Beta and public alike (SG 2026-11-19). The modal itself only appears when the
+            // signature carries `whgmodal`, which the environment endpoint always adds.
+            edopsModal: true });
     }
 }
 

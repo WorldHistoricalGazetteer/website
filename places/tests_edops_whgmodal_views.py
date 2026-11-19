@@ -1,4 +1,4 @@
-"""The beta-only ``whgmodal`` block on the environment endpoints (prototype EDOPS modal).
+"""The ``whgmodal`` block on the environment endpoints (prototype EDOPS modal; beta and public).
 
 EDOPS is never called (fixtures through a fake transport).
 
@@ -18,17 +18,17 @@ MEMBERS = {"members": [{"place_id": "gn:1", "title": "Somewhere", "repr_point": 
 
 @override_settings(CACHES=LOCMEM, EDOP_ENABLED=True, V4_LANDING_ENABLED=True)
 class WhgmodalViewTests(_PublicFixture):
-    def test_beta_record_signature_carries_whgmodal_but_public_does_not(self):
-        t = FakeTransport(AREA, AREA)
-        beta = self.env(self.A.pk, transport=t, user=self.beta).json()
-        anon = self.env(self.A.pk, transport=t).json()
-        self.assertEqual((beta["status"], anon["status"]), ("ok", "ok"))        # both answered (presence) ...
-        self.assertTrue(all("whgmodal" in s for s in beta["signatures"]))
-        self.assertEqual(beta["signatures"][0]["whgmodal"]["schema"], "whgmodal/0-provisional")
-        self.assertFalse(any("whgmodal" in s for s in anon["signatures"]))      # ... only beta gets the block
-        plain = self.env(self.A.pk, transport=FakeTransport(AREA), user=self.plain).json()
-        self.assertFalse(any("whgmodal" in s for s in plain["signatures"]))     # signed-in non-beta too
-        self.assertNotIn("raw", json.dumps(beta))
+    def test_every_caller_gets_whgmodal_on_the_record_endpoint(self):
+        """SG 2026-11-19: the public Record page gets the new modal too. Presence first: each
+        caller's answer is ok and has signatures; then each signature carries the block."""
+        for who, user in (("beta", self.beta), ("anon", None), ("plain", self.plain)):
+            t = FakeTransport(AREA, AREA)
+            j = self.env(self.A.pk, transport=t, user=user).json() if user else self.env(self.A.pk, transport=t).json()
+            self.assertEqual(j["status"], "ok", who)
+            self.assertGreaterEqual(len(j["signatures"]), 1, who)
+            self.assertTrue(all(s["whgmodal"]["schema"] == "whgmodal/0-provisional" for s in j["signatures"]), who)
+            self.assertNotIn("raw", json.dumps(j), who)                         # the raw EDOPS response is not echoed
+            self.assertNotIn("geom_wkt", json.dumps(j["signatures"][0]["whgmodal"]), who)
 
     def test_locus_basin_whgmodal_has_series_and_no_whg_names(self):
         self.client.force_login(self.beta)
