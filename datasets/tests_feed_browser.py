@@ -459,6 +459,60 @@ class FeedMapBrowserTests(MapBrowserBase):
         failed = {k: v for k, v in results.items() if not v}
         self.assertEqual(failed, {}, results)
 
+    BASEMAPS = {"OSM": "OpenStreetMap", "whg-enhanced": "WHG Enhanced", "Satellite": "Satellite"}
+
+    def basemap_switcher(self, page, stubbed=True):
+        """The labels and checked state of the map's basemap switcher. The three tileboss styles are
+        replaced by one-layer stubs (nothing leaves the machine), so the test reads what the page
+        OFFERS, not what MapTiler or tileboss serve today."""
+        if stubbed:
+            def style(route):
+                sid = route.request.url.split("/styles/")[1].split("/")[0]
+                body = {"version": 8, "name": self.BASEMAPS.get(sid, sid), "metadata": {}, "sources": {},
+                        "layers": [{"id": "bg", "type": "background", "paint": {"background-color": "#cde"}}]}
+                route.fulfill(status=200, body=json.dumps(body), content_type="application/json",
+                              headers={"access-control-allow-origin": "*", "access-control-allow-headers": "*",
+                                       "access-control-allow-methods": "GET, OPTIONS"})
+            page.route("https://tiles.whgazetteer.org/styles/*/style.json", style)
+        self.console = []
+        self.tile_requests = []
+        page.on("request", lambda r: self.tile_requests.append(r.url) if "tiles.whgazetteer" in r.url else None)
+        page.on("requestfailed", lambda r: self.tile_requests.append("FAILED " + r.url) if "tiles.whgazetteer" in r.url else None)
+        self.page_errors = []
+        page.on("pageerror", lambda e: self.page_errors.append(str(e)[:300]))
+        page.on("console", lambda m: self.console.append(f"{m.type}: {m.text}"[:300]))
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true")
+        if not self.wait_for(page, "document.querySelectorAll('#mf_map #mapStyleList input[name=style]').length > 0", 15000):
+            self.diagnosis = {"map": page.evaluate("(({state, basemap}) => ({state, basemap}))((window.__whgMatchFeed || {}).map || {})"), "external": sorted(self.external), "tiles": self.tile_requests[:8], "pageerrors": self.page_errors[:6],
+                              "style": page.evaluate("(() => { const m = ((window.__whgMatchFeed || {}).map || {}).instance; return m ? {loaded: m.loaded(), styleLoaded: m.isStyleLoaded(), layers: (m.getStyle().layers || []).map((l) => l.id)} : null; })()"),
+                              "mapdiv": page.evaluate("(document.getElementById('mf_map') || {innerHTML: 'none'}).innerHTML.slice(0, 400)"),
+                              "console": [c for c in self.console if "CDN" not in c and "MIME" not in c and "ERR_FAILED" not in c and "404" not in c][-12:]}
+            return None
+        return page.evaluate("""[...document.querySelectorAll('#mf_map #mapStyleList input[name=style]')].map((r) => ({
+            id: r.dataset.value, label: r.parentElement.textContent.trim(), checked: r.checked}))""")
+
+    def test_basemap_switcher_offers_osm_enhanced_and_satellite_and_remembers_the_choice(self):
+        page = self.new_page()
+        got = self.basemap_switcher(page)
+        self.assertIsNotNone(got, getattr(self, "diagnosis", None))
+        self.assertEqual([(x["id"], x["label"]) for x in got or []],
+                         [("OSM", "OpenStreetMap"), ("whg-enhanced", "WHG Enhanced"), ("Satellite", "Satellite")], got)
+        self.assertEqual([x["id"] for x in got if x["checked"]], ["OSM"])          # richest by default
+        self.assertNotIn("whg-portal", [x["id"] for x in got])                    # no ecoregion fills
+        page.click("#mf_map .style-button")                                        # the list opens from the control
+        page.click("#mf_map #mapStyleList label[data-value='Satellite']")
+        self.assertTrue(self.wait_for(page, "localStorage.getItem('whg-feed-maplayers') === '{\"style\":\"Satellite\"}'", 5000))
+        got = self.basemap_switcher(page, stubbed=False)                           # the page reloads: the choice stays
+        self.assertEqual([x["id"] for x in got if x["checked"]], ["Satellite"], got)
+        self.assertEqual([x["id"] for x in got][0], "Satellite")
+
+    def test_basemap_switcher_harness_can_fail(self):
+        # With no style served (every tileboss request is aborted) there is no switcher to read: the
+        # check above must say so rather than pass.
+        page = self.new_page()
+        self.assertIsNone(self.basemap_switcher(page, stubbed=False))
+
     HAND_XY = [(-0.05, 51.74), (0.01, 51.77)]   # two search results with a point; a third has none
 
     def hand_flow(self, page):
