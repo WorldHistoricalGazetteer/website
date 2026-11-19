@@ -46,6 +46,8 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
             return !!p && !p.hidden && p.querySelector('.enr-band[data-band="B"]') !== null
                 && document.querySelector('.enr-env-modal [data-pane="profile"]').hidden === true; }""")
         r["modal_visible"] = self.wait_for(page, "!!document.querySelector('.enr-env-modal.show .em-nav') && document.querySelector('.enr-env-modal .em-nav').getBoundingClientRect().height > 0", 10000)
+        r["header_logo"] = page.evaluate("""() => { const i = document.querySelector('.enr-env-modal .modal-header img.edops-icon');
+            return !!i && i.complete && i.naturalWidth > 0 && i.getBoundingClientRect().height > 20; }""")
         r["gap_signature"] = page.evaluate("""() => { const n = document.querySelector('.enr-env-modal .em-nav'); const p = document.querySelector('.enr-env-modal [data-pane="signature"]');
             const c = p && !p.hidden && p.firstElementChild; return c ? Math.round(c.getBoundingClientRect().top - n.getBoundingClientRect().bottom) : -1; }""") >= 8   # first content clears the tab border
         try:
@@ -75,14 +77,19 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
                     events: p.querySelectorAll('[data-chart="timeline_pdsi"] .ec-event').length}; }""")
             ch["gap"] = page.evaluate("""() => { const n = document.querySelector('.enr-env-modal .em-nav'); const p = document.querySelector('.enr-env-modal [data-pane="charts"]');
             const c = p && !p.hidden && p.firstElementChild; return c ? Math.round(c.getBoundingClientRect().top - n.getBoundingClientRect().bottom) : -1; }""")
+            ch["unit_clear"] = page.evaluate("""() => { const figs = Array.from(document.querySelectorAll('.enr-env-modal [data-pane="charts"] figure'));
+                const rows = figs.map(f => { const u = f.querySelector('.ec-unit'); const t = Array.from(f.querySelectorAll('.ec-tick')).filter(e => e.getAttribute('text-anchor') === 'end');
+                    return u && t.length ? u.getBoundingClientRect().bottom <= Math.min(...t.map(e => e.getBoundingClientRect().top)) + 0.5 : null; });
+                return rows.length >= 5 && rows.every(v => v === true); }""")
             ch["xticks"] = page.evaluate("""() => Array.from(document.querySelectorAll('[data-chart="timeline_pdsi"] .ec-tick')).map(t => t.textContent).filter(t => /^[0-9.]+$/.test(t) && t.length >= 4)""")
             self.shot(page, "edops_modal_charts", ".enr-env-modal .modal-content")
         except Exception:  # noqa: BLE001
-            ch = {"gap": -1, "xticks": [], "hidden": True, "ids": [], "bars": 0, "lineLens": [], "roles": False, "tables": False, "sized": False, "cap": "", "events": 0}
+            ch = {"unit_clear": False, "gap": -1, "xticks": [], "hidden": True, "ids": [], "bars": 0, "lineLens": [], "roles": False, "tables": False, "sized": False, "cap": "", "events": 0}
         r["charts_all_drawn"] = (not ch["hidden"]) and set(ch["ids"]) == {
             "monthly_precipitation", "monthly_temperature", "timeline_pdsi", "timeline_temperature",
             "timeline_precipitation", "land_use"}
         r["charts_data_drawn"] = ch["bars"] == 12 and len(ch["lineLens"]) >= 4 and min(ch["lineLens"] or [0]) >= 12 and ch["events"] == 3
+        r["unit_labels_clear_of_axis"] = ch["unit_clear"]
         r["gap_charts"] = ch["gap"] >= 8
         r["timeline_year_ticks_are_whole_years"] = len(ch["xticks"]) >= 2 and all(t.isdigit() for t in ch["xticks"])
         r["charts_accessible"] = ch["roles"] and ch["tables"] and ch["sized"]

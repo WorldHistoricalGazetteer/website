@@ -16,7 +16,7 @@ import { extent, max } from 'd3-array';
 
 const W = 520;
 const H = 190;
-const M = { t: 12, r: 14, b: 30, l: 46 };
+const M = { t: 24, r: 14, b: 30, l: 46 };
 
 export function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -29,7 +29,7 @@ let seq = 0;
 function axisY(y, unit) {
     return y.ticks(4).map((t) => `<g><line class="ec-grid" x1="${M.l}" x2="${W - M.r}" y1="${y(t)}" y2="${y(t)}"/>`
         + `<text class="ec-tick" x="${M.l - 6}" y="${y(t)}" text-anchor="end" dominant-baseline="middle">${esc(fmt(t))}</text></g>`).join('')
-        + `<text class="ec-unit" x="4" y="${M.t + 4}" dominant-baseline="hanging">${esc(unit)}</text>`;
+        + `<text class="ec-unit" x="4" y="2" dominant-baseline="hanging">${esc(unit)}</text>`;
 }
 
 function figure({ id, title, desc, svg, rows, head, caption, caveats = [] }) {

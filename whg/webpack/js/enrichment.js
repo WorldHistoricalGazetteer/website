@@ -467,7 +467,7 @@ export function mountEnvironmentCard(containerEl, {
         modalEl.setAttribute('aria-labelledby', `enr_env_modal_${n}_h`);
         modalEl.setAttribute('aria-hidden', 'true');
         modalEl.innerHTML = `<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
-            <div class="modal-header"><h2 class="modal-title h5" id="enr_env_modal_${n}_h">${esc(title)}
+            <div class="modal-header"><h2 class="modal-title h5" id="enr_env_modal_${n}_h">${edopsModal ? edopsIconHTML('edops-icon-lg me-2') : ''}${esc(title)}
                 <span class="enr-badge">EDOPS</span></h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
             <div class="modal-body enr-body"></div>
