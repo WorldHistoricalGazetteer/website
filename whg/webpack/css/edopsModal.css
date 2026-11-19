@@ -1,0 +1,42 @@
+/* The beta EDOPS modal: Profile / Signature / Charts (edopsModal.js, edopsCharts.js). */
+.edops-icon { vertical-align: -0.2em; color: var(--rs-accent, #2f6b34); }
+.em-nav { margin-bottom: .75rem; }
+.em-nav .nav-link { color: #2f6b34; }
+.em-nav .nav-link.active { font-weight: 600; }
+.em-picker { display: block; margin-bottom: .6rem; max-width: 22rem; }
+.em-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .35rem; }
+.em-generated { background: #eef3f8; border: 1px solid #c9d8e6; border-radius: 10px; padding: 1px 9px; font-size: .78rem; font-weight: 600; }
+.em-placeholder { background: #fff3cd; border: 1px solid #e6cf7a; border-radius: 10px; padding: 1px 9px; font-size: .74rem; }
+.em-scope { color: #444; font-size: .85rem; }
+.em-note { color: #555; margin-bottom: .4rem; }
+.em-section { border-top: 1px solid #f0f1f3; padding: .45rem 0 .1rem; }
+.em-h { font-size: 1rem; margin: 0 0 .2rem; }
+.em-scale { font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; font-weight: 600; border-radius: 10px;
+            padding: 1px 8px; margin-left: .3rem; vertical-align: middle; border: 1px solid transparent; }
+.em-scale[data-scale="place"] { background: #e8f1fb; color: #14507f; border-color: #b9d3ec; }
+.em-scale[data-scale="basin"], .em-scale[data-scale="area"] { background: #eef6ee; color: #2f6b34; border-color: #bfdcc1; }
+.em-caveats { font-size: .84rem; color: #6a4b00; padding-left: 1.1rem; margin-bottom: .35rem; }
+.em-sources { margin: .5rem 0; font-size: .88rem; }
+.em-cite { margin: .5rem 0 0; color: #444; }
+
+.em-charts { display: grid; gap: 1rem; }
+.ec-figure { margin: 0; }
+.ec-figure figcaption { font-size: .88rem; margin-bottom: .15rem; }
+.ec-cap { color: #555; font-size: .8rem; }
+.ec-scale { font-weight: 600; color: #14507f; }
+.ec-svg { width: 100%; height: auto; max-height: 240px; display: block; }
+.ec-grid { stroke: #e3e6e9; stroke-width: 1; }
+.ec-zero { stroke: #6c757d; stroke-width: 1; }
+.ec-tick, .ec-unit { font-size: 10px; fill: #495057; }
+.ec-s1 { --ec: #1f6fb2; } .ec-s2 { --ec: #c8641c; } .ec-s3 { --ec: #5b8c3a; } .ec-s4 { --ec: #7a5ea8; }
+.ec-bar { fill: var(--ec); }
+.ec-line { fill: none; stroke: var(--ec); stroke-width: 1.8; }
+.ec-dot { fill: var(--ec); }
+.ec-event { stroke: #8a1c1c; stroke-width: 1; stroke-dasharray: 3 3; }
+.ec-caveats { font-size: .78rem; color: #6a4b00; padding-left: 1.1rem; margin: .2rem 0; }
+.ec-legend { list-style: none; display: flex; gap: .9rem; padding: 0; margin: .2rem 0; font-size: .8rem; }
+.ec-swatch { display: inline-block; width: .8em; height: .8em; margin-right: .3em; background: var(--ec); border-radius: 2px; }
+.ec-table summary { cursor: pointer; font-size: .8rem; color: #495057; }
+.ec-table table { font-size: .8rem; margin-top: .25rem; max-height: 12rem; display: block; overflow: auto; }
+.ec-table th, .ec-table td { padding: 1px 10px 1px 0; text-align: left; font-weight: normal; }
+.ec-table thead th { font-weight: 600; }

@@ -50,6 +50,8 @@
 
 import '../css/recordShell.css';
 import '../css/enrichment.css';
+import { edopsIconHTML } from './edopsIcon.js';
+import { hasWhgmodal, renderEdopsTabs } from './edopsModal.js';
 
 const state = (window.__whgEnrichment = window.__whgEnrichment
     || { gloss: 'idle', environment: 'idle', environmentStatus: null, environmentFetches: 0 });
@@ -435,15 +437,16 @@ const DEFAULT_INVITATION = 'River basin, climate and land-use figures for where 
 /** The compact Environment card; EDOPS is asked only on click (see the contract). */
 export function mountEnvironmentCard(containerEl, {
     fetchEnvironment, title = 'Environment', cap = null, invitation = DEFAULT_INVITATION, headingTag = 'h2',
+    edopsModal = false,
 } = {}) {
     if (!containerEl || typeof fetchEnvironment !== 'function') return null;
     const n = ++modalSeq;
     const tag = /^h[2-6]$/.test(headingTag) ? headingTag : 'h2';
     containerEl.innerHTML = `<div class="rs-card rs-icon-environment enr-env-card">
-        <${tag} class="rs-card-title"><i class="fa-solid fa-water rs-icon" aria-hidden="true"></i>${esc(title)}
+        <${tag} class="rs-card-title">${edopsModal ? edopsIconHTML('rs-icon') : '<i class="fa-solid fa-water rs-icon" aria-hidden="true"></i>'}${esc(title)}
             <span class="enr-badge">EDOPS</span></${tag}>
         <p class="small mb-2">${esc(invitation)}</p>
-        <button type="button" class="btn btn-sm btn-outline-secondary enr-env-show" aria-haspopup="dialog">Show environment</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary enr-env-show" aria-haspopup="dialog">${edopsModal ? edopsIconHTML('me-1') : ''}Show environment</button>
         <span class="enr-env-status small text-muted ms-2" role="status"></span></div>`;
     const card = containerEl.firstElementChild;
     const button = card.querySelector('.enr-env-show');
@@ -494,7 +497,13 @@ export function mountEnvironmentCard(containerEl, {
             body.innerHTML = NOT_PUBLIC_HTML;
             return;
         }
-        renderEnvironment(body, data);
+        // Beta: a signature carrying ``whgmodal`` gets the tabbed Profile / Signature /
+        // Charts body; the Signature tab IS the existing display. Else, as before.
+        if (edopsModal && hasWhgmodal(data)) {
+            renderEdopsTabs(body, data, { renderSignature: renderEnvironment, statusSentence, state });
+        } else {
+            renderEnvironment(body, data);
+        }
         if (cap && cap.capped) body.insertAdjacentHTML('afterbegin', capNote(cap));
     }
 

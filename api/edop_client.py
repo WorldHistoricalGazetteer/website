@@ -100,7 +100,7 @@ READ_TIMEOUT = {"basin": 5.0, "area": 12.0}
 MAX_RETRIES = 2
 RETRY_BACKOFF_S = 0.5
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2                     # 2: Band T per-year series are kept (chart modal)
 CACHE_TTL = 30 * 24 * 3600            # ok and no_basin: slow-changing source data
 FAILURE_TTL = 30                      # unavailable: just enough to stop a stampede
 
@@ -242,16 +242,12 @@ class _Unavailable(Exception):
 
 
 def _trim(raw: dict, scope: str) -> dict:
-    """The response without the bulk no summary reads: the basin polygon, per-year
-    series, and area histograms."""
+    """The response without the bulk nothing reads: the basin polygon and area
+    histograms. The Band T per-year series ARE kept (about 100 numbers each): the beta
+    chart modal draws them (``api.edops_whgmodal``); the plain summaries ignore them."""
     if not isinstance(raw, dict):
         return raw
     out = {k: v for k, v in raw.items() if k != "geom_geojson"}
-    bands = out.get("signature_bands")
-    if isinstance(bands, dict) and isinstance(bands.get("T"), dict):
-        bands = dict(bands)
-        bands["T"] = {k: v for k, v in bands["T"].items() if not k.endswith("_series")}
-        out["signature_bands"] = bands
     if isinstance(out.get("variables"), list):
         out["variables"] = [{k: v for k, v in var.items() if k != "detail"} if isinstance(var, dict) else var
                             for var in out["variables"]]

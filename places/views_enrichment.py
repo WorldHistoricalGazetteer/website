@@ -144,10 +144,12 @@ def _member_view(m: dict) -> dict:
             "sent_to_edops": m.get("offsite") is True}
 
 
-def _environment_payload(plan: dict, results: list, members: list) -> dict:
+def _environment_payload(plan: dict, results: list, members: list, *, beta: bool = False) -> dict:
     """One response shape for both pages. ``signatures`` is one entry per distinct
     signature; per-member basin answers that landed in the same basin are merged, so
-    the page shows "these 3 members share basin 4620" once."""
+    the page shows "these 3 members share basin 4620" once. ``beta`` (a beta user; never
+    the public path) adds each signature's ``whgmodal``: the provisional chart-modal
+    payload (``api.edops_whgmodal``), EDOPS values only, nothing of WHG's."""
     from api import edop_client as edop
     plan_view = {k: v for k, v in plan.items() if k not in ("requests",)}
     sigs = []
@@ -157,6 +159,9 @@ def _environment_payload(plan: dict, results: list, members: list) -> dict:
     by_unit = {}
     for res, keys in zip(results, groups):
         pub = edop.public_result(res, members=list(keys))
+        if beta:
+            from api import edops_whgmodal
+            pub["whgmodal"] = edops_whgmodal.fetch_whgmodal(res)
         if plan.get("kind") == "per_member" and pub["status"] == edop.STATUS_OK:
             unit = (pub["summary"] or {}).get("unit") or {}
             uid = (unit.get("level"), unit.get("basin_id"), pub["request"].get("from_year"),
@@ -215,7 +220,7 @@ def atlas_record_environment(request, pk):
     plan = edop.plan_concordance(planned, span=group_span(sendable))
     plan["withheld"] = [m["key"] for m in members if m.get("offsite") is not True]
     results = edop.run_requests(plan["requests"])
-    out = _environment_payload(plan, results, members)
+    out = _environment_payload(plan, results, members, beta=not public)
     out.update({"public": True, "place_id": place.pk, "unresolved": group.get("unresolved", 0),
                 "truncated": bool(group.get("truncated")),
                 "elapsed_ms": int((time.monotonic() - t0) * 1000)})
@@ -311,7 +316,7 @@ def atlas_locus_environment(request):
     plan = edop.plan_locus(offsite_members(members))
     plan["withheld"] = [m["key"] for m in members if m.get("offsite") is not True]
     results = edop.run_requests(plan["requests"])
-    out = _environment_payload(plan, results, members)
+    out = _environment_payload(plan, results, members, beta=True)
     out["elapsed_ms"] = int((time.monotonic() - t0) * 1000)
     return JsonResponse(out)
 

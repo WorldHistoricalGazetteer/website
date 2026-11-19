@@ -38,6 +38,7 @@ import { fetchJSON, failureHtml, atlasNotice } from './atlasNotice.js';
 import { resolveRecipe, canonicalMemberId } from './locus_resolve.js';
 import '../css/locus.css';
 import { loadGlossCards, locusFetchers, mountEnvironmentCard, renderWikipediaLinks } from './enrichment.js';
+import { edopsIconHTML } from './edopsIcon.js';
 import { linkButtonHtml } from './attest.js';
 
 const RESOLVE_TIMEOUT_MS = 35000;
@@ -196,7 +197,7 @@ function renderResult(recipe, data, out) {
     // and stays hidden until the card is mounted (describeCluster).
     const envButton = document.getElementById('locus_environment_slot')
         ? '<button type="button" class="btn btn-link btn-sm locus-env-open" aria-haspopup="dialog" hidden>'
-            + '<i class="fa-solid fa-water me-1" aria-hidden="true"></i>Environment</button>'
+            + `${edopsIconHTML('me-1')}Environment</button>`
         : '';
     let h = `<div class="rs-card locus-cluster">`
         + `<div class="locus-cluster-head"><h3 class="rs-card-title locus-cluster-title">`
@@ -268,7 +269,7 @@ function describeCluster(members) {
         loadGlossCards(about.querySelector('.locus-about-body'), f.gloss, { kind: 'locus', cap: f.cap, onData: showWikipedia });
     }
     if (envSlot) {
-        const env = mountEnvironmentCard(envSlot, { fetchEnvironment: f.environment, cap: f.cap, headingTag: 'h2' });
+        const env = mountEnvironmentCard(envSlot, { fetchEnvironment: f.environment, cap: f.cap, headingTag: 'h2', edopsModal: true });
         if (!env) return;
         envSlot.hidden = false;
         document.querySelectorAll('#locus_result .locus-env-open').forEach((b) => {

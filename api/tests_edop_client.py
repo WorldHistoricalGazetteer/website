@@ -145,7 +145,7 @@ class StatusTests(SimpleTestCase):
         self.assertIsNone(r["reason"])
         self.assertIn("signature_bands", r["raw"])
         self.assertNotIn("geom_geojson", r["raw"])                            # bulk dropped ...
-        self.assertNotIn("pdsi_series", r["raw"]["signature_bands"]["T"])
+        self.assertIn("pdsi_series", r["raw"]["signature_bands"]["T"])         # kept for the chart modal
         self.assertIn("pdsi_mean", r["raw"]["signature_bands"]["T"])           # ... the rest kept
         s = edop.summarise(r)
         self.assertEqual(s["scope"], "basin")
@@ -252,7 +252,7 @@ class CacheAndRetryTests(SimpleTestCase):
         self.assertNotEqual(a, edop.cache_key({"scope": "basin", "lat": 1, "lon": 2.000001}))
         with override_settings(EDOP_BASE_URL="https://example.org"):
             self.assertNotEqual(a, edop.cache_key({"scope": "basin", "lat": 1, "lon": 2}))
-        self.assertTrue(re.fullmatch(r"edop:v1:[0-9a-f]{64}", a))
+        self.assertTrue(re.fullmatch(rf"edop:v{edop.CACHE_VERSION}:[0-9a-f]{{64}}", a))
 
     def test_ttls_by_status(self):
         seen = []
