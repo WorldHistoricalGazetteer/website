@@ -30,7 +30,7 @@ const S = {
   tab: root.dataset.tab, records: [], idx: 0, offset: 0, next: null,
   dec: new Map(),            // row index -> { d: 'same'|'not'|'unsure', src: 'explicit'|'prefilled'|'default' }
   focus: null,               // the row with the focus (roving tabindex, map highlight)
-  undo: [], relaxed: new Set(), searchResults: null, handSel: null, searchChips: [],
+  undo: [], relaxed: new Set(), searchResults: null, handSel: null, handChecked: new Set(), searchChips: [],
   shortcuts: store('local', 'mf.shortcuts') === 'on',   // off until the person switches them on
   publish: store('session', 'mf.publish') === '1',
   note: '', relation: 'closeMatch',   // kept across redraws; both reset when the record changes
@@ -472,7 +472,7 @@ function renderRecord(opts = {}) {
   const box = document.getElementById('mf_record');
   const r = current();
   const keepSearch = opts.keepSearch;
-  if (!keepSearch) { S.searchResults = null; S.handSel = null; }
+  if (!keepSearch) { S.searchResults = null; S.handSel = null; S.handChecked = new Set(); }
   window.__whgMatchFeed.regions = { record: false, rows: false, map: false, bar: false };
   if (!r) {
     box.innerHTML = '<p class="text-secondary" id="mf_empty" data-tour="record">Nothing to review in this tab.</p>';
@@ -832,7 +832,10 @@ function handHTML(c, i) {
     c.km != null ? `<b class="mf-dist">${esc(distText(c.km))}</b>` : '',
     c.location === null ? 'no location' : ''].filter(Boolean).join(' · ');
   return `<li class="mf-cand mf-hand${S.handSel === i ? ' mf-cand--selected' : ''}" data-i="${i}" data-candidate="${esc(c.candidate_id)}">
-      <div class="mf-row-main"><span class="mf-key">s${i + 1}</span>
+      <div class="mf-row-main">
+        <input type="checkbox" class="form-check-input mf-hand-check me-1" data-i="${i}"${S.handChecked.has(i) ? ' checked' : ''}
+               aria-label="Select ${esc(card.title || c.title)} to link together with the other ticked places">
+        <span class="mf-key">s${i + 1}</span>
         <div class="mf-row-text">
           <div class="mf-row-title"><span class="fw-semibold" dir="auto">${esc(card.title || c.title)}</span>
             <span class="badge text-bg-light border ms-1">${esc(nsLabel(card.namespace || c.namespace))}</span>
@@ -864,9 +867,34 @@ async function search() {
   }
   S.searchResults = res.data.results || [];
   S.handSel = null;
-  out.innerHTML = S.searchResults.map((c, i) => handHTML(c, i)).join('')
+  S.handChecked = new Set();
+  out.innerHTML = (S.searchResults.length ? handBarHTML() : '') + S.searchResults.map((c, i) => handHTML(c, i)).join('')
     || '<li class="text-secondary small">Nothing found for that name.</li>';
+  updateHandBar();
   try { renderMap(false); } catch (err) { console.warn('The feed map could not show the search results:', err); }
+}
+
+// Several results can be the same place (Getty, GeoNames, Wikidata and OpenStreetMap all hold it):
+// tick them and link them in one go. One "Same place" button per result still links just that one.
+const MAX_HAND = 10;   // the most the server takes at once (views_feed.MAX_HAND_TARGETS)
+function handBarHTML() {
+  return `<li class="mf-hand-bar d-flex align-items-center gap-2 small mb-1" id="mf_hand_bar">
+      <span class="text-secondary" id="mf_hand_count">Tick every result that is the same place, then link them together.</span>
+      <button type="button" class="btn btn-sm btn-success ms-auto" data-act="link-hand-selected" id="mf_hand_link" disabled>Same place (0)</button></li>`;
+}
+function updateHandBar() {
+  const n = S.handChecked.size;
+  const btn = document.getElementById('mf_hand_link');
+  if (btn) { btn.disabled = n === 0; btn.textContent = `Same place (${n})`; }
+  const count = document.getElementById('mf_hand_count');
+  if (count) count.textContent = n >= MAX_HAND ? `That is the most (${MAX_HAND}) to link at once.` : 'Tick every result that is the same place, then link them together.';
+  document.querySelectorAll('#mf_search_results .mf-hand-check').forEach((cb) => {
+    cb.disabled = !cb.checked && n >= MAX_HAND;
+  });
+}
+function checkHand(i, on) {
+  if (on && S.handChecked.size < MAX_HAND) S.handChecked.add(i); else S.handChecked.delete(i);
+  updateHandBar();
 }
 
 function pickHand(i) {
@@ -884,6 +912,10 @@ root.addEventListener('click', (e) => {
   if (tabBtn) { load(tabBtn.dataset.tab); return; }
   const qi = e.target.closest('[data-qi]');
   if (qi) { go(Number(qi.dataset.qi)); return; }
+  if (e.target.matches && e.target.matches('#mf_search_results .mf-hand-check')) {
+    checkHand(Number(e.target.dataset.i), e.target.checked);   // ticking is not "show it on the map"
+    return;
+  }
   const b = e.target.closest('[data-act]');
   if (!b) {
     const hl = e.target.closest('#mf_search_results .mf-hand');
@@ -899,6 +931,9 @@ root.addEventListener('click', (e) => {
   else if (act === 'link-hand') {
     const c = S.searchResults && S.searchResults[Number(b.dataset.i)];
     if (c) { S.handSel = Number(b.dataset.i); review({ action: 'link', target: c.candidate_id, relation: relation() }); }
+  } else if (act === 'link-hand-selected') {
+    const ids = [...S.handChecked].sort((a, b2) => a - b2).map((i) => S.searchResults[i] && S.searchResults[i].candidate_id).filter(Boolean);
+    if (ids.length) review({ action: 'link', targets: ids, relation: relation() });
   } else if (act === 'none') review({ action: 'none' });
   else if (act === 'later') review({ action: 'later' });
   else if (act === 'tour') startMatchTour();

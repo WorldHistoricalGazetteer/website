@@ -561,6 +561,52 @@ class FeedMapBrowserTests(MapBrowserBase):
         failed = {k: v for k, v in results.items() if not v}
         self.assertEqual(failed, {}, results)
 
+    def test_several_search_results_can_be_ticked_and_linked_together(self):
+        """Ali's case: a search finds the same place in several sources. Ticking a result is not
+        "show it on the map"; the bar counts the ticks; one action links them all."""
+        from api.models import ContributorAttestation
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        self.fake.by_query["Brox Hand"] = response(
+            hit("gn:70", "Brox Hand One", self.HAND_XY[0], types=[GN_TOWN]),
+            hit("gn:71", "Brox Hand Two", self.HAND_XY[1], types=[GN_TOWN]),
+            hit("wd:Q72", "Brox Hand Three"))
+        page = self.new_page()
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true"))
+        page.fill("#mf_search_q", "Brox Hand")
+        page.click("[data-act=search]")
+        self.assertTrue(self.wait_for(page, "document.querySelectorAll('#mf_search_results .mf-hand-check').length === 3", 15000))
+        self.assertTrue(page.is_disabled("#mf_hand_link"))                          # nothing ticked: nothing to link
+        page.check("#mf_search_results .mf-hand-check[data-i='0']")
+        page.check("#mf_search_results .mf-hand-check[data-i='2']")
+        self.assertEqual(page.text_content("#mf_hand_link"), "Same place (2)")
+        self.assertFalse(page.evaluate(f"() => ({MARKERS_JS})().some((m) => m.role === 'hand-focus')"))   # ticking is not focusing
+        self.assertFalse(ContributorAttestation.objects.filter(user=self.user).exists())
+        page.uncheck("#mf_search_results .mf-hand-check[data-i='2']")
+        page.check("#mf_search_results .mf-hand-check[data-i='1']")
+        self.assertEqual(page.text_content("#mf_hand_link"), "Same place (2)")
+        page.click("#mf_hand_link")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed.saves === 1", 10000))
+        linked = {a.place_a if a.place_b.startswith("whg:") else a.place_b
+                  for a in ContributorAttestation.objects.filter(user=self.user)}
+        self.assertEqual(linked, {"gn:70", "gn:71"})
+
+    def test_ticking_search_results_harness_can_fail(self):
+        # With no ticked result the link button stays disabled: clicking it must not link anything.
+        from api.models import ContributorAttestation
+        from datasets.tests_candidates import GN_TOWN, hit, response
+        self.fake.by_query["Brox Hand"] = response(hit("gn:70", "Brox Hand One", self.HAND_XY[0], types=[GN_TOWN]))
+        page = self.new_page()
+        page.goto(f"{self.live_server_url}/datasets/{self.ds.pk}/matches/?tier=ambiguous")
+        self.assertTrue(self.wait_for(page, "window.__whgMatchFeed && window.__whgMatchFeed.ready === true"))
+        page.fill("#mf_search_q", "Brox Hand")
+        page.click("[data-act=search]")
+        self.assertTrue(self.wait_for(page, "document.querySelectorAll('#mf_search_results .mf-hand-check').length === 1", 15000))
+        page.evaluate("document.getElementById('mf_hand_link').click()")            # a disabled button ignores a click
+        page.wait_for_timeout(500)
+        self.assertEqual(page.evaluate("window.__whgMatchFeed.saves"), 0)
+        self.assertFalse(ContributorAttestation.objects.filter(user=self.user).exists())
+
     def test_hand_search_works_when_the_map_cannot_load(self):
         """With the map chunk blocked, searching and linking by hand still work."""
         from datasets.tests_candidates import GN_TOWN, hit, response

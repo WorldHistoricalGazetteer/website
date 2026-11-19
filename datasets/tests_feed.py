@@ -140,6 +140,37 @@ class FeedReviewTests(FeedTestBase):
         r = self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk]})
         self.assertEqual(r.status_code, 200)
 
+    def test_several_hand_search_results_link_together_or_not_at_all(self):
+        """Ali's case: a manual search finds the same glacier in four sources; all four can be linked in
+        one action, each as its own Link, and Undo takes them all back."""
+        ids = ["gn:44", "wd:Q44", "tgn:44", "osm:44"]
+        r = self.post({"place": self.ware.pk, "action": "link", "targets": ids + ["gn:44"], "relation": "closeMatch"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["state"], "linked")
+        rows = ContributorAttestation.objects.all()
+        self.assertEqual(len(r.json()["attestations"]), 4)          # the repeated id is one Link
+        self.assertEqual({(a.place_a if a.place_b.startswith("whg:") else a.place_b) for a in rows}, set(ids))
+        self.assertTrue(all(a.suggested_by == "manual" and a.evidence.get("hand_search") for a in rows))
+        r = self.post({"place": self.ware.pk, "action": "reopen"})
+        self.assertEqual(set(ContributorAttestation.objects.values_list("status", flat=True)), {"withdrawn"})
+
+    def test_hand_search_targets_are_checked_and_all_or_nothing(self):
+        too_many = [f"gn:{n}" for n in range(11)]
+        for bad in ("gn:44", [1, 2], [""], too_many):
+            r = self.post({"place": self.ware.pk, "action": "link", "targets": bad})
+            self.assertEqual(r.status_code, 400, bad)
+        with override_settings(CONTRIBUTOR_ATTESTATION_DAILY_CAP=2):   # the third Link is over the cap
+            r = self.post({"place": self.ware.pk, "action": "link", "targets": ["gn:44", "wd:Q44", "tgn:44"]})
+        self.assertEqual(r.status_code, 429)
+        self.assertEqual(ContributorAttestation.objects.count(), 0)    # none of the three was kept
+        self.assertEqual(RecordReviewState.objects.get(place=self.ware).state, "unreviewed")
+        # one suggestion and a hand-search result still go together, and a repeat is not a second Link
+        c = self.cand(self.ware, "gn:4")
+        r = self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk], "target": "wd:Q44",
+                       "targets": ["wd:Q44", "gn:4", "tgn:44"]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(ContributorAttestation.objects.count(), 3)
+
     def test_candidate_of_another_record_is_not_found(self):
         c = self.cand(self.brox, "gn:6")
         self.assertEqual(self.post({"place": self.ware.pk, "action": "link", "candidates": [c.pk]}).status_code, 404)

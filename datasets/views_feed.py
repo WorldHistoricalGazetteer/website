@@ -6,7 +6,9 @@ One page (``/datasets/<id>/matches/``) and its JSON:
   plan's order (4c): confident, ambiguous, weak, none; later and unqueried on their own tabs.
   Each record and each suggestion carries ``location`` ([lon, lat] or null) for the feed map.
   A contributed suggestion whose dataset the viewer may not see now is left out entirely;
-* ``POST matches/review/`` one decision about one record: ``link`` (Same place), ``reject``
+* ``POST matches/review/`` one decision about one record: ``link`` (Same place; ``candidates`` are
+  stored suggestions, ``target`` one hand-search result, ``targets`` up to ``MAX_HAND_TARGETS`` of them
+  at once, all or none: the same place often sits in several sources), ``reject``
   (Not the same place; optionally also recorded as a ``distinct`` Link), ``none`` (None of
   these fits), ``later`` (Not sure yet), ``reopen`` (undo), and ``decide``: every row of a record
   decided in one request (``same`` / ``not`` / ``unsure`` per suggestion, each with how the
@@ -49,6 +51,7 @@ TABS = ["confident", "ambiguous", "weak", "none", "later", "unqueried"]
 TAB_LABELS = {"confident": "Likely the same place", "ambiguous": "Which one, if any?",
               "weak": "Weak suggestions", "none": "Nothing found", "later": "Not sure yet",
               "unqueried": "Waiting for search"}
+MAX_HAND_TARGETS = 10   # places that can be linked from one hand search in one action
 RELATIONS = ("closeMatch", "exactMatch")   # Q1: closeMatch by default, exactMatch under "advanced"
 
 
@@ -425,6 +428,15 @@ def feed_review(request, id):
         targets = [(c, c.candidate_id) for c in cands]
         if body.get("target"):   # a hand-search result: a Link with no suggestion behind it
             targets.append((None, str(body["target"])))
+        extra = body.get("targets")   # several hand-search results at once (the same place in other sources)
+        if extra is not None:
+            if not isinstance(extra, list) or not all(isinstance(t, str) and 0 < len(t.strip()) <= 128 for t in extra):
+                return JsonResponse({"error": "targets must be a list of place ids"}, status=400)
+            have = {t for _, t in targets}
+            wanted = list(dict.fromkeys(t.strip() for t in extra))
+            if len(wanted) > MAX_HAND_TARGETS:
+                return JsonResponse({"error": f"link at most {MAX_HAND_TARGETS} places at a time"}, status=400)
+            targets += [(None, t) for t in wanted if t not in have]
         if not targets:
             return JsonResponse({"error": "nothing to link"}, status=400)
         if any(c.status == "rejected" for c in cands):
