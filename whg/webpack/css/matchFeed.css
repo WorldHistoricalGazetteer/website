@@ -20,8 +20,19 @@
 .mf-kind { color: #495057; font-size: .85rem; margin-left: .25rem; }
 .mf-kind::before { content: '· '; }
 .mf-dist { color: #212529; }
-.mf-key { display: inline-block; min-width: 1.6em; text-align: center; border-radius: .3rem;
-  background: #495057; color: #fff; font-weight: 600; flex: none; }
+/* A suggestion's number in the list is its pin on the map: the same blue circle, the same number, the same
+   colours for the same decisions (green same, grey not, amber can't tell, dashed filled in by the page).
+   Tab counts are plain bracketed text, so nothing in the tabs looks like a pin. */
+.mf-key { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--pin, #0d6efd); color: #fff; font-size: .75rem; font-weight: 700; line-height: 1;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
+.mf-row--same .mf-key, .mf-cand--accepted .mf-key { --pin: #198754; }
+.mf-row--not .mf-key, .mf-cand--rejected .mf-key { --pin: #adb5bd; color: #212529; text-decoration: line-through; }
+.mf-row--unsure .mf-key { --pin: #ffc107; color: #212529; }
+.mf-row--prefilled .mf-key { border-style: dashed; }
+.mf-row.is-focus .mf-key { box-shadow: 0 0 0 3px #fff, 0 0 0 5px #212529; }
+.mf-hand .mf-key { --pin: #6f42c1; border-radius: 4px; width: auto; min-width: 22px; padding: 0 3px; }   /* search results: purple squares, as on the map */
+.mf-tab-count { color: #6c757d; font-weight: normal; }
 .mf-more summary { cursor: pointer; color: #495057; }
 .mf-why { font-size: .85rem; }
 .mf-row--same { border-color: #198754; background: #f0fff4; }

@@ -56,7 +56,7 @@
       <button type="button" class="nav-link{% if key == tab %} active{% endif %}" data-tab="{{ key }}" role="tab"
               id="mf_tab_{{ key }}" aria-controls="mf_panel" tabindex="{% if key == tab %}0{% else %}-1{% endif %}"
               aria-selected="{% if key == tab %}true{% else %}false{% endif %}">
-        {{ label }} <span class="badge bg-secondary mf-tab-count" data-count-for="{{ key }}">{{ n }}</span>
+        {{ label }} <span class="mf-tab-count">(<span data-count-for="{{ key }}">{{ n }}</span>)</span>
       </button>
     </li>
     {% endfor %}
