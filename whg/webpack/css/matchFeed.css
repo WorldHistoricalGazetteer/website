@@ -59,8 +59,9 @@
 .mf-map-panel { position: sticky; top: 4.5rem; }
 .mf-map, .mf-map-empty { height: 320px; border: 1px solid #dee2e6; border-radius: .4rem; position: relative; }
 .mf-map { background: #e9eef1; }
-/* The tileboss basemap is richly coloured; the numbered markers are what must stand out. */
-.mf-map .maplibregl-canvas { filter: grayscale(.92) contrast(.92) brightness(1.04); }
+/* The numbered markers are what must stand out, but rivers and water must still read: tone the basemap
+   down, do not grey it out (it was grayscale(.92), which left rivers as faint grey lines). */
+.mf-map .maplibregl-canvas { filter: saturate(.7) contrast(.95) brightness(1.03); }
 .mf-map-tools { display: flex; gap: .4rem; margin-top: .3rem; justify-content: flex-end; }
 .mf-map-empty { display: flex; align-items: center; justify-content: center; text-align: center;
   padding: 1rem; background: #f8f9fa; color: #495057; }

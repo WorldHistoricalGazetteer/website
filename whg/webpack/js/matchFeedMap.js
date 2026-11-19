@@ -16,8 +16,11 @@
 // overlap are merged into one badge ("1·2"); clicking it zooms to them, or, when they sit on the
 // same spot, steps through them.
 //
-// Basemap: the same tileboss style the review map uses (process.env.TILEBOSS); no other network
-// calls. If the style cannot be fetched, the map falls back to a plain background and says so.
+// Basemap: tileboss styles (process.env.TILEBOSS); no other network calls. Placing a location by hand
+// needs landmarks, so the default is OpenStreetMap (rivers, roads, settlements, labels). The wrapper's
+// style switcher offers WHG Enhanced (rivers, lakes and relief; no external service) and Satellite;
+// the choice is remembered. None of them draws ecoregions. If the style cannot be fetched, the map
+// falls back to a plain background and says so.
 
 import './recon-maplibre-global.js'; // MUST be first: publishes window.maplibregl (whg_maplibre needs the global)
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -27,12 +30,32 @@ const BLANK_STYLE = {
   version: 8, metadata: {}, sources: {},
   layers: [{ id: 'mf-blank', type: 'background', paint: { 'background-color': '#e9eef1' } }],
 };
+const STYLES = ['OSM', 'whg-enhanced', 'Satellite'];   // the first is the default
+const LAYER_LS_KEY = 'whg-feed-maplayers';              // the remembered basemap
 const STYLE_GRACE_MS = 10000;
 const MIN_REGIONAL_ZOOM = 5;   // "nearby" keeps at least this zoom (about a region, not a continent)
 const MERGE_PX = 22;           // markers closer than this on screen become one badge
 const SAME_SPOT_DEG = 0.0005;  // members within about 50 m: zooming cannot separate them
 
 const ML = () => window.whg_maplibre;
+
+function readPrefs() { try { return JSON.parse(localStorage.getItem(LAYER_LS_KEY) || 'null') || {}; } catch (_) { return {}; } }
+// The remembered style goes first: the wrapper shows styles[0] and lists the rest in the switcher.
+function orderedStyles() {
+  const pref = readPrefs().style;
+  return pref && STYLES.includes(pref) ? [pref].concat(STYLES.filter((x) => x !== pref)) : STYLES.slice();
+}
+// The wrapper builds the switcher (radios name="style") inside the map container once the map loads;
+// remember any change. A label click sets the radio programmatically (no 'change' event).
+function rememberBasemap(container) {
+  const save = () => {
+    const r = container.querySelector('input[name="style"]:checked');
+    if (!r) return;
+    try { localStorage.setItem(LAYER_LS_KEY, JSON.stringify({ style: r.dataset.value || r.value })); } catch (_) { /* private mode */ }
+  };
+  container.addEventListener('change', (e) => { if (e.target.matches('input[name="style"]')) save(); });
+  container.addEventListener('click', (e) => { if (e.target.closest('#mapStyleList')) setTimeout(save, 0); });
+}
 const ARROWS = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
 const WORDS = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
 
@@ -44,7 +67,7 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
   const M = ML();
   const map = new M.Map({
     container,
-    style: process.env.TILEBOSS ? ['whg-portal'] : BLANK_STYLE,
+    style: process.env.TILEBOSS ? orderedStyles() : BLANK_STYLE,
     center: [0, 20], zoom: 1, minZoom: 0, maxZoom: 17,
     attributionControl: { position: 'bottom-right', autoClose: true, customAttribution: '&copy; World Historical Gazetteer & contributors' },
     navigationControl: { position: 'top-right', showZoom: true, showCompass: false, visualizePitch: false },
@@ -54,6 +77,7 @@ export function createFeedMap(container, { onPick, onPickHand, onBasemap } = {})
     throw new Error('map could not be created');
   }
 
+  rememberBasemap(container);
   let loaded = false;
   let fellBack = false;
   const fallBack = () => {
