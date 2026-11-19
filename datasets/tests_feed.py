@@ -266,6 +266,8 @@ class FeedExportDetailTests(ExportBase):
         self.assertTrue(rows["f1"]["matched_detail"].startswith("gateway unavailable"))
         self.assertTrue(rows["f2"]["matched_detail"].startswith("card only"))      # falls back to what was stored
         self.assertEqual(rows["f2"]["matched_title"], "Broxbourne")
+        from datasets import match_export
+        self.assertEqual(match_export.from_card({"temporal_range": [-814, 698]})["matched_dates"], "-814/698")
 
         def silent(ids, user=None, meta=None, **k):
             return {}

@@ -42,6 +42,8 @@ def _cell(parts, sep="; "):
 
 
 def _span(t):
+    if isinstance(t, (list, tuple)):
+        return "/".join("" if x is None else str(x) for x in t[:2])
     if isinstance(t, dict):
         a, b = t.get("start"), t.get("end")
         if a is None and b is None:
