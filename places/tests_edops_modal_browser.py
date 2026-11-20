@@ -36,7 +36,7 @@ class EdopsModalBrowserTests(base.EnrichmentBrowserTests):
         r = {}
         r["gloss_ready"] = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", 30000)
         _idle, r["env_ready"] = self.show_environment(page)
-        r["icon"] = page.evaluate("""() => !!document.querySelector('#record_environment .enr-env-show img.edops-icon[src^="data:image/jpeg"]')
+        r["icon"] = page.evaluate("""() => !!document.querySelector('#record_environment .enr-env-show img.edops-icon[src$="/static/images/edops.svg"]')
             && !!document.querySelector('#record_environment .rs-card-title img.edops-icon')
             && Array.from(document.querySelectorAll('img.edops-icon')).every(i => i.complete && i.naturalWidth > 0)""")
         r["three_tabs"] = page.evaluate("""() => Array.from(document.querySelectorAll('.enr-env-modal [role="tab"]')).map(b => b.dataset.tab).join()""") == "profile,signature,charts"
