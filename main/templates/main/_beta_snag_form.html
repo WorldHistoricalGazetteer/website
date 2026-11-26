@@ -28,6 +28,8 @@
       {% else %}
         <p class="mb-1">The team has been notified. (It's saved even though it wasn't auto-posted to the tracker.)</p>
       {% endif %}
+      {% if shots_saved %}<p class="mb-1 small">{{ shots_saved }} screenshot{{ shots_saved|pluralize }} attached.</p>{% endif %}
+      {% if shots_skipped %}<p class="mb-1 small text-danger">{{ shots_skipped }} file{{ shots_skipped|pluralize }} could not be attached (not an image, over 8 MB, or more than 4).</p>{% endif %}
       <p class="mb-0 small text-muted">Reference session: <code>{{ submitted.session_id|default:"—" }}</code></p>
     </div>
     {% comment %}
@@ -43,7 +45,7 @@
       page, browser, and a diagnostic session id automatically, so we can trace the cause.</p>
     {% if error %}<div class="alert alert-danger py-2">{{ error }}</div>{% endif %}
 
-    <form method="post" action="{% url 'beta-snag' %}" id="snag-form">
+    <form method="post" action="{% url 'beta-snag' %}" id="snag-form" enctype="multipart/form-data">
       {% csrf_token %}
       <input type="hidden" name="session_id" id="snag-session" value="{{ session }}">
       <input type="hidden" name="user_agent" id="snag-ua">
@@ -99,6 +101,14 @@
         <label for="snag-steps">Steps to reproduce <span class="text-muted fw-normal">(optional)</span></label>
         <textarea class="form-control" name="steps" id="snag-steps" rows="3"
                   placeholder="1. … 2. … 3. …">{{ form.steps|default:'' }}</textarea>
+      </div>
+      <div class="mb-3 snag-shots">
+        <label for="snag-shots">Screenshots <span class="text-muted fw-normal">(optional — up to 4)</span></label>
+        <input class="form-control form-control-sm" type="file" name="screenshots" id="snag-shots"
+               accept="image/*" multiple>
+        <div class="form-text">Choose files, drag them here, or click in this form and paste (Ctrl/⌘+V) a
+          screenshot from your clipboard. Only the WHG team can see them.</div>
+        <div class="snag-shot-previews d-flex flex-wrap gap-2 mt-1"></div>
       </div>
       <p class="small text-muted">Auto-attached: the page you came from, your browser, your role, and a
         diagnostic session id — no need to fill those in.</p>

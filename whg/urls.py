@@ -159,6 +159,7 @@ urlpatterns = [
                   path('workbench/dataset/', views.wb_dataset_view, name="wb-dataset"),
                   path('workbench/suggestions/', views.suggestions_review, name="suggestions-review"),
                   path('beta/snag/', views.beta_snag, name="beta-snag"),
+                  path('beta/snag/image/<int:pk>/', views.beta_snag_image, name="beta-snag-image"),
                   path('beta/suggestion/', views.beta_suggestion, name="beta-suggestion"),
 
                   # Gazetteer Workbench — Reconciliation UI (STAFF-ONLY, unpublished preview; see place#111/#112)

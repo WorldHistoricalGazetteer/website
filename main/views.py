@@ -817,8 +817,65 @@ def _snag_github_body(snag, user, role):
         + block('What happened', snag.what)
         + block('Expected', snag.expected)
         + block('Steps', snag.steps)
+        + _screenshot_links(snag)
         + '\n---\n_Filed via the WHG on-site beta snag form. The session id ties this to the reporter’s '
           'GlitchTip diagnostics for the same session._')
+
+
+MAX_SNAG_IMAGES = 4
+MAX_SNAG_IMAGE_BYTES = 8 * 1024 * 1024   # as uploaded; each is re-encoded smaller below
+SNAG_IMAGE_MAX_SIDE = 2400
+
+
+def _screenshot_links(snag):
+    """Links, not embeds: the issue tracker is public and a screenshot can show private data, so the
+    pictures stay behind a staff login (``beta_snag_image``)."""
+    ids = list(snag.images.values_list('pk', flat=True)) if snag.pk else []
+    if not ids:
+        return ''
+    base = 'https://whgazetteer.org'
+    links = ', '.join(f'[{i + 1}]({base.rstrip("/")}/beta/snag/image/{pk}/)' for i, pk in enumerate(ids))
+    return f'\n**Screenshots** (staff login required): {links}\n'
+
+
+def _save_snag_images(snag, files):
+    """Validate and store up to MAX_SNAG_IMAGES uploads. Each is opened with Pillow (so only real images
+    get in), downscaled and re-encoded as PNG (so nothing but pixels is kept — no EXIF, no embedded
+    scripts). Returns (saved, skipped) counts; never raises."""
+    from io import BytesIO
+    from PIL import Image
+    from main.models import BetaSnagImage
+    saved = skipped = 0
+    for f in files[:MAX_SNAG_IMAGES]:
+        try:
+            if f.size > MAX_SNAG_IMAGE_BYTES:
+                raise ValueError('too large')
+            im = Image.open(f)
+            im.load()
+            im.thumbnail((SNAG_IMAGE_MAX_SIDE, SNAG_IMAGE_MAX_SIDE))
+            if im.mode not in ('RGB', 'RGBA', 'L', 'P'):
+                im = im.convert('RGBA')
+            out = BytesIO()
+            im.save(out, 'PNG', optimize=True)
+            BetaSnagImage.objects.create(snag=snag, data=out.getvalue(), content_type='image/png')
+            saved += 1
+        except Exception as e:  # noqa: BLE001
+            logger.info('beta snag image skipped: %s', e)
+            skipped += 1
+    return saved, skipped + max(0, len(files) - MAX_SNAG_IMAGES)
+
+
+@login_required
+def beta_snag_image(request, pk):
+    """A report's screenshot — staff, or the person who filed it. Anyone else gets a 404."""
+    from main.models import BetaSnagImage
+    img = get_object_or_404(BetaSnagImage.objects.select_related('snag'), pk=pk)
+    if not (request.user.is_staff or request.user.is_superuser or img.snag.reporter_id == request.user.id):
+        raise Http404()
+    resp = HttpResponse(bytes(img.data), content_type=img.content_type)
+    resp['Cache-Control'] = 'private, no-store'
+    resp['X-Content-Type-Options'] = 'nosniff'
+    return resp
 
 
 def _suggestion_github_body(snag, user, role):
@@ -894,11 +951,14 @@ def beta_snag(request):
             steps=(d.get('steps') or '')[:8000], feature=(d.get('feature') or '')[:80],
             severity=(d.get('severity') or '')[:20], page_url=(d.get('page_url') or '')[:500],
             session_id=(d.get('session_id') or '')[:64], user_agent=(d.get('user_agent') or '')[:300])
+        shots_saved, shots_skipped = _save_snag_images(snag, request.FILES.getlist('screenshots'))
         gh_url = _file_snag_to_github(snag, request.user)
         if gh_url:
             snag.github_url = gh_url
             snag.save(update_fields=['github_url'])
-        return _beta_form_response(request, 'beta_snag', {'submitted': snag, 'github_url': gh_url})
+        return _beta_form_response(request, 'beta_snag', {'submitted': snag, 'github_url': gh_url,
+                                                          'shots_saved': shots_saved,
+                                                          'shots_skipped': shots_skipped})
     return _beta_form_response(request, 'beta_snag',
                                 {'page': request.GET.get('page', ''), 'session': request.GET.get('session', '')})
 

@@ -164,11 +164,69 @@ function wireReportClose(panel) {
   }));
 }
 
+// Screenshots: the file input already works on its own; this adds paste-from-clipboard, drag-and-drop
+// and thumbnails. Files are merged into the input via DataTransfer so the ordinary multipart submit
+// (and FormData(form) in the panel) carries them — no separate upload path. Inline <script>s do not run
+// when the form is injected into the panel, hence this lives here.
+const MAX_SHOTS = 4;
+function wireScreenshots(form) {
+  const input = form && form.querySelector('input[type="file"][name="screenshots"]');
+  if (!input || input.dataset.wired) return;
+  input.dataset.wired = '1';
+  const strip = form.querySelector('.snag-shot-previews');
+  const render = () => {
+    if (!strip) return;
+    strip.innerHTML = '';
+    Array.from(input.files).forEach((f, i) => {
+      const cell = document.createElement('div');
+      cell.className = 'position-relative';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(f);
+      img.alt = f.name;
+      img.style.cssText = 'height:64px;width:auto;border:1px solid #ccc;border-radius:.25rem;';
+      img.onload = () => URL.revokeObjectURL(img.src);
+      const x = document.createElement('button');
+      x.type = 'button'; x.className = 'btn-close position-absolute top-0 end-0 bg-white p-1';
+      x.setAttribute('aria-label', 'Remove ' + f.name);
+      x.addEventListener('click', () => {
+        const dt = new DataTransfer();
+        Array.from(input.files).forEach((g, j) => { if (j !== i) dt.items.add(g); });
+        input.files = dt.files; render();
+      });
+      cell.append(img, x); strip.append(cell);
+    });
+  };
+  const add = (files) => {
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach((f) => dt.items.add(f));
+    Array.from(files).filter((f) => /^image\//.test(f.type)).forEach((f) => {
+      if (dt.files.length < MAX_SHOTS) dt.items.add(f.name && f.name !== 'image.png' ? f
+        : new File([f], 'screenshot-' + (dt.files.length + 1) + '.png', { type: f.type }));
+    });
+    input.files = dt.files; render();
+  };
+  input.addEventListener('change', () => { add([]); });
+  form.addEventListener('paste', (e) => {
+    const imgs = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => /^image\//.test(f.type));
+    if (imgs.length) { e.preventDefault(); add(imgs); }   // pasted text still pastes normally
+  });
+  form.addEventListener('dragover', (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault(); });
+  form.addEventListener('drop', (e) => {
+    if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); add(e.dataTransfer.files); }
+  });
+}
+// The standalone /beta/snag/ page (the panel wires its own copy in wireReportForm).
+(function () {
+  const go = () => { const f = document.getElementById('snag-form'); if (f && !f.closest('.whg-beta-report')) wireScreenshots(f); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+})();
+
 function wireReportForm(panel, url) {
   const body = panel.querySelector('.whg-beta-report-body');
   wireReportClose(panel);
   const form = body.querySelector('form');
   if (!form) return;
+  wireScreenshots(form);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = form.querySelector('button[type="submit"]');

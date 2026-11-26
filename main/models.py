@@ -51,6 +51,21 @@ class BetaSnag(models.Model):
         return f'{self.kind} #{self.pk}: {self.title[:60]}'
 
 
+class BetaSnagImage(models.Model):
+    """A screenshot attached to a beta report. Held in the database (a handful of small, re-encoded
+    images), not under MEDIA_ROOT, because nginx serves /media/ to anyone and the tracker repo is
+    public: a screenshot can show private datasets. Only staff and the reporter may fetch one
+    (``main.views.beta_snag_image``); the GitHub issue carries a link, never the picture."""
+    snag = models.ForeignKey(BetaSnag, on_delete=models.CASCADE, related_name='images')
+    data = models.BinaryField()
+    content_type = models.CharField(max_length=40, default='image/png')
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'beta_snag_image'
+        ordering = ['pk']
+
+
 class DownloadFile(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     title = models.CharField(max_length=255, null=True, blank=True)
